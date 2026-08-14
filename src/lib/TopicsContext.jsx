@@ -1,0 +1,74 @@
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import { supabase } from "../supabase";
+import { EXAM_TOPICS as YEDEK_TOPICS } from "./examTopics";
+import { STATIK_DERSLER } from "./examSubjects";
+
+// Konu başlıkları veritabanında (exam_topics) tutulur ve öğretmen panelinden
+// yönetilir. Tablo henüz oluşturulmadıysa ya da okunamazsa koddaki
+// examTopics.js listesine düşülür — uygulama hiçbir durumda konusuz kalmaz.
+const TopicsCtx = createContext(null);
+
+// Provider dışında çağrılırsa (ör. izole test) statik listeyle çalışır
+const yedekDeger = {
+  EXAM_TOPICS: YEDEK_TOPICS,
+  examSubjectsOf: (tur) => Object.keys(YEDEK_TOPICS[tur] ?? {}),
+  topicsOf: (tur, ders) => YEDEK_TOPICS[tur]?.[ders] ?? [],
+  dersleriGetir: (tur) => Object.keys(YEDEK_TOPICS[tur] ?? {}) .length
+    ? Object.keys(YEDEK_TOPICS[tur])
+    : (STATIK_DERSLER[tur] ?? []),
+  veritabanindan: false,
+  loading: false,
+  reload: async () => {},
+};
+
+export function TopicsProvider({ children }) {
+  const [topics,  setTopics]  = useState(null);   // null → yedeğe düş
+  const [loading, setLoading] = useState(true);
+
+  const yukle = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("exam_topics")
+      .select("exam_type, subject, topic, sira")
+      .eq("aktif", true)
+      .order("exam_type", { ascending: true })
+      .order("subject",   { ascending: true })
+      .order("sira",      { ascending: true });
+
+    // Tablo yoksa / boşsa / hata varsa koddaki listeyle devam
+    if (error || !data || data.length === 0) {
+      setTopics(null);
+    } else {
+      const harita = {};
+      data.forEach(r => {
+        (harita[r.exam_type] ??= {});
+        (harita[r.exam_type][r.subject] ??= []).push(r.topic);
+      });
+      setTopics(harita);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { yukle(); }, [yukle]);
+
+  const deger = useMemo(() => {
+    const aktif = topics ?? YEDEK_TOPICS;
+    return {
+      EXAM_TOPICS: aktif,
+      examSubjectsOf: (tur) => Object.keys(aktif[tur] ?? {}),
+      topicsOf: (tur, ders) => aktif[tur]?.[ders] ?? [],
+      // Sınav giriş formu için: TYT/AYT müfredattan, LGS/Okul Sınavı sabit listeden
+      dersleriGetir: (tur) => {
+        const mufredat = Object.keys(aktif[tur] ?? {});
+        return mufredat.length > 0 ? mufredat : (STATIK_DERSLER[tur] ?? []);
+      },
+      veritabanindan: topics != null,
+      loading,
+      reload: yukle,
+    };
+  }, [topics, loading, yukle]);
+
+  return <TopicsCtx.Provider value={deger}>{children}</TopicsCtx.Provider>;
+}
+
+export const useTopics = () => useContext(TopicsCtx) ?? yedekDeger;

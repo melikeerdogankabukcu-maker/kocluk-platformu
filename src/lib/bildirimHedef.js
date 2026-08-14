@@ -1,0 +1,35 @@
+// Bildirime tıklanınca gidilecek bölüm. Uygulama tek sayfa olduğu için
+// yönlendirme yerine ilgili karta kaydırıp kısa süreli vurgu yapıyoruz.
+// Hedef hem bildirim türüne hem de bakan kişinin rolüne bağlı:
+// "ödev yüklendi" öğretmende Ödev Kontrol'e, öğrencide Görevlerim'e gider.
+const HEDEFLER = {
+  gorev:    { student: "bolum-gorevler", teacher: "bolum-gorevler" },
+  odev:     { student: "bolum-gorevler", teacher: "bolum-odev" },
+  test:     { student: "bolum-test",     teacher: "bolum-test" },
+  sinav:    { student: "bolum-sinav",    teacher: "bolum-sinav" },
+  ders:     { student: "bolum-ders",     teacher: "bolum-ders",  parent: "bolum-ders" },
+  odeme:    { student: "bolum-ders",     teacher: "bolum-ders",  parent: "bolum-odeme" },
+  baglanti: { student: "bolum-baglanti", teacher: "bolum-baglanti" },
+  rozet:    { student: "bolum-rozet",    parent:  "bolum-rozet" },
+};
+
+export const bildirimHedefi = (tur, rol) => HEDEFLER[tur]?.[rol] ?? null;
+
+// Hedefe kaydır ve kısa süre vurgula. Bölüm bulunamazsa sessizce geç.
+export function bolumeGit(hedefId) {
+  if (!hedefId) return false;
+  const el = document.getElementById(hedefId);
+  if (!el) return false;
+
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  const eskiGolge = el.style.boxShadow;
+  const eskiGecis = el.style.transition;
+  el.style.transition = "box-shadow .25s ease";
+  el.style.boxShadow  = "0 0 0 3px rgba(15,110,86,0.45)";
+  setTimeout(() => {
+    el.style.boxShadow = eskiGolge;
+    setTimeout(() => { el.style.transition = eskiGecis; }, 300);
+  }, 1600);
+  return true;
+}

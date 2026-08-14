@@ -1,0 +1,402 @@
+-- ============================================================
+-- Migration: exam_topics — konu başlıkları veritabanına taşındı
+-- Artık öğretmen panelinden yönetilebilir; kod içindeki
+-- src/lib/examTopics.js yalnızca yedek (fallback) olarak kalır.
+--
+-- Silme yerine 'aktif' bayrağı kullanılır: pasife alınan konu yeni
+-- girişlerde seçilemez ama eski kayıtlar (tasks.topic, test_sessions.topic,
+-- exam_results.subject_details) bozulmadan okunmaya devam eder.
+-- Supabase Dashboard > SQL Editor > yapıştır > Run
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS exam_topics (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  exam_type  TEXT        NOT NULL,          -- 'TYT' | 'AYT'
+  subject    TEXT        NOT NULL,
+  topic      TEXT        NOT NULL,
+  sira       INT         NOT NULL DEFAULT 0,
+  aktif      BOOLEAN     NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (exam_type, subject, topic)
+);
+
+CREATE INDEX IF NOT EXISTS idx_exam_topics_lookup ON exam_topics (exam_type, subject, sira);
+
+ALTER TABLE exam_topics ENABLE ROW LEVEL SECURITY;
+
+-- Giriş yapmış herkes okur (öğrenci test kaydında, öğretmen sınav girişinde kullanır)
+DROP POLICY IF EXISTS "Konulari herkes okur" ON exam_topics;
+CREATE POLICY "Konulari herkes okur" ON exam_topics
+  FOR SELECT TO authenticated USING (true);
+
+-- Yalnızca öğretmen ekler / düzenler
+DROP POLICY IF EXISTS "Konulari ogretmen yonetir" ON exam_topics;
+CREATE POLICY "Konulari ogretmen yonetir" ON exam_topics
+  FOR ALL
+  USING      (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'teacher'))
+  WITH CHECK (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'teacher'));
+
+-- Mevcut müfredat (DERS PLANLAMA.xlsx'ten gelen 315 konu)
+INSERT INTO exam_topics (exam_type, subject, topic, sira) VALUES
+  ('TYT', 'Türkçe', 'Sözcükte Anlam', 0),
+  ('TYT', 'Türkçe', 'Söz Yorumu', 1),
+  ('TYT', 'Türkçe', 'Deyim ve Atasözü', 2),
+  ('TYT', 'Türkçe', 'Cümlede Anlam', 3),
+  ('TYT', 'Türkçe', 'Paragraf', 4),
+  ('TYT', 'Türkçe', 'Paragrafta Anlatım Teknikleri', 5),
+  ('TYT', 'Türkçe', 'Paragrafta Düşünceyi Geliştirme Yolları', 6),
+  ('TYT', 'Türkçe', 'Paragrafta Yapı', 7),
+  ('TYT', 'Türkçe', 'Paragrafta Konu-Ana Düşünce', 8),
+  ('TYT', 'Türkçe', 'Paragrafta Yardımcı Düşünce', 9),
+  ('TYT', 'Türkçe', 'Ses Bilgisi', 10),
+  ('TYT', 'Türkçe', 'Yazım Kuralları', 11),
+  ('TYT', 'Türkçe', 'Noktalama İşaretleri', 12),
+  ('TYT', 'Türkçe', 'Sözcükte Yapı/Ekler', 13),
+  ('TYT', 'Türkçe', 'Sözcük Türleri', 14),
+  ('TYT', 'Türkçe', 'İsimler', 15),
+  ('TYT', 'Türkçe', 'Zamirler', 16),
+  ('TYT', 'Türkçe', 'Sıfatlar', 17),
+  ('TYT', 'Türkçe', 'Zarflar', 18),
+  ('TYT', 'Türkçe', 'Edat – Bağlaç – Ünlem', 19),
+  ('TYT', 'Türkçe', 'Fiiller', 20),
+  ('TYT', 'Türkçe', 'Fiilde Anlam (Kip-Kişi-Yapı)', 21),
+  ('TYT', 'Türkçe', 'Ek Fiil', 22),
+  ('TYT', 'Türkçe', 'Fiilimsi', 23),
+  ('TYT', 'Türkçe', 'Fiilde Çatı', 24),
+  ('TYT', 'Türkçe', 'Sözcük Grupları', 25),
+  ('TYT', 'Türkçe', 'Cümlenin Ögeleri', 26),
+  ('TYT', 'Türkçe', 'Cümle Türleri', 27),
+  ('TYT', 'Matematik', 'Temel Kavramlar', 0),
+  ('TYT', 'Matematik', 'Sayı Basamakları', 1),
+  ('TYT', 'Matematik', 'Bölme ve Bölünebilme', 2),
+  ('TYT', 'Matematik', 'EBOB – EKOK', 3),
+  ('TYT', 'Matematik', 'Rasyonel Sayılar', 4),
+  ('TYT', 'Matematik', 'Basit Eşitsizlikler', 5),
+  ('TYT', 'Matematik', 'Mutlak Değer', 6),
+  ('TYT', 'Matematik', 'Üslü Sayılar', 7),
+  ('TYT', 'Matematik', 'Köklü Sayılar', 8),
+  ('TYT', 'Matematik', 'Çarpanlara Ayırma', 9),
+  ('TYT', 'Matematik', 'Oran Orantı', 10),
+  ('TYT', 'Matematik', 'Denklem Çözme', 11),
+  ('TYT', 'Matematik', 'Sayı Problemleri', 12),
+  ('TYT', 'Matematik', 'Kesir Problemleri', 13),
+  ('TYT', 'Matematik', 'Yaş Problemleri', 14),
+  ('TYT', 'Matematik', 'Hareket Hız Problemleri', 15),
+  ('TYT', 'Matematik', 'İşçi Emek Problemleri', 16),
+  ('TYT', 'Matematik', 'Yüzde Problemleri', 17),
+  ('TYT', 'Matematik', 'Kar Zarar Problemleri', 18),
+  ('TYT', 'Matematik', 'Karışım Problemleri', 19),
+  ('TYT', 'Matematik', 'Grafik Problemleri', 20),
+  ('TYT', 'Matematik', 'Rutin Olmayan Problemleri', 21),
+  ('TYT', 'Matematik', 'Kümeler – Kartezyen Çarpım', 22),
+  ('TYT', 'Matematik', 'Mantık', 23),
+  ('TYT', 'Matematik', 'Fonskiyonlar', 24),
+  ('TYT', 'Matematik', 'Polinomlar', 25),
+  ('TYT', 'Matematik', '2.Dereceden Denklemler', 26),
+  ('TYT', 'Matematik', 'Permütasyon ve Kombinasyon', 27),
+  ('TYT', 'Matematik', 'Olasılık', 28),
+  ('TYT', 'Matematik', 'Veri – İstatistik', 29),
+  ('TYT', 'Geometri', 'Doğruda Açılar', 0),
+  ('TYT', 'Geometri', 'Üçgende Açılar', 1),
+  ('TYT', 'Geometri', 'Özel Üçgenler', 2),
+  ('TYT', 'Geometri', 'Dik Üçgen', 3),
+  ('TYT', 'Geometri', 'İkizkenar Üçgen', 4),
+  ('TYT', 'Geometri', 'Eşkenar Üçgen', 5),
+  ('TYT', 'Geometri', 'Açıortay', 6),
+  ('TYT', 'Geometri', 'Kenarortay', 7),
+  ('TYT', 'Geometri', 'Üçgende Alan', 8),
+  ('TYT', 'Geometri', 'Üçgende Benzerlik', 9),
+  ('TYT', 'Geometri', 'Açı Kenar Bağıntıları', 10),
+  ('TYT', 'Geometri', 'Çokgenler', 11),
+  ('TYT', 'Geometri', 'Özel Dörtgenler', 12),
+  ('TYT', 'Geometri', 'Dörtgenler', 13),
+  ('TYT', 'Geometri', 'Deltoid', 14),
+  ('TYT', 'Geometri', 'Paralelkenar', 15),
+  ('TYT', 'Geometri', 'Eşkenar Dörtgen', 16),
+  ('TYT', 'Geometri', 'Dikdörtgen', 17),
+  ('TYT', 'Geometri', 'Kare', 18),
+  ('TYT', 'Geometri', 'Yamuk', 19),
+  ('TYT', 'Geometri', 'Çember ve Daire', 20),
+  ('TYT', 'Geometri', 'Çemberde Açı', 21),
+  ('TYT', 'Geometri', 'Çemberde Uzun', 22),
+  ('TYT', 'Geometri', 'Dairede Çevre ve Alan', 23),
+  ('TYT', 'Geometri', 'Analitik Geometri', 24),
+  ('TYT', 'Geometri', 'Noktanın Analitiği', 25),
+  ('TYT', 'Geometri', 'Doğrunun Analitiği', 26),
+  ('TYT', 'Geometri', 'Dönüşüm Geometrisi', 27),
+  ('TYT', 'Geometri', 'Katı Cisimler', 28),
+  ('TYT', 'Geometri', 'Çemberin Analitiği', 29),
+  ('TYT', 'Fizik', 'Fizik Bilimine Giriş', 0),
+  ('TYT', 'Fizik', 'Madde ve Özellikleri', 1),
+  ('TYT', 'Fizik', 'Sıvıların Kaldırma Kuvveti', 2),
+  ('TYT', 'Fizik', 'Basınç', 3),
+  ('TYT', 'Fizik', 'Isı, Sıcaklık ve Genleşme', 4),
+  ('TYT', 'Fizik', 'Hareket ve Kuvvet', 5),
+  ('TYT', 'Fizik', 'Dinamik', 6),
+  ('TYT', 'Fizik', 'İş, Güç ve Enerji', 7),
+  ('TYT', 'Fizik', 'Elektrik', 8),
+  ('TYT', 'Fizik', 'Manyetizma', 9),
+  ('TYT', 'Fizik', 'Dalgalar', 10),
+  ('TYT', 'Fizik', 'Optik', 11),
+  ('TYT', 'Kimya', 'Kimya Bilimi', 0),
+  ('TYT', 'Kimya', 'Atom ve Periyodik Sistem', 1),
+  ('TYT', 'Kimya', 'Kimyasal Türler Arası Etkileşimler', 2),
+  ('TYT', 'Kimya', 'Maddenin Halleri', 3),
+  ('TYT', 'Kimya', 'Doğa ve Kimya', 4),
+  ('TYT', 'Kimya', 'Kimyanın Temel Kanunları', 5),
+  ('TYT', 'Kimya', 'Kimyasal Hesaplamalar', 6),
+  ('TYT', 'Kimya', 'Karışımlar', 7),
+  ('TYT', 'Kimya', 'Asit, Baz ve Tuz', 8),
+  ('TYT', 'Kimya', 'Kimya Her Yerde', 9),
+  ('TYT', 'Biyoloji', 'Canlıların Ortak Özellikleri', 0),
+  ('TYT', 'Biyoloji', 'Canlıların Temel Bileşenleri', 1),
+  ('TYT', 'Biyoloji', 'Hücre ve Organelleri', 2),
+  ('TYT', 'Biyoloji', 'Hücre Zarından Madde Geçişi', 3),
+  ('TYT', 'Biyoloji', 'Canlıların Sınıflandırılması', 4),
+  ('TYT', 'Biyoloji', 'Mitoz ve Eşeysiz Üreme', 5),
+  ('TYT', 'Biyoloji', 'Mayoz ve Eşeyli Üreme', 6),
+  ('TYT', 'Biyoloji', 'Kalıtım', 7),
+  ('TYT', 'Biyoloji', 'Ekosistem Ekolojisi', 8),
+  ('TYT', 'Biyoloji', 'Güncel Çevre Sorunları', 9),
+  ('TYT', 'Tarih', 'Tarih ve Zaman', 0),
+  ('TYT', 'Tarih', 'İnsanlığın İlk Dönemleri', 1),
+  ('TYT', 'Tarih', 'Orta Çağ’da Dünya', 2),
+  ('TYT', 'Tarih', 'İlk ve Orta Çağlarda Türk Dünyası', 3),
+  ('TYT', 'Tarih', 'İslam Medeniyetinin Doğuşu', 4),
+  ('TYT', 'Tarih', 'Türklerin İslamiyet’i Kabulü ve İlk Türk İslam Devletleri', 5),
+  ('TYT', 'Tarih', 'Yerleşme ve Devletleşme Sürecinde Selçuklu Türkiyesi', 6),
+  ('TYT', 'Tarih', 'Beylikten Devlete Osmanlı Siyaseti', 7),
+  ('TYT', 'Tarih', 'Devletleşme Sürecinde Savaşçılar ve Askerler', 8),
+  ('TYT', 'Tarih', 'Beylikten Devlete Osmanlı Medeniyeti', 9),
+  ('TYT', 'Tarih', 'Dünya Gücü Osmanlı', 10),
+  ('TYT', 'Tarih', 'Sultan ve Osmanlı Merkez Teşkilatı', 11),
+  ('TYT', 'Tarih', 'Klasik Çağda Osmanlı Toplum Düzeni', 12),
+  ('TYT', 'Tarih', 'Değişen Dünya Dengeleri Karşısında Osmanlı Siyaseti', 13),
+  ('TYT', 'Tarih', 'Değişim Çağında Avrupa ve Osmanlı', 14),
+  ('TYT', 'Tarih', 'Uluslararası İlişkilerde Denge Stratejisi (1774-1914)', 15),
+  ('TYT', 'Tarih', 'Devrimler Çağında Değişen Devlet-Toplum İlişkileri', 16),
+  ('TYT', 'Tarih', 'Sermaye ve Emek', 17),
+  ('TYT', 'Tarih', 'XIX. ve XX. Yüzyılda Değişen Gündelik Hayat', 18),
+  ('TYT', 'Tarih', 'XX. Yüzyıl Başlarında Osmanlı Devleti ve Dünya', 19),
+  ('TYT', 'Tarih', 'Milli Mücadele', 20),
+  ('TYT', 'Tarih', 'Atatürkçülük ve Türk İnkılabı', 21),
+  ('TYT', 'Coğrafya', 'Doğa ve İnsan', 0),
+  ('TYT', 'Coğrafya', 'Dünya’nın Şekli ve Hareketleri', 1),
+  ('TYT', 'Coğrafya', 'Coğrafi Konum', 2),
+  ('TYT', 'Coğrafya', 'Harita Bilgisi', 3),
+  ('TYT', 'Coğrafya', 'Atmosfer ve Sıcaklık', 4),
+  ('TYT', 'Coğrafya', 'İklimler', 5),
+  ('TYT', 'Coğrafya', 'Basınç ve Rüzgarlar', 6),
+  ('TYT', 'Coğrafya', 'Nem, Yağış ve Buharlaşma', 7),
+  ('TYT', 'Coğrafya', 'İç Kuvvetler / Dış Kuvvetler', 8),
+  ('TYT', 'Coğrafya', 'Su – Toprak ve Bitkiler', 9),
+  ('TYT', 'Coğrafya', 'Nüfus', 10),
+  ('TYT', 'Coğrafya', 'Göç', 11),
+  ('TYT', 'Coğrafya', 'Yerleşme', 12),
+  ('TYT', 'Coğrafya', 'Türkiye’nin Yer Şekilleri', 13),
+  ('TYT', 'Coğrafya', 'Ekonomik Faaliyetler', 14),
+  ('TYT', 'Coğrafya', 'Bölgeler', 15),
+  ('TYT', 'Coğrafya', 'Uluslararası Ulaşım Hatları', 16),
+  ('TYT', 'Coğrafya', 'Çevre ve Toplum', 17),
+  ('TYT', 'Coğrafya', 'Doğal Afetler', 18),
+  ('TYT', 'Felsefe', 'Felsefe’nin Konusu', 0),
+  ('TYT', 'Felsefe', 'Bilgi Felsefesi', 1),
+  ('TYT', 'Felsefe', 'Varlık Felsefesi', 2),
+  ('TYT', 'Felsefe', 'Ahlak Felsefesi', 3),
+  ('TYT', 'Felsefe', 'Sanat Felsefesi', 4),
+  ('TYT', 'Felsefe', 'Din Felsefesi', 5),
+  ('TYT', 'Felsefe', 'Siyaset Felsefesi', 6),
+  ('TYT', 'Felsefe', 'Bilim Felsefesi', 7),
+  ('TYT', 'Felsefe', 'İlk Çağ Felsefesi', 8),
+  ('TYT', 'Felsefe', '2. Yüzyıl ve 15. Yüzyıl Felsefeleri', 9),
+  ('TYT', 'Felsefe', '15. Yüzyıl ve 17. Yüzyıl Felsefeleri', 10),
+  ('TYT', 'Felsefe', '18. Yüzyıl ve 19. Yüzyıl Felsefeleri', 11),
+  ('TYT', 'Felsefe', '20. Yüzyıl Felsefesi', 12),
+  ('TYT', 'Din Kültürü', 'Bilgi ve İnanç', 0),
+  ('TYT', 'Din Kültürü', 'İslam ve İbadet', 1),
+  ('TYT', 'Din Kültürü', 'Ahlak ve Değerler', 2),
+  ('TYT', 'Din Kültürü', 'Allah İnsan İlişkisi', 3),
+  ('TYT', 'Din Kültürü', 'Hz. Muhammed (S.A.V.)', 4),
+  ('TYT', 'Din Kültürü', 'Vahiy ve Akıl', 5),
+  ('TYT', 'Din Kültürü', 'İslam Düşüncesinde Yorumlar, Mezhepler', 6),
+  ('TYT', 'Din Kültürü', 'Din, Kültür ve Medeniyet', 7),
+  ('TYT', 'Din Kültürü', 'İslam ve Bilim, Estetik, Barış', 8),
+  ('TYT', 'Din Kültürü', 'Yaşayan Dinler', 9),
+  ('AYT', 'Matematik', 'Fonksiyonlar', 0),
+  ('AYT', 'Matematik', '2.Dereceden Denklemler', 1),
+  ('AYT', 'Matematik', 'Mantık', 2),
+  ('AYT', 'Matematik', 'Parabol', 3),
+  ('AYT', 'Matematik', 'Trigonometri', 4),
+  ('AYT', 'Matematik', 'Karmaşık sayılar', 5),
+  ('AYT', 'Matematik', 'Polinomlar', 6),
+  ('AYT', 'Matematik', 'Logoritma', 7),
+  ('AYT', 'Matematik', 'Denklem çözme', 8),
+  ('AYT', 'Matematik', 'Diziler', 9),
+  ('AYT', 'Matematik', 'Permütasyon-Kombinasyon-Olasılık – Binom', 10),
+  ('AYT', 'Matematik', 'Limit', 11),
+  ('AYT', 'Matematik', 'Türev', 12),
+  ('AYT', 'Matematik', 'İntegral', 13),
+  ('AYT', 'Matematik', 'Vektörler', 14),
+  ('AYT', 'Matematik', 'Kümeler ve Kartezyen Çarpım', 15),
+  ('AYT', 'Geometri', 'Doğruda Açılar', 0),
+  ('AYT', 'Geometri', 'Üçgende Açılar', 1),
+  ('AYT', 'Geometri', 'Özel Üçgenler', 2),
+  ('AYT', 'Geometri', 'Dik Üçgen', 3),
+  ('AYT', 'Geometri', 'İkizkenar Üçgen', 4),
+  ('AYT', 'Geometri', 'Eşkenar Üçgen', 5),
+  ('AYT', 'Geometri', 'Açıortay', 6),
+  ('AYT', 'Geometri', 'Kenarortay', 7),
+  ('AYT', 'Geometri', 'Üçgende Alan', 8),
+  ('AYT', 'Geometri', 'Üçgende Benzerlik', 9),
+  ('AYT', 'Geometri', 'Açı Kenar Bağıntıları', 10),
+  ('AYT', 'Geometri', 'Çokgenler', 11),
+  ('AYT', 'Geometri', 'Özel Dörtgenler', 12),
+  ('AYT', 'Geometri', 'Dörtgenler', 13),
+  ('AYT', 'Geometri', 'Deltoid', 14),
+  ('AYT', 'Geometri', 'Paralelkenar', 15),
+  ('AYT', 'Geometri', 'Eşkenar Dörtgen', 16),
+  ('AYT', 'Geometri', 'Dikdörtgen', 17),
+  ('AYT', 'Geometri', 'Kare', 18),
+  ('AYT', 'Geometri', 'Yamuk', 19),
+  ('AYT', 'Geometri', 'Çember ve Daire', 20),
+  ('AYT', 'Geometri', 'Çemberde Açı', 21),
+  ('AYT', 'Geometri', 'Çemberde Uzun', 22),
+  ('AYT', 'Geometri', 'Dairede Çevre ve Alan', 23),
+  ('AYT', 'Geometri', 'Analitik Geometri', 24),
+  ('AYT', 'Geometri', 'Noktanın Analitiği', 25),
+  ('AYT', 'Geometri', 'Doğrunun Analitiği', 26),
+  ('AYT', 'Geometri', 'Dönüşüm Geometrisi', 27),
+  ('AYT', 'Geometri', 'Katı Cisimler', 28),
+  ('AYT', 'Geometri', 'Çemberin Analitiği', 29),
+  ('AYT', 'Fizik', 'Vektörler', 0),
+  ('AYT', 'Fizik', 'Hareket', 1),
+  ('AYT', 'Fizik', 'Newton’un Hareket Yasaları', 2),
+  ('AYT', 'Fizik', 'Bir Boyutta Savit İvmeli Hareket', 3),
+  ('AYT', 'Fizik', 'Atışlar', 4),
+  ('AYT', 'Fizik', 'İş, Güç ve Enerji II', 5),
+  ('AYT', 'Fizik', 'İtme ve Momentum', 6),
+  ('AYT', 'Fizik', 'Kuvvet, Tork ve Denge', 7),
+  ('AYT', 'Fizik', 'Kütle Merkezi', 8),
+  ('AYT', 'Fizik', 'Basit Makineler', 9),
+  ('AYT', 'Fizik', 'Elektrik Alan ve Potansiyel', 10),
+  ('AYT', 'Fizik', 'Paralel Levhalar ve Sığa', 11),
+  ('AYT', 'Fizik', 'Manyetik Alan ve Manyetik Kuvvet', 12),
+  ('AYT', 'Fizik', 'İndüksiyon, Alternatif Akım ve Transformatörler', 13),
+  ('AYT', 'Fizik', 'Çembersel Hareket', 14),
+  ('AYT', 'Fizik', 'Dönme, Yuvarlanma ve Açısal Momentum', 15),
+  ('AYT', 'Fizik', 'Kütle Çekim ve Kepler Yasaları', 16),
+  ('AYT', 'Fizik', 'Basit Harmonik Hareket', 17),
+  ('AYT', 'Fizik', 'Dalga Mekaniği ve Elektromanyetik Dalgalar', 18),
+  ('AYT', 'Fizik', 'Atom Fiziğine Giriş ve Radyoaktivite', 19),
+  ('AYT', 'Fizik', 'Fotoelektrik Olay ve Compton Olayı', 20),
+  ('AYT', 'Fizik', 'Modern Fiziğin Teknolojideki Uygulamaları', 21),
+  ('AYT', 'Fizik', 'Özel Görelillik', 22),
+  ('AYT', 'Kimya', 'Modern Atom Teorisi', 0),
+  ('AYT', 'Kimya', 'Gazlar', 1),
+  ('AYT', 'Kimya', 'Çözeltiler', 2),
+  ('AYT', 'Kimya', 'Kimyasal Tepkimelerde Enerji', 3),
+  ('AYT', 'Kimya', 'Kimyasal Tepkimelerde Hız', 4),
+  ('AYT', 'Kimya', 'Kimyasal Tepkimelerde Denge', 5),
+  ('AYT', 'Kimya', 'Asit-Baz Dengesi', 6),
+  ('AYT', 'Kimya', 'Çözünürlük Dengesi', 7),
+  ('AYT', 'Kimya', 'Kimya ve Elektrik', 8),
+  ('AYT', 'Kimya', 'Organik Kimya', 9),
+  ('AYT', 'Biyoloji', 'Sinir Sistemi', 0),
+  ('AYT', 'Biyoloji', 'Endokrin Sistem', 1),
+  ('AYT', 'Biyoloji', 'Duyu Organları', 2),
+  ('AYT', 'Biyoloji', 'Destek ve Hareket Sistemi', 3),
+  ('AYT', 'Biyoloji', 'Sindirim Sistemi', 4),
+  ('AYT', 'Biyoloji', 'Dolaşım ve Bağışıklık Sistemi', 5),
+  ('AYT', 'Biyoloji', 'Solunum Sistemi', 6),
+  ('AYT', 'Biyoloji', 'Boşaltım Sistemi', 7),
+  ('AYT', 'Biyoloji', 'Üriner Sistem', 8),
+  ('AYT', 'Biyoloji', 'Üreme Sistemi ve Embriyonik Gelişim', 9),
+  ('AYT', 'Biyoloji', 'Komünite ve Popülasyon Ekolojisi', 10),
+  ('AYT', 'Biyoloji', 'Nükleik Asitler', 11),
+  ('AYT', 'Biyoloji', 'Genetik Şifre ve Protein Sentezi', 12),
+  ('AYT', 'Biyoloji', 'Canlılık ve Enerji', 13),
+  ('AYT', 'Biyoloji', 'Fotosentez ve Kemosentez', 14),
+  ('AYT', 'Biyoloji', 'Hücresel Solunum', 15),
+  ('AYT', 'Biyoloji', 'Bitki Biyolojisi', 16),
+  ('AYT', 'Biyoloji', 'Canlılar ve Çevre', 17),
+  ('AYT', 'Edebiyat', 'Anlam Bilgisi', 0),
+  ('AYT', 'Edebiyat', 'Şiir Bilgisi', 1),
+  ('AYT', 'Edebiyat', 'Edebi Sanatlar', 2),
+  ('AYT', 'Edebiyat', 'Edebi Metinler (Düzyazı)', 3),
+  ('AYT', 'Edebiyat', 'Tiyatro', 4),
+  ('AYT', 'Edebiyat', 'İslamiyet Öncesi ve Geçiş Dönemi Türk Edebiyatı', 5),
+  ('AYT', 'Edebiyat', 'Halk Edebiyatı', 6),
+  ('AYT', 'Edebiyat', 'Divan Edebiyatı', 7),
+  ('AYT', 'Edebiyat', 'Edebi Akımlar', 8),
+  ('AYT', 'Edebiyat', 'Tanzimat Edebiyatı', 9),
+  ('AYT', 'Edebiyat', 'Servetifünun ve Fecriati Edebiyatı', 10),
+  ('AYT', 'Edebiyat', 'Millî Edebiyat', 11),
+  ('AYT', 'Edebiyat', 'Cumhuriyet Dönemi Türk Edebiyatı', 12),
+  ('AYT', 'Tarih', 'İki Savaş Arasındaki Dönemde Türkiye ve Dünya', 0),
+  ('AYT', 'Tarih', 'II. Dünya Savaşı Sürecinde – Sonrasında Türkiye ve Dünya', 1),
+  ('AYT', 'Tarih', 'XXI. Yüzyılın Eşiğinde Türkiye ve Dünya', 2),
+  ('AYT', 'Coğrafya', 'İklim ve Yer Şekilleri', 0),
+  ('AYT', 'Coğrafya', 'Coğrafi Konum', 1),
+  ('AYT', 'Coğrafya', 'Dünya’nın Şekli ve Hareketleri', 2),
+  ('AYT', 'Coğrafya', 'Harita Bilgisi', 3),
+  ('AYT', 'Coğrafya', 'İç ve Dış Kuvvetler', 4),
+  ('AYT', 'Coğrafya', 'Ekosistem', 5),
+  ('AYT', 'Coğrafya', 'Nüfus Politikaları', 6),
+  ('AYT', 'Coğrafya', 'Türkiye’de Nüfus ve Yerleşme', 7),
+  ('AYT', 'Coğrafya', 'Ekonomik Faaliyetler ve Doğal Kaynaklar', 8),
+  ('AYT', 'Coğrafya', 'Göç ve Şehirleşme', 9),
+  ('AYT', 'Coğrafya', 'Türkiye Ekonomisi', 10),
+  ('AYT', 'Coğrafya', 'Türkiye’nin İşlevsel Bölgeleri ve Kalkınma Projeleri', 11),
+  ('AYT', 'Coğrafya', 'Küresel Ticaret', 12),
+  ('AYT', 'Coğrafya', 'Kültür Bölgeleri', 13),
+  ('AYT', 'Coğrafya', 'Küresel ve Bölgesel Örgütler', 14),
+  ('AYT', 'Coğrafya', 'Ülkeler Arası Etkileşimler', 15),
+  ('AYT', 'Coğrafya', 'Bölgeler ve Ülkeler', 16),
+  ('AYT', 'Coğrafya', 'Çevre ve Toplum', 17)
+ON CONFLICT (exam_type, subject, topic) DO NOTHING;
+
+-- Doğrulama:
+--   SELECT exam_type, subject, count(*) FROM exam_topics
+--   GROUP BY 1,2 ORDER BY 1,2;
+
+
+-- ============================================================
+-- Konu adı değiştirildiğinde eski kayıtları da güncelleyen fonksiyon.
+-- Konu adları tasks.topic, test_sessions.topic ve
+-- exam_results.subject_details->{ders}->yanlis_konular içinde düz metin
+-- olarak durur; bunlar güncellenmezse analiz eski/yeni adı iki ayrı konu sayar.
+-- ============================================================
+CREATE OR REPLACE FUNCTION konu_yeniden_adlandir(p_ders TEXT, p_eski TEXT, p_yeni TEXT)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Yalnızca öğretmen çalıştırabilir
+  IF NOT EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'teacher') THEN
+    RAISE EXCEPTION 'Bu işlem için öğretmen yetkisi gerekiyor';
+  END IF;
+
+  UPDATE tasks         SET topic = p_yeni WHERE subject = p_ders AND topic = p_eski;
+  UPDATE test_sessions SET topic = p_yeni WHERE subject = p_ders AND topic = p_eski;
+
+  -- Sınavlardaki yanlış konu listeleri (tekrar edebilen dizi)
+  UPDATE exam_results er
+  SET subject_details = jsonb_set(
+        er.subject_details,
+        ARRAY[p_ders, 'yanlis_konular'],
+        (SELECT COALESCE(jsonb_agg(
+                  CASE WHEN x = to_jsonb(p_eski) THEN to_jsonb(p_yeni) ELSE x END
+                ), '[]'::jsonb)
+         FROM jsonb_array_elements(er.subject_details -> p_ders -> 'yanlis_konular') x)
+      )
+  WHERE er.subject_details ? p_ders
+    AND er.subject_details -> p_ders -> 'yanlis_konular' @> to_jsonb(ARRAY[p_eski]);
+
+  -- Konu tablosundaki kaydın kendisi
+  UPDATE exam_topics SET topic = p_yeni WHERE subject = p_ders AND topic = p_eski;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION konu_yeniden_adlandir(TEXT, TEXT, TEXT) TO authenticated;

@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Ortam degiskenleri — ASLA depoya girmemeli
+.env
+.env.*
+!.env.example
