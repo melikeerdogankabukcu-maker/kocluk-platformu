@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
+import { hatalariBildir } from "../lib/db";
 import { useAnaliz } from "../hooks/useAnaliz";
 import { useSinavAnalizi } from "../hooks/useSinavAnalizi";
 import { useProgramAtama } from "../hooks/useProgramAtama";
@@ -50,9 +51,12 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
     let sorgu = supabase.from("badges").select("rozet_kod, kazanildi_at").eq("user_id", studentId);
     if (aralik.baslangic) sorgu = sorgu.gte("kazanildi_at", aralik.baslangic);
     if (aralik.bitis)     sorgu = sorgu.lte("kazanildi_at", `${aralik.bitis}T23:59:59`);
-    sorgu.then(({ data }) => setRozetler(data ?? []));
+    // ogrenci_puan artik yetki denetimi yapiyor (ogrencinin kendisi,
+    // ogretmeni ya da velisi). Reddedilirse rapordaki seviye bolumu
+    // sessizce kaybolurdu; sebebi konsolda gorunsun.
+    sorgu.then((r) => { hatalariBildir([r], ["rapor rozetleri"]); setRozetler(r.data ?? []); });
     supabase.rpc("ogrenci_puan", { p_user: studentId })
-      .then(({ data }) => setPuan(data ?? null));
+      .then((r) => { hatalariBildir([r], ["rapor seviye/XP"]); setPuan(r.data ?? null); });
   }, [acik, studentId, aralik.baslangic, aralik.bitis]);
 
   const kisaTarih = (t) => t

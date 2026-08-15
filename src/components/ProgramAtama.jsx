@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
+import { calistir } from "../lib/db";
 import { useStudyPrograms, icerikSatirSayisi, icerikHaftaSatirlari } from "../hooks/useStudyPrograms";
 import { useGruplar } from "../hooks/useGruplar";
 import Card from "./Card";
@@ -51,8 +52,14 @@ export default function ProgramAtama({ userId, students, color: c }) {
     setIslemde(true);
 
     // Hedeflerin önceki aktif programlarını pasife al
-    await supabase.from("program_atamalari")
-      .update({ aktif: false }).in("student_id", hedefler).eq("aktif", true);
+    // Eskiyi pasife alamazsak yeni atamayi hic yapma: iki aktif program
+    // kalirsa ogrencinin panelinde hangisi gecerli belirsizlesir.
+    const { hata: pasifHata } = await calistir(
+      supabase.from("program_atamalari")
+        .update({ aktif: false }).in("student_id", hedefler).eq("aktif", true),
+      "Onceki programi pasife alma"
+    );
+    if (pasifHata) { setIslemde(false); return; }
 
     // İçeriğin KOPYASI atamayla saklanır: program sonradan düzenlense bile
     // öğrencinin planı ve işaretlediği adımlar kaymaz.
@@ -77,8 +84,12 @@ export default function ProgramAtama({ userId, students, color: c }) {
   const kaldir = async (atama, ad) => {
     if (!window.confirm(`${ad} için program kaldırılsın mı?\n\nİlerleme kaydı korunur, program pasife alınır.`)) return;
     setIslemde(true);
-    await supabase.from("program_atamalari").update({ aktif: false }).eq("id", atama.id);
+    const { hata } = await calistir(
+      supabase.from("program_atamalari").update({ aktif: false }).eq("id", atama.id),
+      "Program kaldirma"
+    );
     setIslemde(false);
+    if (hata) return;
     yukle();
   };
 

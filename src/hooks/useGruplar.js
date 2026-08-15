@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
+import { hatalariBildir } from "../lib/db";
 
 // Öğretmenin öğrenci grupları ve üyelikleri.
 // Hem grup yönetimi hem toplu atama (görev/program) aynı veriyi kullandığı için
@@ -19,8 +20,9 @@ export function useGruplar(teacherId) {
     const idler = (gs ?? []).map(g => g.id);
     let uyelikler = [];
     if (idler.length > 0) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("grup_ogrencileri").select("grup_id, student_id").in("grup_id", idler);
+      if (error) console.error("[Grup uyelikleri]", error);
       uyelikler = data ?? [];
     }
     setGruplar((gs ?? []).map(g => ({

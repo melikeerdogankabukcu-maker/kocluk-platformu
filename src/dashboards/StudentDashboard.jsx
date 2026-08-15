@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabase";
+import { calistir, hatalariBildir } from "../lib/db";
 import { COLORS } from "../lib/theme";
 import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
@@ -105,6 +106,8 @@ export default function StudentDashboard({ userId, userName }) {
       supabase.from("teacher_students").select("teacher_id")
         .eq("student_id", userId).eq("durum", "onaylandi"),
     ]);
+    hatalariBildir([t, ts, er, prof, sub, tch],
+      ["gorevler", "testler", "sinavlar", "profil", "odev gonderimleri", "bagli ogretmenler"]);
     setTasks(t.data ?? []);
     setTestSessions(ts.data ?? []);
     setExamResults(er.data ?? []);
@@ -114,14 +117,20 @@ export default function StudentDashboard({ userId, userName }) {
     setSubmissions(subMap);
     // Bağlı öğretmenler; tablo yoksa (migration çalışmadıysa) hepsine düşülür
     if (tch.error) {
-      const { data } = await supabase.from("users").select("id, full_name").eq("role", "teacher");
-      setTeachers(data ?? []);
+      const { veri } = await calistir(
+        supabase.from("users").select("id, full_name").eq("role", "teacher"),
+        "Ogretmen listesi", { sessiz: true }
+      );
+      setTeachers(veri ?? []);
     } else {
       const ids = (tch.data ?? []).map(b => b.teacher_id);
-      const { data } = ids.length
-        ? await supabase.from("users").select("id, full_name").in("id", ids)
-        : { data: [] };
-      setTeachers(data ?? []);
+      const { veri } = ids.length
+        ? await calistir(
+            supabase.from("users").select("id, full_name").in("id", ids),
+            "Bagli ogretmenler", { sessiz: true }
+          )
+        : { veri: [] };
+      setTeachers(veri ?? []);
     }
     const profData = prof.data ?? null;
     setProfile(profData);
@@ -249,7 +258,9 @@ export default function StudentDashboard({ userId, userName }) {
 
       const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(path);
 
-      await supabase.from("homework_submissions").upsert({
+      // Supabase hata FIRLATMAZ; error okunmazsa yukleme basarisiz olsa
+      // bile catch tetiklenmez ve ogrenci odevi gonderildi sanir.
+      const { error: kayitHatasi } = await supabase.from("homework_submissions").upsert({
         task_id:      taskId,
         student_id:   userId,
         file_url:     publicUrl,
@@ -259,6 +270,7 @@ export default function StudentDashboard({ userId, userName }) {
         submitted_at: new Date().toISOString(),
         reviewed_at:  null,
       }, { onConflict: "task_id" });
+      if (kayitHatasi) throw kayitHatasi;
 
       loadAll();
     } catch (err) {

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { supabase } from "../supabase";
+import { calistir } from "../lib/db";
 
 // Görev öğesi: tamamlandı checkbox'ı + ödev yükleme / durum gösterimi
 export default function TaskItem({ id, done, label, sub, color, onToggle, submission, uploading, onFileSelect }) {
@@ -10,10 +11,17 @@ export default function TaskItem({ id, done, label, sub, color, onToggle, submis
   const handleToggle = async (e) => {
     e.stopPropagation();
     const next = !checked;
-    setChecked(next);
+    setChecked(next);          // iyimser güncelleme: kutucuk hemen dolsun
     setSaving(true);
-    await supabase.from("tasks").update({ is_done: next }).eq("id", id);
+    const { hata } = await calistir(
+      supabase.from("tasks").update({ is_done: next }).eq("id", id),
+      "Görev güncelleme"
+    );
     setSaving(false);
+    if (hata) {
+      setChecked(!next);       // yazma başarısızsa kutucuk yalan söylemesin
+      return;
+    }
     if (onToggle) onToggle(id, next);
   };
 

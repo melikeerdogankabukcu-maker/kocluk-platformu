@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase";
+import { calistir } from "./lib/db";
 import Auth from "./Auth";
 import TopBar from "./components/TopBar";
 import { TopicsProvider } from "./lib/TopicsContext";
@@ -8,11 +9,17 @@ import TeacherDashboard from "./dashboards/TeacherDashboard";
 import ParentDashboard from "./dashboards/ParentDashboard";
 
 async function fetchUserProfile(userId) {
-  const { data } = await supabase
+  // Bu okuma sessizce basarisiz olursa rol "student"a duser ve ogretmen
+  // ogrenci paneliyle karsilasir. Hatayi yutmak yerine gorunur kil.
+  const { data, error } = await supabase
     .from("users")
     .select("role, full_name")
     .eq("id", userId)
     .single();
+  if (error) {
+    console.error("[Kullanici profili]", error);
+    return null;
+  }
   return data;
 }
 
@@ -42,7 +49,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await calistir(supabase.auth.signOut(), "Cikis yapma", { sessiz: true });
     setUser(null);
     setRole(null);
     setUserName("");

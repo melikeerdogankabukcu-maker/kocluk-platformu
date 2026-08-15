@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../supabase";
+import { calistir } from "../lib/db";
 
 // Kullanıcının bildirimlerini yükler ve Supabase Realtime ile canlı dinler.
 // notifications tablosu yoksa (migration çalışmadıysa) sessizce devre dışı kalır.
@@ -40,21 +41,36 @@ export function useNotifications(userId) {
 
   const okunmamis = bildirimler.filter(b => !b.okundu).length;
 
+  // Bu üçü kullanıcının bilinçli beklediği bir sonuç üretmiyor (zil zaten
+  // anında güncelleniyor), o yüzden sessiz: hata konsola yazılır ama
+  // ekrana uyarı basılmaz. Başarısızlıkta iyimser güncelleme geri alınır.
   const okunduIsaretle = async (id) => {
     setBildirimler(b => b.map(x => (x.id === id ? { ...x, okundu: true } : x)));
-    await supabase.from("notifications").update({ okundu: true }).eq("id", id);
+    const { hata } = await calistir(
+      supabase.from("notifications").update({ okundu: true }).eq("id", id),
+      "Bildirim okundu işaretleme", { sessiz: true }
+    );
+    if (hata) yukle();
   };
 
   const hepsiniOkunduYap = async () => {
     const okunmamisIdler = bildirimler.filter(b => !b.okundu).map(b => b.id);
     if (okunmamisIdler.length === 0) return;
     setBildirimler(b => b.map(x => ({ ...x, okundu: true })));
-    await supabase.from("notifications").update({ okundu: true }).in("id", okunmamisIdler);
+    const { hata } = await calistir(
+      supabase.from("notifications").update({ okundu: true }).in("id", okunmamisIdler),
+      "Bildirimleri okundu işaretleme", { sessiz: true }
+    );
+    if (hata) yukle();
   };
 
   const sil = async (id) => {
     setBildirimler(b => b.filter(x => x.id !== id));
-    await supabase.from("notifications").delete().eq("id", id);
+    const { hata } = await calistir(
+      supabase.from("notifications").delete().eq("id", id),
+      "Bildirim silme", { sessiz: true }
+    );
+    if (hata) yukle();
   };
 
   return { bildirimler, okunmamis, etkin, yukle, okunduIsaretle, hepsiniOkunduYap, sil };

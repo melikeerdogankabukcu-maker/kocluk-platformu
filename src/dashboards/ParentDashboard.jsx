@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
+import { hatalariBildir } from "../lib/db";
 import { COLORS } from "../lib/theme";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { computeTopicProgress } from "../lib/progressHelpers";
@@ -27,17 +28,20 @@ export default function ParentDashboard({ userId, userName }) {
 
   useEffect(() => {
     const load = async () => {
-      const { data: links } = await supabase
+      const { data: links, error: bagHatasi } = await supabase
         .from("family_links").select("student_id").eq("parent_id", userId);
+      if (bagHatasi) console.error("[Veli-cocuk bagi]", bagHatasi);
 
       if (!links || links.length === 0) { setLoading(false); return; }
 
       const studentId = links[0].student_id;
 
-      const [{ data: studentData }, { data: taskData }] = await Promise.all([
+      const sonuclar = await Promise.all([
         supabase.from("users").select("id, full_name").eq("id", studentId).single(),
         supabase.from("tasks").select("*").eq("student_id", studentId).order("created_at", { ascending: false }),
       ]);
+      hatalariBildir(sonuclar, ["cocuk bilgisi", "gorevler"]);
+      const [{ data: studentData }, { data: taskData }] = sonuclar;
 
       setChild(studentData);
       setTasks(taskData ?? []);

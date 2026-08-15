@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
+import { hatalariBildir } from "../lib/db";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 
@@ -28,8 +29,9 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
     setBaglar(satirlar ?? []);
 
     // Karşı taraftaki herkesin adı (aday listesi + görünen ad için)
-    const { data: kisilerData } = await supabase
+    const { data: kisilerData, error: kisiHatasi } = await supabase
       .from("users").select("id, full_name, email").eq("role", karsiRol);
+    if (kisiHatasi) console.error("[Aday kisi listesi]", kisiHatasi);
     const harita = {};
     (kisilerData ?? []).forEach(k => { harita[k.id] = k; });
     setKisiler(harita);

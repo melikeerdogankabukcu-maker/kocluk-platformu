@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../supabase";
+import { calistir } from "../lib/db";
 import { useTopics } from "../lib/TopicsContext";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
@@ -29,9 +30,12 @@ export default function KonuYonetimi({ color: c }) {
 
   const pasifleriYukle = async (tur, d) => {
     if (!d) return setPasifler([]);
-    const { data } = await supabase.from("exam_topics")
-      .select("topic").eq("exam_type", tur).eq("subject", d).eq("aktif", false).order("sira");
-    setPasifler((data ?? []).map(r => r.topic));
+    const { veri } = await calistir(
+      supabase.from("exam_topics")
+        .select("topic").eq("exam_type", tur).eq("subject", d).eq("aktif", false).order("sira"),
+      "Pasif konulari yukleme", { sessiz: true }
+    );
+    setPasifler((veri ?? []).map(r => r.topic));
   };
 
   const dersSec = (d) => { setDers(d); setDuzenlenen(null); pasifleriYukle(examType, d); };

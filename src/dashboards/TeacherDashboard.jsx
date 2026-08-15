@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
+import { calistir, hatalariBildir } from "../lib/db";
 import { API_URL } from "../lib/config";
 import { COLORS } from "../lib/theme";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
@@ -53,14 +54,16 @@ export default function TeacherDashboard({ userId, userName }) {
 
     let studentData = [];
     if (bagHata) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("users").select("id, full_name, email").eq("role", "student");
+      if (error) console.error("[Ogrenci listesi]", error);
       studentData = data ?? [];
     } else {
       const ids = (baglar ?? []).map(b => b.student_id);
       if (ids.length > 0) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("users").select("id, full_name, email").in("id", ids);
+        if (error) console.error("[Bagli ogrenciler]", error);
         studentData = data ?? [];
       }
     }
@@ -71,7 +74,7 @@ export default function TeacherDashboard({ userId, userName }) {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const [{ data: taskData }, { data: profileData }, { data: submissionData }, { data: testData }] = await Promise.all([
+    const sonuclar = await Promise.all([
       supabase.from("tasks").select("*").eq("teacher_id", userId),
       studentIds.length > 0
         ? supabase.from("student_profiles").select("*").in("id", studentIds)
@@ -90,6 +93,8 @@ export default function TeacherDashboard({ userId, userName }) {
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] }),
     ]);
+    hatalariBildir(sonuclar, ["gorevler", "ogrenci profilleri", "odev gonderimleri", "testler"]);
+    const [{ data: taskData }, { data: profileData }, { data: submissionData }, { data: testData }] = sonuclar;
 
     const grouped = {};
     (taskData ?? []).forEach(t => {
@@ -132,20 +137,30 @@ export default function TeacherDashboard({ userId, userName }) {
       due_date: form.due_date || null,
     };
     // Gruba atamada her öğrenci için ayrı görev satırı — herkes kendi ilerlemesini tutar
-    await supabase.from("tasks").insert(hedefler.map(sid => ({ ...ortak, student_id: sid })));
+    // Gruptaki bir ogrencinin bagi onayli degilse WITH CHECK tum insert'i
+    // reddeder; hata okunmazsa ogretmen hicbir gorev atanmadigini fark etmez.
+    const { hata } = await calistir(
+      supabase.from("tasks").insert(hedefler.map(sid => ({ ...ortak, student_id: sid }))),
+      "Gorev atama"
+    );
+    setSaving(false);
+    if (hata) return;
     setForm({ student_id: "", title: "", subject: "", custom_subject: "", topic: "",
       exam_type: "TYT", estimated_minutes: "", due_date: "" });
     setShowForm(false);
-    setSaving(false);
     loadData();
   };
 
   const handleReview = async (submissionId, status, note = null) => {
-    await supabase.from("homework_submissions").update({
-      status,
-      teacher_note: note || null,
-      reviewed_at:  new Date().toISOString(),
-    }).eq("id", submissionId);
+    const { hata } = await calistir(
+      supabase.from("homework_submissions").update({
+        status,
+        teacher_note: note || null,
+        reviewed_at:  new Date().toISOString(),
+      }).eq("id", submissionId),
+      "Odev degerlendirme"
+    );
+    if (hata) return;
     setReturningId(null);
     setReturnNote("");
     loadData();
