@@ -8,6 +8,7 @@ export default function Auth({ onLogin }) {
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("student");
   const [error, setError] = useState("");
+  const [bilgi, setBilgi] = useState("");
   const [loading, setLoading] = useState(false);
 
   const COLORS = {
@@ -19,22 +20,35 @@ export default function Auth({ onLogin }) {
   const handleSubmit = async () => {
     setLoading(true);
     setError("");
+    setBilgi("");
 
     if (isLogin) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setError(error.message);
       else onLogin(data.user);
     } else {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      // Ad ve rol metadata olarak gidiyor; profil satırını auth.users
+      // üzerindeki tetikleyici oluşturuyor (kayit_akisi_migration.sql).
+      // Buradan users tablosuna insert YAPILMIYOR: e-posta onayı açıkken
+      // signUp oturum döndürmediği için o insert anon olarak çalışır ve
+      // RLS tarafından reddedilirdi.
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName.trim(), role } },
+      });
+
       if (error) {
         setError(error.message);
+      } else if (!data.session) {
+        // Onay bekleniyor — kullanıcı henüz giriş yapmış değil.
+        setBilgi(
+          `${email} adresine bir doğrulama bağlantısı gönderdik. ` +
+          `Bağlantıya tıkladıktan sonra giriş yapabilirsiniz.`
+        );
+        setIsLogin(true);
+        setPassword("");
       } else {
-        await supabase.from("users").insert({
-          id: data.user.id,
-          email,
-          full_name: fullName,
-          role,
-        });
         onLogin(data.user);
       }
     }
@@ -147,6 +161,15 @@ export default function Auth({ onLogin }) {
             background: "#FFF0F0", color: "#A32D2D", fontSize: 12,
             padding: "10px 14px", borderRadius: 10, marginBottom: 16,
           }}>{error}</div>
+        )}
+
+        {/* E-posta onayı bekleniyor */}
+        {bilgi && (
+          <div style={{
+            background: "#EFF7F2", color: "#0F6E56", fontSize: 12,
+            padding: "10px 14px", borderRadius: 10, marginBottom: 16,
+            lineHeight: 1.5,
+          }}>{bilgi}</div>
         )}
 
         {/* Buton */}
