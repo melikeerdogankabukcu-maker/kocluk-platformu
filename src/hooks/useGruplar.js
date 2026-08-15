@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
-import { hatalariBildir } from "../lib/db";
 
 // Öğretmenin öğrenci grupları ve üyelikleri.
 // Hem grup yönetimi hem toplu atama (görev/program) aynı veriyi kullandığı için

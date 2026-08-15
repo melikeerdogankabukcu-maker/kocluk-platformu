@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
-import { calistir, hatalariBildir } from "../lib/db";
+import { calistir } from "../lib/db";
 
 // Bir kullanıcının (öğretmen / öğrenci / veli) derslerini yönetir.
 // RLS sayesinde select yalnızca kullanıcının taraf olduğu (veya velinin çocuğunun)

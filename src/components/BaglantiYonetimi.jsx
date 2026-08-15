@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
-import { hatalariBildir } from "../lib/db";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 

@@ -485,6 +485,10 @@ export default function TeacherDashboard({ userId, userName }) {
         <div id="bolum-baglanti"><BaglantiYonetimi userId={userId} rol="teacher" color={c} onDegisti={loadData} /></div>
       )}
 
+      {/* Gruplar — toplu görev/program ataması için. Bağlantı yönetiminin
+          hemen ardında: önce öğrenci eklenir, sonra gruplanır. */}
+      <GrupYonetimi userId={userId} students={students} color={c} onDegisti={gruplariTazele} />
+
       {/* Son Çözülen Testler (son 7 gün) — öğrenci test girince burada görünür */}
       {recentTests.length > 0 && (
         <Card id="bolum-test">
