@@ -1467,9 +1467,10 @@ export function programGorevSatirlari(icerik, { teacherId, studentId, baslangic,
       const tarih = _tarihStr(gun);
 
       (g.dersler ?? []).forEach(x => {
-        // Başlık önce konudan, yoksa dersten. İkisi de boşsa satır bir iş
-        // tarif etmiyor demektir; göreve çevirmeye değmez.
-        const baslik = (x.konu?.trim() || x.ders?.trim() || "");
+        // Başlık önce öğretmenin yazdığı görev başlığından; yoksa konudan,
+        // o da yoksa dersten. Üçü de boşsa satır bir iş tarif etmiyor
+        // demektir; göreve çevirmeye değmez.
+        const baslik = (x.baslik?.trim() || x.konu?.trim() || x.ders?.trim() || "");
         if (!baslik) return;
         satirlar.push({
           teacher_id: teacherId,

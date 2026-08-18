@@ -11,7 +11,10 @@ const ONCELIKLER = [
   { e: "🔴", ad: "Kritik" }, { e: "🟠", ad: "Önemli" },
   { e: "🟡", ad: "Orta" },   { e: "⚪", ad: "Destek" },
 ];
-const BOS_SATIR = { ders: "", konu: "", sure: "", oncelik: "🟠", aciklama: "" };
+// baslik: gorevin metni. Program goreve donusturuldugunde tasks.title bu
+// olur. Bos birakilirsa konuya, o da bossa derse dusulur. Gorev Ata
+// formundaki "Gorev basligi" alaninin karsiligi.
+const BOS_SATIR = { ders: "", konu: "", baslik: "", sure: "", oncelik: "🟠", aciklama: "" };
 
 const bosHafta = (no) => ({
   week: no, title: "",
@@ -93,6 +96,15 @@ export default function ProgramDuzenleyici({ userId, color: c }) {
   });
   const satirGuncelle = (hno, gi, si, alan, v) => icerikGuncelle(i => {
     const d = i.weeks.find(w => w.week === hno)?.days[gi].dersler[si]; if (d) d[alan] = v;
+  });
+
+  // Konu seçilince başlığı öner; öğretmen elle yazdıysa dokunma.
+  // Görev Ata formundaki davranışın aynısı.
+  const konuSec = (hno, gi, si, konu) => icerikGuncelle(i => {
+    const d = i.weeks.find(w => w.week === hno)?.days[gi].dersler[si];
+    if (!d) return;
+    if (!d.baslik || d.baslik === d.konu) d.baslik = konu;
+    d.konu = konu;
   });
 
   const kaydet = async () => {
@@ -319,16 +331,26 @@ export default function ProgramDuzenleyici({ userId, color: c }) {
 
                                       {elleKipte(w.week, gi, si, d.ders) ? (
                                         <input placeholder="Konu / açıklama" value={d.konu}
-                                          onChange={e => satirGuncelle(w.week, gi, si, "konu", e.target.value)}
+                                          onChange={e => konuSec(w.week, gi, si, e.target.value)}
                                           style={{ ...inputStyle, background: "#fff" }} />
                                       ) : d.ders ? (
                                         <select value={d.konu}
-                                          onChange={e => satirGuncelle(w.week, gi, si, "konu", e.target.value)}
+                                          onChange={e => konuSec(w.week, gi, si, e.target.value)}
                                           style={{ ...inputStyle, background: "#fff", color: d.konu ? "#222" : "#aaa" }}>
                                           <option value="">Konu seç...</option>
                                           {topicsOf(examType, d.ders).map(k => <option key={k} value={k}>{k}</option>)}
                                         </select>
                                       ) : null}
+
+                                      {/* Görev başlığı — öğrenciye bu metin görev olarak düşer.
+                                          Görev Ata formundaki alanın karşılığı: konu seçilince
+                                          otomatik dolar, öğretmen üzerine yazabilir. */}
+                                      <input
+                                        placeholder="Görev başlığı (ör. Matematik — 10 soru)"
+                                        value={d.baslik ?? ""}
+                                        onChange={e => satirGuncelle(w.week, gi, si, "baslik", e.target.value)}
+                                        style={{ ...inputStyle, background: "#fff", fontWeight: 600 }} />
+
                                       <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
                                         {ONCELIKLER.map(o => (
                                           <button key={o.e} onClick={() => satirGuncelle(w.week, gi, si, "oncelik", o.e)}
