@@ -37,10 +37,21 @@ export default function TeacherDashboard({ userId, userName }) {
   const [loading,     setLoading]     = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  // due_dates: birden fazla tarih seçilebilir. Her (öğrenci × tarih) için
+  // ayrı görev satırı açılır — grup atamasındaki mantığın aynısı, herkes
+  // kendi ilerlemesini tutsun diye.
   const [form, setForm] = useState({
     student_id: "", title: "", subject: "", custom_subject: "", topic: "",
-    exam_type: "TYT", estimated_minutes: "", due_date: "",
+    exam_type: "TYT", estimated_minutes: "", due_dates: [],
   });
+  const [tarihGirdi, setTarihGirdi] = useState("");
+
+  const tarihEkle = (t) => {
+    if (!t) return;
+    setForm(f => (f.due_dates.includes(t) ? f : { ...f, due_dates: [...f.due_dates, t].sort() }));
+  };
+  const tarihCikar = (t) =>
+    setForm(f => ({ ...f, due_dates: f.due_dates.filter(x => x !== t) }));
 
   // Öğrenci analizi (Python backend) — satıra tıklayınca getir + önbelleğe al
   const { expandedId: expandedStudent, toggle: toggleAnaliz, getAnaliz, getOneriler, isLoading: isLoadingAnalizFor } = useAnalizCache();
@@ -134,19 +145,25 @@ export default function TeacherDashboard({ userId, userName }) {
       subject: (form.subject === "__diger" ? form.custom_subject.trim() : form.subject) || null,
       topic: form.subject === "__diger" ? null : (form.topic || null),
       estimated_minutes: form.estimated_minutes ? parseInt(form.estimated_minutes) : null,
-      due_date: form.due_date || null,
     };
-    // Gruba atamada her öğrenci için ayrı görev satırı — herkes kendi ilerlemesini tutar
+    // Her (öğrenci × tarih) için ayrı satır: gruba atamadaki mantığın aynısı,
+    // herkes kendi ilerlemesini tutsun diye. Tarih seçilmediyse tek satır ve
+    // due_date null — eski davranış korunur.
+    const tarihler = form.due_dates.length > 0 ? form.due_dates : [null];
+    const satirlar = hedefler.flatMap(sid =>
+      tarihler.map(t => ({ ...ortak, student_id: sid, due_date: t }))
+    );
     // Gruptaki bir ogrencinin bagi onayli degilse WITH CHECK tum insert'i
     // reddeder; hata okunmazsa ogretmen hicbir gorev atanmadigini fark etmez.
     const { hata } = await calistir(
-      supabase.from("tasks").insert(hedefler.map(sid => ({ ...ortak, student_id: sid }))),
+      supabase.from("tasks").insert(satirlar),
       "Gorev atama"
     );
     setSaving(false);
     if (hata) return;
     setForm({ student_id: "", title: "", subject: "", custom_subject: "", topic: "",
-      exam_type: "TYT", estimated_minutes: "", due_date: "" });
+      exam_type: "TYT", estimated_minutes: "", due_dates: [] });
+    setTarihGirdi("");
     setShowForm(false);
     loadData();
   };
@@ -630,12 +647,46 @@ export default function TeacherDashboard({ userId, userName }) {
               />
             </div>
 
-            {/* Tarih */}
+            {/* Tarihler — birden fazla seçilebilir, her tarih için ayrı görev açılır */}
             <div>
-              <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>Tarih</div>
-              <input type="date" value={form.due_date}
-                onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+              <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>
+                Tarih {form.due_dates.length > 0 && `(${form.due_dates.length} seçili)`}
+              </div>
+              <input type="date" value={tarihGirdi}
+                onChange={e => { tarihEkle(e.target.value); setTarihGirdi(""); }}
                 style={{ width: "100%", padding: "9px 12px", borderRadius: 10, border: "1.5px solid #f0ede8", fontSize: 13, boxSizing: "border-box" }} />
+
+              {form.due_dates.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  {form.due_dates.map(t => (
+                    <span key={t} style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      background: c.light, color: c.bg, fontSize: 12, fontWeight: 600,
+                      padding: "5px 8px 5px 10px", borderRadius: 999,
+                    }}>
+                      {new Date(`${t}T00:00:00`).toLocaleDateString("tr-TR",
+                        { day: "numeric", month: "short", weekday: "short" })}
+                      <button onClick={() => tarihCikar(t)} title="Kaldır" style={{
+                        background: "none", border: "none", color: c.bg, cursor: "pointer",
+                        fontSize: 14, lineHeight: 1, padding: 0,
+                      }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Kaç görev açılacağını önceden göster: gruba çok tarihli atamada
+                  satır sayısı hızla büyüyor, öğretmen bunu görmeden onaylamasın. */}
+              {(() => {
+                const ogr = hedefOgrenciler().length;
+                const tar = Math.max(form.due_dates.length, 1);
+                if (ogr === 0) return null;
+                return (
+                  <div style={{ fontSize: 11, color: "#888", marginTop: 8 }}>
+                    {ogr} öğrenci × {tar} tarih = <b style={{ color: c.bg }}>{ogr * tar} görev</b>
+                  </div>
+                );
+              })()}
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>

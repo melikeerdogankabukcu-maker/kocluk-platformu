@@ -33,6 +33,18 @@ export default function ProgramDuzenleyici({ userId, color: c }) {
   const [kaydediliyor, setKay]  = useState(false);
   const [examType, setExamType] = useState("TYT");  // konu seçici için
 
+  // Ders/konu seçimi görev atama formuyla aynı: müfredattan açılır liste,
+  // yanında "Diğer (elle yaz)" kaçışı. Kaçış şart — programlarda ders
+  // olmayan satırlar var (🔁 TEKİ, 📝 DENEME, 😴 DİNLENME) ve mevcut
+  // kayıtlardaki ders adları büyük harfli (FİZİK), müfredattaki Fizik ile
+  // birebir eşleşmiyor. Eşleşmeyen değer otomatik olarak elle-yazma
+  // kipinde açılır, böylece hiçbir mevcut satır bozulmaz.
+  const [elleDers, setElleDers] = useState(new Set());
+  const satirAnahtari = (hno, gi, si) => `${hno}-${gi}-${si}`;
+  const mufredattaVar = (ders) => !!ders && examSubjectsOf(examType).includes(ders);
+  const elleKipte = (hno, gi, si, ders) =>
+    elleDers.has(satirAnahtari(hno, gi, si)) || (!!ders && !mufredattaVar(ders));
+
   const inputStyle = {
     padding: "7px 10px", borderRadius: 8, border: "1.5px solid #f0ede8",
     fontSize: 12, boxSizing: "border-box", width: "100%",
@@ -268,23 +280,55 @@ export default function ProgramDuzenleyici({ userId, color: c }) {
                                   {g.dersler.map((d, si) => (
                                     <div key={si} style={{ padding: 7, borderRadius: 7, background: "#fafaf8", display: "flex", flexDirection: "column", gap: 5 }}>
                                       <div style={{ display: "flex", gap: 5 }}>
-                                        <input list={`dersler-${examType}`} placeholder="Ders" value={d.ders}
-                                          onChange={e => satirGuncelle(w.week, gi, si, "ders", e.target.value)}
-                                          style={{ ...inputStyle, flex: 1, background: "#fff" }} />
+                                        {/* Ders — görev atama formundaki seçicinin aynısı */}
+                                        <select
+                                          value={elleKipte(w.week, gi, si, d.ders) ? "__diger" : d.ders}
+                                          onChange={e => {
+                                            const v = e.target.value;
+                                            const ah = satirAnahtari(w.week, gi, si);
+                                            if (v === "__diger") {
+                                              setElleDers(s => new Set(s).add(ah));
+                                              satirGuncelle(w.week, gi, si, "ders", "");
+                                            } else {
+                                              setElleDers(s => { const y = new Set(s); y.delete(ah); return y; });
+                                              satirGuncelle(w.week, gi, si, "ders", v);
+                                              satirGuncelle(w.week, gi, si, "konu", "");
+                                            }
+                                          }}
+                                          style={{ ...inputStyle, flex: 1, background: "#fff", color: d.ders ? "#222" : "#aaa" }}>
+                                          <option value="">Ders seç...</option>
+                                          {examSubjectsOf(examType).map(x => <option key={x} value={x}>{x}</option>)}
+                                          <option value="__diger">Diğer (elle yaz)</option>
+                                        </select>
                                         <input placeholder="Süre" value={d.sure}
                                           onChange={e => satirGuncelle(w.week, gi, si, "sure", e.target.value)}
                                           style={{ ...inputStyle, width: 70, background: "#fff" }} />
-                                        <button onClick={() => satirSil(w.week, gi, si)} style={{
+                                        <button onClick={() => { setElleDers(new Set()); satirSil(w.week, gi, si); }} style={{
                                           fontSize: 11, padding: "0 9px", borderRadius: 7, border: "none",
                                           background: "#FFF0F0", color: "#A32D2D", cursor: "pointer", flexShrink: 0,
                                         }}>✕</button>
                                       </div>
-                                      <input list={`konular-${examType}-${d.ders}`} placeholder="Konu" value={d.konu}
-                                        onChange={e => satirGuncelle(w.week, gi, si, "konu", e.target.value)}
-                                        style={{ ...inputStyle, background: "#fff" }} />
-                                      <datalist id={`konular-${examType}-${d.ders}`}>
-                                        {topicsOf(examType, d.ders).map(k => <option key={k} value={k} />)}
-                                      </datalist>
+
+                                      {/* Elle kipte ders adı serbest; müfredattan seçildiyse konu da müfredattan */}
+                                      {elleKipte(w.week, gi, si, d.ders) ? (
+                                        <input list={`dersler-${examType}`}
+                                          placeholder="Ders adı (ör. 📝 DENEME)" value={d.ders}
+                                          onChange={e => satirGuncelle(w.week, gi, si, "ders", e.target.value)}
+                                          style={{ ...inputStyle, background: "#fff" }} />
+                                      ) : null}
+
+                                      {elleKipte(w.week, gi, si, d.ders) ? (
+                                        <input placeholder="Konu / açıklama" value={d.konu}
+                                          onChange={e => satirGuncelle(w.week, gi, si, "konu", e.target.value)}
+                                          style={{ ...inputStyle, background: "#fff" }} />
+                                      ) : d.ders ? (
+                                        <select value={d.konu}
+                                          onChange={e => satirGuncelle(w.week, gi, si, "konu", e.target.value)}
+                                          style={{ ...inputStyle, background: "#fff", color: d.konu ? "#222" : "#aaa" }}>
+                                          <option value="">Konu seç...</option>
+                                          {topicsOf(examType, d.ders).map(k => <option key={k} value={k}>{k}</option>)}
+                                        </select>
+                                      ) : null}
                                       <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
                                         {ONCELIKLER.map(o => (
                                           <button key={o.e} onClick={() => satirGuncelle(w.week, gi, si, "oncelik", o.e)}
