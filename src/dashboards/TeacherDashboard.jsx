@@ -5,6 +5,7 @@ import { API_URL } from "../lib/config";
 import { COLORS } from "../lib/theme";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { useTopics } from "../lib/TopicsContext";
+import { bolumeGit } from "../lib/bildirimHedef";
 import SinavGirisFormu from "../components/SinavGirisFormu";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
@@ -149,7 +150,11 @@ export default function TeacherDashboard({ userId, userName }) {
       teacher_id: userId,
       title: form.title.trim(),
       subject: (form.subject === "__diger" ? form.custom_subject.trim() : form.subject) || null,
-      topic: form.subject === "__diger" ? null : (form.topic || null),
+      // Ders seçici değişince topic zaten temizleniyor (aşağıdaki onChange),
+      // bu yüzden burada ayrıca __diger kontrolü gerekmiyor. Kaldırılması
+      // kopyalanan görevin konusunu koruyor: müfredat dışı dersli bir görev
+      // kopyalandığında konusu da geliyor.
+      topic: form.topic || null,
       estimated_minutes: form.estimated_minutes ? parseInt(form.estimated_minutes) : null,
     };
     // Her (öğrenci × tarih) için ayrı satır: gruba atamadaki mantığın aynısı,
@@ -210,6 +215,30 @@ export default function TeacherDashboard({ userId, userName }) {
     if (hata) return;
     setGorevTaslak(null);
     loadData();
+  };
+
+  // Kopyalama ayrı bir form açmıyor: mevcut "Görev Ata" formunu görevin
+  // içeriğiyle dolduruyor. Böylece çoklu tarih ve gruba atama gibi tüm
+  // yetenekler kopyada da geçerli oluyor.
+  const gorevKopyala = (t) => {
+    // Dersin hangi sınav müfredatında olduğunu bul; hiçbirinde yoksa
+    // "Diğer (elle yaz)" kipine düş, ders adı kaybolmasın.
+    const tur = examSubjectsOf("TYT").includes(t.subject) ? "TYT"
+              : examSubjectsOf("AYT").includes(t.subject) ? "AYT" : null;
+    setForm({
+      student_id: t.student_id,
+      title: t.title ?? "",
+      subject: tur ? t.subject : (t.subject ? "__diger" : ""),
+      custom_subject: tur ? "" : (t.subject ?? ""),
+      topic: t.topic ?? "",
+      exam_type: tur ?? "TYT",
+      estimated_minutes: t.estimated_minutes ?? "",
+      due_dates: [],            // tarihi öğretmen yeniden seçsin
+    });
+    setTarihGirdi("");
+    setShowForm(true);
+    // Form listenin altında; kullanıcı nereye gittiğini görsün.
+    setTimeout(() => bolumeGit("bolum-gorevler"), 50);
   };
 
   const gorevSil = async (t) => {
@@ -454,6 +483,10 @@ export default function TeacherDashboard({ userId, userName }) {
                                   maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                                 }}>{t.kaynak_program}</span>
                               )}
+                              <button onClick={() => gorevKopyala(t)} title="Kopyala — Görev Ata formunu bu görevle doldurur" style={{
+                                flexShrink: 0, background: "none", border: "none", padding: "0 2px",
+                                color: c.mid, fontSize: 12, cursor: "pointer",
+                              }}>⧉</button>
                               <button onClick={() => gorevDuzenle(t)} title="Düzenle" style={{
                                 flexShrink: 0, background: "none", border: "none", padding: "0 2px",
                                 color: c.mid, fontSize: 12, cursor: "pointer",
