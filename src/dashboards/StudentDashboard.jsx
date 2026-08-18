@@ -180,7 +180,7 @@ export default function StudentDashboard({ userId, userName }) {
   const gorevSatiri = (t) => (
     <TaskItem
       key={t.id} id={t.id} color={c.bg} done={t.is_done} label={t.title}
-      sub={[t.subject, t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
+      sub={[t.subject, t.topic, t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
         t.due_date ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : null,
         t.description].filter(Boolean).join(" · ")}
       submission={submissions[t.id] ?? null}

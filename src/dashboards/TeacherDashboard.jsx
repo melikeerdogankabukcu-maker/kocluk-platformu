@@ -36,6 +36,8 @@ export default function TeacherDashboard({ userId, userName }) {
   // varsayılan olarak son 6 tanesi gösterilir, bu state hangi öğrencinin
   // listesinin tamamen açıldığını tutar.
   const [acikGorevListesi, setAcikGorevListesi] = useState(null);
+  // Düzenlenen görevin taslağı: { id, title, subject, topic, due_date, estimated_minutes }
+  const [gorevTaslak, setGorevTaslak] = useState(null);
   const [returningId, setReturningId] = useState(null);
   const [returnNote,  setReturnNote]  = useState("");
   const [loading,     setLoading]     = useState(true);
@@ -169,6 +171,56 @@ export default function TeacherDashboard({ userId, userName }) {
       exam_type: "TYT", estimated_minutes: "", due_dates: [] });
     setTarihGirdi("");
     setShowForm(false);
+    loadData();
+  };
+
+  // Görev düzenleme/silme. RLS'de ek iş yok: "Ogretmen kendi ogrencisinin
+  // gorevleri" politikası FOR ALL ve ogrencim_mi(student_id) kontrollü.
+  // Ders/konu listeleri TYT ve AYT'nin birleşimi: tasks tablosunda exam_type
+  // tutulmuyor, hangi sınavdan geldiği bilinmiyor.
+  const tumDersler = [...new Set([...examSubjectsOf("TYT"), ...examSubjectsOf("AYT")])];
+  const tumKonular = (ders) =>
+    ders ? [...new Set([...topicsOf("TYT", ders), ...topicsOf("AYT", ders)])] : [];
+
+  const duzenleInput = {
+    padding: "6px 9px", borderRadius: 7, border: "1.5px solid #f0ede8",
+    fontSize: 11.5, boxSizing: "border-box", width: "100%", background: "#fff",
+  };
+
+  const gorevDuzenle = (t) => setGorevTaslak({
+    id: t.id, title: t.title ?? "", subject: t.subject ?? "", topic: t.topic ?? "",
+    due_date: t.due_date ?? "", estimated_minutes: t.estimated_minutes ?? "",
+  });
+
+  const gorevKaydet = async () => {
+    if (!gorevTaslak?.title.trim()) { alert("Görev başlığı boş olamaz"); return; }
+    setSaving(true);
+    const { hata } = await calistir(
+      supabase.from("tasks").update({
+        title: gorevTaslak.title.trim(),
+        subject: gorevTaslak.subject || null,
+        topic: gorevTaslak.topic || null,
+        due_date: gorevTaslak.due_date || null,
+        estimated_minutes: gorevTaslak.estimated_minutes
+          ? parseInt(gorevTaslak.estimated_minutes) : null,
+      }).eq("id", gorevTaslak.id),
+      "Gorev guncelleme"
+    );
+    setSaving(false);
+    if (hata) return;
+    setGorevTaslak(null);
+    loadData();
+  };
+
+  const gorevSil = async (t) => {
+    if (!window.confirm(`"${t.title}" görevi silinsin mi?\n\nBu işlem geri alınamaz.`)) return;
+    setSaving(true);
+    const { hata } = await calistir(
+      supabase.from("tasks").delete().eq("id", t.id),
+      "Gorev silme"
+    );
+    setSaving(false);
+    if (hata) return;
     loadData();
   };
 
@@ -321,6 +373,60 @@ export default function TeacherDashboard({ userId, userName }) {
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                           {gosterilen.map(t => (
+                            gorevTaslak?.id === t.id ? (
+                              /* Düzenleme kipi */
+                              <div key={t.id} style={{
+                                display: "flex", flexDirection: "column", gap: 5,
+                                padding: 8, borderRadius: 8, background: "#fff",
+                                border: `1.5px solid ${c.mid}`,
+                              }}>
+                                <input autoFocus value={gorevTaslak.title}
+                                  placeholder="Görev başlığı"
+                                  onChange={e => setGorevTaslak(g => ({ ...g, title: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === "Escape") setGorevTaslak(null); }}
+                                  style={{ ...duzenleInput, fontWeight: 600 }} />
+                                <div style={{ display: "flex", gap: 5 }}>
+                                  <select value={gorevTaslak.subject}
+                                    onChange={e => setGorevTaslak(g => ({ ...g, subject: e.target.value, topic: "" }))}
+                                    style={{ ...duzenleInput, flex: 1 }}>
+                                    <option value="">Ders yok</option>
+                                    {gorevTaslak.subject && !tumDersler.includes(gorevTaslak.subject) && (
+                                      <option value={gorevTaslak.subject}>{gorevTaslak.subject}</option>
+                                    )}
+                                    {tumDersler.map(d => <option key={d} value={d}>{d}</option>)}
+                                  </select>
+                                  <select value={gorevTaslak.topic}
+                                    onChange={e => setGorevTaslak(g => ({ ...g, topic: e.target.value }))}
+                                    style={{ ...duzenleInput, flex: 1 }}>
+                                    <option value="">Konu yok</option>
+                                    {/* Müfredatta olmayan mevcut konu kaybolmasın */}
+                                    {gorevTaslak.topic && !tumKonular(gorevTaslak.subject).includes(gorevTaslak.topic) && (
+                                      <option value={gorevTaslak.topic}>{gorevTaslak.topic}</option>
+                                    )}
+                                    {tumKonular(gorevTaslak.subject).map(k => <option key={k} value={k}>{k}</option>)}
+                                  </select>
+                                </div>
+                                <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                                  <input type="date" value={gorevTaslak.due_date}
+                                    onChange={e => setGorevTaslak(g => ({ ...g, due_date: e.target.value }))}
+                                    style={{ ...duzenleInput, flex: 1 }} />
+                                  <input type="number" placeholder="dk" value={gorevTaslak.estimated_minutes}
+                                    onChange={e => setGorevTaslak(g => ({ ...g, estimated_minutes: e.target.value }))}
+                                    style={{ ...duzenleInput, width: 62 }} />
+                                  <div style={{ flex: 1 }} />
+                                  <button onClick={() => setGorevTaslak(null)} disabled={saving} style={{
+                                    fontSize: 10.5, padding: "5px 10px", borderRadius: 99,
+                                    border: "1px solid #f0ede8", background: "#fff", color: "#888",
+                                    cursor: "pointer", fontWeight: 600,
+                                  }}>Vazgeç</button>
+                                  <button onClick={gorevKaydet} disabled={saving} style={{
+                                    fontSize: 10.5, padding: "5px 12px", borderRadius: 99, border: "none",
+                                    background: c.bg, color: "#fff", cursor: "pointer", fontWeight: 700,
+                                    opacity: saving ? 0.7 : 1,
+                                  }}>{saving ? "..." : "Kaydet"}</button>
+                                </div>
+                              </div>
+                            ) : (
                             <div key={t.id} style={{ display: "flex", alignItems: "baseline", gap: 7, fontSize: 11.5 }}>
                               <span style={{ flexShrink: 0, color: t.is_done ? "#1A6B3C" : "#c8c2ba", fontWeight: 700 }}>
                                 {t.is_done ? "✓" : "○"}
@@ -335,7 +441,11 @@ export default function TeacherDashboard({ userId, userName }) {
                                 textDecoration: t.is_done ? "line-through" : "none",
                               }}>
                                 {t.title}
-                                {t.subject && <span style={{ color: "#aaa" }}> · {t.subject}</span>}
+                                {(t.subject || t.topic) && (
+                                  <span style={{ color: "#aaa" }}>
+                                    {" · "}{[t.subject, t.topic].filter(Boolean).join(" · ")}
+                                  </span>
+                                )}
                               </span>
                               {t.kaynak_program && (
                                 <span title={`${t.kaynak_program} programından`} style={{
@@ -344,7 +454,16 @@ export default function TeacherDashboard({ userId, userName }) {
                                   maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                                 }}>{t.kaynak_program}</span>
                               )}
+                              <button onClick={() => gorevDuzenle(t)} title="Düzenle" style={{
+                                flexShrink: 0, background: "none", border: "none", padding: "0 2px",
+                                color: c.mid, fontSize: 12, cursor: "pointer",
+                              }}>✎</button>
+                              <button onClick={() => gorevSil(t)} disabled={saving} title="Sil" style={{
+                                flexShrink: 0, background: "none", border: "none", padding: "0 2px",
+                                color: "#C98A8A", fontSize: 12, cursor: "pointer",
+                              }}>✕</button>
                             </div>
+                            )
                           ))}
                         </div>
                         {sirali.length > 6 && (
