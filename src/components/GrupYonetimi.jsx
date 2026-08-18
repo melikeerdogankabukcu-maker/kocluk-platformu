@@ -8,11 +8,13 @@ const RENKLER = ["#5B8DEF", "#E0A526", "#9B59B6", "#1A6B3C", "#E24B4A", "#4A5B73
 // Öğretmenin öğrencilerini sınıf/gruba ayırdığı ekran.
 // Gruplar toplu görev ve program atamasında kullanılır.
 export default function GrupYonetimi({ userId, students, color: c, onDegisti }) {
-  const { gruplar, etkin, grupEkle, grupSil, uyeEkle, uyeCikar } = useGruplar(userId);
+  const { gruplar, etkin, grupEkle, grupGuncelle, grupSil, uyeEkle, uyeCikar } = useGruplar(userId);
   const [acik, setAcik]         = useState(false);
   const [acikGrup, setAcikGrup] = useState(null);
   const [islemde, setIslemde]   = useState(false);
   const [yeni, setYeni] = useState({ ad: "", aciklama: "", renk: RENKLER[0] });
+  // Düzenlenen grubun taslağı: { id, ad, aciklama, renk }. null ise düzenleme kapalı.
+  const [duzenlenen, setDuzenlenen] = useState(null);
 
   if (!etkin) return null;   // tablo yoksa kartı hiç gösterme
 
@@ -35,6 +37,17 @@ export default function GrupYonetimi({ userId, students, color: c, onDegisti }) 
   const sil = async (g) => {
     if (!window.confirm(`"${g.ad}" grubu silinsin mi?\n\nÖğrenciler ve verileri silinmez, yalnızca grup kalkar.`)) return;
     await sarmala(() => grupSil(g.id));
+  };
+
+  const duzenlemeyeBasla = (g) =>
+    setDuzenlenen({ id: g.id, ad: g.ad, aciklama: g.aciklama ?? "", renk: g.renk });
+
+  const duzenlemeyiKaydet = async () => {
+    if (!duzenlenen?.ad.trim()) { alert("Grup adı boş olamaz"); return; }
+    await sarmala(() => grupGuncelle(duzenlenen.id, {
+      ad: duzenlenen.ad, aciklama: duzenlenen.aciklama, renk: duzenlenen.renk,
+    }));
+    setDuzenlenen(null);
   };
 
   const inputStyle = {
@@ -70,6 +83,50 @@ export default function GrupYonetimi({ userId, students, color: c, onDegisti }) 
                     borderRadius: 10, overflow: "hidden",
                     border: `1px solid ${grupAcik ? g.renk + "66" : "#f0ede8"}`,
                   }}>
+                    {duzenlenen?.id === g.id ? (
+                      /* Düzenleme kipi — ad, açıklama ve renk değiştirilebilir */
+                      <div style={{
+                        padding: "9px 11px", background: g.renk + "11",
+                        display: "flex", flexDirection: "column", gap: 6,
+                      }}>
+                        <input autoFocus value={duzenlenen.ad}
+                          placeholder="Grup adı"
+                          onChange={e => setDuzenlenen(d => ({ ...d, ad: e.target.value }))}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") duzenlemeyiKaydet();
+                            if (e.key === "Escape") setDuzenlenen(null);
+                          }}
+                          style={{ ...inputStyle, width: "100%", fontWeight: 700 }} />
+                        <input value={duzenlenen.aciklama}
+                          placeholder="Açıklama (opsiyonel)"
+                          onChange={e => setDuzenlenen(d => ({ ...d, aciklama: e.target.value }))}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") duzenlemeyiKaydet();
+                            if (e.key === "Escape") setDuzenlenen(null);
+                          }}
+                          style={{ ...inputStyle, width: "100%" }} />
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {RENKLER.map(r => (
+                            <button key={r} onClick={() => setDuzenlenen(d => ({ ...d, renk: r }))}
+                              title="Renk" style={{
+                                width: 20, height: 20, borderRadius: 99, cursor: "pointer",
+                                background: r, flexShrink: 0,
+                                border: duzenlenen.renk === r ? "2.5px solid #444" : "2.5px solid transparent",
+                              }} />
+                          ))}
+                          <div style={{ flex: 1 }} />
+                          <button onClick={() => setDuzenlenen(null)} disabled={islemde} style={{
+                            fontSize: 11, padding: "5px 11px", borderRadius: 99, border: "1px solid #f0ede8",
+                            background: "#fff", color: "#888", cursor: "pointer", fontWeight: 600,
+                          }}>Vazgeç</button>
+                          <button onClick={duzenlemeyiKaydet} disabled={islemde} style={{
+                            fontSize: 11, padding: "5px 13px", borderRadius: 99, border: "none",
+                            background: c.bg, color: "#fff", cursor: "pointer", fontWeight: 700,
+                            opacity: islemde ? 0.7 : 1,
+                          }}>{islemde ? "..." : "Kaydet"}</button>
+                        </div>
+                      </div>
+                    ) : (
                     <div onClick={() => setAcikGrup(grupAcik ? null : g.id)} style={{
                       display: "flex", alignItems: "center", gap: 9,
                       padding: "9px 11px", cursor: "pointer",
@@ -84,12 +141,17 @@ export default function GrupYonetimi({ userId, students, color: c, onDegisti }) 
                           {g.uyeler.length} öğrenci{g.aciklama ? ` · ${g.aciklama}` : ""}
                         </div>
                       </div>
+                      <button onClick={(e) => { e.stopPropagation(); duzenlemeyeBasla(g); }} disabled={islemde} style={{
+                        fontSize: 10.5, padding: "3px 9px", borderRadius: 99, border: "none",
+                        background: "#F1F0FB", color: "#534AB7", cursor: "pointer", fontWeight: 600, flexShrink: 0,
+                      }}>Düzenle</button>
                       <button onClick={(e) => { e.stopPropagation(); sil(g); }} disabled={islemde} style={{
                         fontSize: 10.5, padding: "3px 9px", borderRadius: 99, border: "none",
                         background: "#FFF0F0", color: "#A32D2D", cursor: "pointer", fontWeight: 600, flexShrink: 0,
                       }}>Sil</button>
                       <span style={{ fontSize: 10, color: g.renk, fontWeight: 700 }}>{grupAcik ? "▾" : "▸"}</span>
                     </div>
+                    )}
 
                     {grupAcik && (
                       <div style={{ padding: "8px 11px 10px", display: "flex", flexDirection: "column", gap: 6 }}>

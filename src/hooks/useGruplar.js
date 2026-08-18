@@ -41,6 +41,19 @@ export function useGruplar(teacherId) {
     return {};
   };
 
+  const grupGuncelle = async (grupId, { ad, aciklama, renk }) => {
+    const yama = {};
+    if (ad !== undefined)       yama.ad       = ad.trim();
+    if (aciklama !== undefined) yama.aciklama = aciklama?.trim() || null;
+    if (renk !== undefined)     yama.renk     = renk;
+    if (Object.keys(yama).length === 0) return {};
+    const { error } = await supabase.from("ogrenci_gruplari")
+      .update(yama).eq("id", grupId);
+    if (error) return { error };
+    await yukle();
+    return {};
+  };
+
   const grupSil = async (grupId) => {
     const { error } = await supabase.from("ogrenci_gruplari").delete().eq("id", grupId);
     if (error) return { error };
@@ -64,5 +77,5 @@ export function useGruplar(teacherId) {
     return {};
   };
 
-  return { gruplar, etkin, loading, yukle, grupEkle, grupSil, uyeEkle, uyeCikar };
+  return { gruplar, etkin, loading, yukle, grupEkle, grupGuncelle, grupSil, uyeEkle, uyeCikar };
 }
