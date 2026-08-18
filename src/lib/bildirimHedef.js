@@ -1,10 +1,14 @@
 // Bildirime tıklanınca gidilecek bölüm. Uygulama tek sayfa olduğu için
 // yönlendirme yerine ilgili karta kaydırıp kısa süreli vurgu yapıyoruz.
 // Hedef hem bildirim türüne hem de bakan kişinin rolüne bağlı:
-// "ödev yüklendi" öğretmende Ödev Kontrol'e, öğrencide Görevlerim'e gider.
+// "ödev yüklendi" öğretmende Ödev Kontrol'e, öğrencide takvime gider.
+//
+// Öğrencide artık ayrı "Görevlerim" kartı YOK; görevler Takvimim'in içinde.
+// O yüzden gorev/odev bildirimleri bolum-ders'e (takvim kartı) gidiyor.
+// Öğretmen tarafı değişmedi, orada bolum-gorevler kartı duruyor.
 const HEDEFLER = {
-  gorev:    { student: "bolum-gorevler", teacher: "bolum-gorevler" },
-  odev:     { student: "bolum-gorevler", teacher: "bolum-odev" },
+  gorev:    { student: "bolum-ders", teacher: "bolum-gorevler" },
+  odev:     { student: "bolum-ders", teacher: "bolum-odev" },
   test:     { student: "bolum-test",     teacher: "bolum-test" },
   sinav:    { student: "bolum-sinav",    teacher: "bolum-sinav" },
   ders:     { student: "bolum-ders",     teacher: "bolum-ders",  parent: "bolum-ders" },

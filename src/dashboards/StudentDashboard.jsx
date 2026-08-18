@@ -36,7 +36,7 @@ export default function StudentDashboard({ userId, userName }) {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [savingProfile,   setSavingProfile]   = useState(false);
-  const [showTasksModal,    setShowTasksModal]    = useState(false);
+  const [tamamlananlarAcik, setTamamlananlarAcik] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [profileForm,  setProfileForm]  = useState({
     birth_date: "", phone: "",
@@ -170,6 +170,55 @@ export default function StudentDashboard({ userId, userName }) {
   const pendingTasks = tasks.filter(t => !t.is_done);
   const doneTasks    = tasks.filter(t =>  t.is_done);
   const pendingCount = pendingTasks.length;
+  // Tarihi olmayan bekleyen görevler takvimde hiçbir güne düşmez; ayrı bir
+  // görev kartı da kalmadığı için takvimin altında gösterilmezlerse
+  // öğrenciye tamamen görünmez olurlar.
+  const tarihsizBekleyen = pendingTasks.filter(t => !t.due_date);
+
+  // Görev satırı: işaretleme kutusu + ödev yükleme. Hem takvimde seçili günde
+  // hem takvim altındaki listelerde aynı bileşen kullanılıyor.
+  const gorevSatiri = (t) => (
+    <TaskItem
+      key={t.id} id={t.id} color={c.bg} done={t.is_done} label={t.title}
+      sub={[t.subject, t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
+        t.due_date ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : null].filter(Boolean).join(" · ")}
+      submission={submissions[t.id] ?? null}
+      uploading={uploadingTaskId === t.id}
+      onFileSelect={handleHomeworkUpload}
+    />
+  );
+
+  const takvimAltiBolum = (
+    <>
+      {tarihsizBekleyen.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#888", marginBottom: 8 }}>
+            TARİHSİZ GÖREVLER ({tarihsizBekleyen.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {tarihsizBekleyen.map(gorevSatiri)}
+          </div>
+        </div>
+      )}
+
+      {doneTasks.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <button onClick={() => setTamamlananlarAcik(v => !v)} style={{
+            width: "100%", padding: "10px 0", borderRadius: 12,
+            border: "1px solid #f0ede8", background: "#fafaf8",
+            color: c.text, fontSize: 12, fontWeight: 600, cursor: "pointer",
+          }}>
+            {tamamlananlarAcik ? "▾" : "▸"} Tamamlanan görevler ({doneTasks.length})
+          </button>
+          {tamamlananlarAcik && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+              {doneTasks.map(gorevSatiri)}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
 
   // Konu ilerlemesi: görevlerden otomatik hesaplanır (elle giriş kaldırıldı)
   const progressList = computeTopicProgress(tasks);
@@ -536,46 +585,6 @@ export default function StudentDashboard({ userId, userName }) {
       <SeviyeAvatar studentId={userId} color={c} />
       <Rozetler studentId={userId} color={c} />
 
-      {/* Görevler — bekleyenler görünür, tamamlananlar modalda */}
-      <Card id="bolum-gorevler">
-        <SectionTitle title="Görevlerim" color={c.mid} />
-        {loading ? <div style={{ fontSize: 13, color: "#aaa", padding: "12px 0" }}>Yükleniyor...</div>
-          : tasks.length === 0 ? <div style={{ fontSize: 13, color: "#aaa", padding: "12px 0", textAlign: "center" }}>Henüz görev atanmadı 📭</div>
-          : pendingTasks.length === 0 ? <div style={{ fontSize: 13, color: "#888", padding: "12px 0", textAlign: "center" }}>Bekleyen görev yok, tümü tamamlandı 🎉</div>
-          : pendingTasks.map(t => (
-            <TaskItem
-              key={t.id} id={t.id} color={c.bg} done={t.is_done} label={t.title}
-              sub={[t.subject, t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
-                t.due_date ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : null].filter(Boolean).join(" · ")}
-              submission={submissions[t.id] ?? null}
-              uploading={uploadingTaskId === t.id}
-              onFileSelect={handleHomeworkUpload}
-            />
-          ))}
-        {doneTasks.length > 0 && (
-          <button onClick={() => setShowTasksModal(true)} style={{
-            width: "100%", padding: "10px 0", borderRadius: 12, marginTop: 10,
-            border: "1px solid #f0ede8", background: "#fafaf8",
-            color: c.text, fontSize: 12, fontWeight: 600, cursor: "pointer",
-          }}>✓ Tamamlanan görevler ({doneTasks.length})</button>
-        )}
-      </Card>
-
-      {showTasksModal && (
-        <Modal title="Tamamlanan Görevler" onClose={() => setShowTasksModal(false)}>
-          {doneTasks.map(t => (
-            <TaskItem
-              key={t.id} id={t.id} color={c.bg} done={t.is_done} label={t.title}
-              sub={[t.subject, t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
-                t.due_date ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : null].filter(Boolean).join(" · ")}
-              submission={submissions[t.id] ?? null}
-              uploading={uploadingTaskId === t.id}
-              onFileSelect={handleHomeworkUpload}
-            />
-          ))}
-        </Modal>
-      )}
-
       {/* Öğretmen bağlantıları (çift onaylı) */}
       <div id="bolum-baglanti"><BaglantiYonetimi userId={userId} rol="student" color={c} onDegisti={loadAll} /></div>
 
@@ -586,6 +595,8 @@ export default function StudentDashboard({ userId, userName }) {
         programItems={programOgeleri}
         onProgramCevir={programCevir}
         programOzet={programOzetSeridi}
+        renderTask={gorevSatiri}
+        takvimAlti={takvimAltiBolum}
       /></div>
 
       {/* Test Ekle */}

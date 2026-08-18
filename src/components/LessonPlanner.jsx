@@ -11,8 +11,13 @@ import CalendarMonth from "./CalendarMonth";
 //  - counterparts: karşı taraf listesi [{ id, full_name }]
 //      (öğretmen için öğrenciler, öğrenci için öğretmenler)
 //  - color: tema renk objesi (c)
+// renderTaskDisari: seçili günün görev satırını çağıran belirlesin. Öğrenci
+//   panelinde görevler ayrı bir karttan değil buradan yönetiliyor, o yüzden
+//   işaretleme kutusu ve ödev yükleme içeren satır dışarıdan geliyor.
+// takvimAlti: takvimin ALTINDA duracak içerik (tarihsiz ve tamamlanan görevler).
 export default function LessonPlanner({ userId, role, counterparts, color: c,
-  tasks = [], tests = [], programItems = [], onProgramCevir, programOzet }) {
+  tasks = [], tests = [], programItems = [], onProgramCevir, programOzet,
+  renderTask: renderTaskDisari, takvimAlti }) {
   const { lessons, createLesson, respondLesson, cancelLesson, markCompleted, confirmPaid } = useLessons(userId);
 
   // Ödeme durumu rozeti
@@ -356,9 +361,10 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
         <CalendarMonth
           lessons={lessons} tasks={tasks} tests={tests} programItems={programItems}
           color={c}
-          renderLesson={renderLesson} renderTask={renderTask}
+          renderLesson={renderLesson} renderTask={renderTaskDisari ?? renderTask}
           renderTest={renderTest} renderProgram={renderProgram}
         />
+        {takvimAlti}
       </Card>
     </>
   );
