@@ -1455,7 +1455,7 @@ const _dakika = (s) => {
 // (baslangic + (hafta-1)*7 + günIndeksi); ikisi ayrışırsa aynı program
 // iki yerde farklı güne düşer. baslangic programın ilk günü kabul edilir,
 // yani haftanın pazartesisi seçilmeli.
-export function programGorevSatirlari(icerik, { teacherId, studentId, baslangic }) {
+export function programGorevSatirlari(icerik, { teacherId, studentId, baslangic, programAdi = null }) {
   const bas = new Date(baslangic);
   if (Number.isNaN(bas.getTime())) return [];
   const satirlar = [];
@@ -1480,6 +1480,9 @@ export function programGorevSatirlari(icerik, { teacherId, studentId, baslangic 
           estimated_minutes: _dakika(x.sure),
           description: x.aciklama?.trim() || null,
           due_date: tarih,
+          // Öğretmen "hangi programı kime attım" sorusunu buradan izliyor;
+          // elle atanan görevlerde null kalır.
+          kaynak_program: programAdi,
         });
       });
     });

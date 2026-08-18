@@ -32,6 +32,10 @@ export default function TeacherDashboard({ userId, userName }) {
   const [recentTests, setRecentTests] = useState([]);
   const [bagKurulabilir, setBagKurulabilir] = useState(false);  // teacher_students tablosu var mı
 
+  // Görev listesi uzun olabilir (bir program tek seferde onlarca görev açar);
+  // varsayılan olarak son 6 tanesi gösterilir, bu state hangi öğrencinin
+  // listesinin tamamen açıldığını tutar.
+  const [acikGorevListesi, setAcikGorevListesi] = useState(null);
   const [returningId, setReturningId] = useState(null);
   const [returnNote,  setReturnNote]  = useState("");
   const [loading,     setLoading]     = useState(true);
@@ -298,6 +302,58 @@ export default function TeacherDashboard({ userId, userName }) {
                             {prof.parent2_phone ? ` · 📞 ${prof.parent2_phone}` : ""}
                             {prof.parent2_email ? ` · ✉️ ${prof.parent2_email}` : ""}
                           </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Atanan görevler — hangi görev, hangi tarihe, hangi programdan */}
+                  {sTasks.length > 0 && (() => {
+                    const hepsi = acikGorevListesi === s.id;
+                    // En yeni tarih üstte; tarihsizler sona.
+                    const sirali = [...sTasks].sort((a, b) =>
+                      (b.due_date ?? "").localeCompare(a.due_date ?? ""));
+                    const gosterilen = hepsi ? sirali : sirali.slice(0, 6);
+                    return (
+                      <div style={{ padding: "8px 12px", borderRadius: 10, background: "#fafaf8", marginBottom: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", marginBottom: 6 }}>
+                          ATANAN GÖREVLER ({done}/{total})
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {gosterilen.map(t => (
+                            <div key={t.id} style={{ display: "flex", alignItems: "baseline", gap: 7, fontSize: 11.5 }}>
+                              <span style={{ flexShrink: 0, color: t.is_done ? "#1A6B3C" : "#c8c2ba", fontWeight: 700 }}>
+                                {t.is_done ? "✓" : "○"}
+                              </span>
+                              <span style={{ flexShrink: 0, color: "#888", minWidth: 52 }}>
+                                {t.due_date
+                                  ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" })
+                                  : "tarihsiz"}
+                              </span>
+                              <span style={{
+                                flex: 1, minWidth: 0, color: t.is_done ? "#9aa" : "#333",
+                                textDecoration: t.is_done ? "line-through" : "none",
+                              }}>
+                                {t.title}
+                                {t.subject && <span style={{ color: "#aaa" }}> · {t.subject}</span>}
+                              </span>
+                              {t.kaynak_program && (
+                                <span title={`${t.kaynak_program} programından`} style={{
+                                  flexShrink: 0, fontSize: 9.5, fontWeight: 700, padding: "1px 6px",
+                                  borderRadius: 99, background: c.light, color: c.text,
+                                  maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                }}>{t.kaynak_program}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {sirali.length > 6 && (
+                          <button onClick={() => setAcikGorevListesi(hepsi ? null : s.id)} style={{
+                            marginTop: 6, background: "none", border: "none", padding: 0,
+                            color: c.mid, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                          }}>
+                            {hepsi ? "▴ daha az" : `▾ tümünü göster (${sirali.length})`}
+                          </button>
                         )}
                       </div>
                     );

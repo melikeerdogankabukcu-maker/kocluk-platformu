@@ -65,6 +65,7 @@ export default function ProgramAtama({ userId, students, color: c }) {
       const satirlar = hedefler.flatMap(sid =>
         programGorevSatirlari(p.icerik, {
           teacherId: userId, studentId: sid, baslangic: form.baslangic,
+          programAdi: p.title,
         })
       );
       if (satirlar.length === 0) {
