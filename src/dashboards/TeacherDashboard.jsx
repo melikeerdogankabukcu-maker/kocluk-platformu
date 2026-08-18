@@ -9,7 +9,6 @@ import { bolumeGit } from "../lib/bildirimHedef";
 import SinavGirisFormu from "../components/SinavGirisFormu";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
-import ProgramAtama from "../components/ProgramAtama";
 import GrupYonetimi from "../components/GrupYonetimi";
 import VeliRaporu from "../components/VeliRaporu";
 import { useGruplar } from "../hooks/useGruplar";
@@ -762,8 +761,8 @@ export default function TeacherDashboard({ userId, userName }) {
       <div id="bolum-sinav"><SinavGirisFormu students={students} profileMap={profileMap} color={c} onKaydedildi={loadData} /></div>
 
       {/* Çalışma programı: kütüphane + atama */}
-      <ProgramDuzenleyici userId={userId} color={c} />
-      <ProgramAtama userId={userId} students={students} color={c} />
+      {/* Program yazma ve atama tek kartta — ProgramAtama içeride gömülü */}
+      <ProgramDuzenleyici userId={userId} students={students} color={c} />
 
       {/* Müfredat konularını yönetme */}
       <KonuYonetimi color={c} />

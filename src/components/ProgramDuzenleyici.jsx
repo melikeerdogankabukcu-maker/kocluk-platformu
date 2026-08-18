@@ -4,6 +4,7 @@ import { useTopics } from "../lib/TopicsContext";
 import { useStudyPrograms, icerikSatirSayisi } from "../hooks/useStudyPrograms";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
+import ProgramAtama from "./ProgramAtama";
 import Modal from "./Modal";
 
 const GUNLER = ["PAZARTESİ", "SALI", "ÇARŞAMBA", "PERŞEMBE", "CUMA", "CUMARTESİ", "PAZAR"];
@@ -25,7 +26,7 @@ const bosHafta = (no) => ({
 // Program kütüphanesi (study_programs) ile atanmış program ayrıdır: burada
 // yapılan değişiklik, daha önce atanmış öğrencilerin planını ETKİLEMEZ
 // (atama anında içeriğin kopyası alınır).
-export default function ProgramDuzenleyici({ userId, color: c }) {
+export default function ProgramDuzenleyici({ userId, students = [], color: c }) {
   const { programlar, dbden, yukle } = useStudyPrograms();
   const { examSubjectsOf, topicsOf } = useTopics();
 
@@ -417,6 +418,10 @@ export default function ProgramDuzenleyici({ userId, color: c }) {
           </div>
         </Modal>
       )}
+      {/* Program atama — ayrı kart değil, aynı kartın alt bölümü.
+          Program yazmak ve atamak aynı işin iki adımı, ayrı kartlarda
+          durunca öğretmen ikisi arasında gidip geliyordu. */}
+      <ProgramAtama userId={userId} students={students} color={c} gomulu />
     </Card>
   );
 }

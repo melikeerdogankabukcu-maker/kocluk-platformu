@@ -10,7 +10,9 @@ import SectionTitle from "./SectionTitle";
 // Öğretmenin öğrencilere hazır çalışma programı atadığı ekran.
 // toplam_satir ve hafta_satirlari atama anında yazılır; rozet ölçütleri
 // (hafta/program tamamlama) veritabanı tarafında bunlara bakarak hesaplanır.
-export default function ProgramAtama({ userId, students, color: c }) {
+// gomulu: true ise kendi Card'ini cizmez, cagiranin karti icine yerlesir.
+// Program yazma ve program atama tek kartta birlestirildigi icin eklendi.
+export default function ProgramAtama({ userId, students, color: c, gomulu = false }) {
   const { programlar } = useStudyPrograms();
   const { gruplar } = useGruplar(userId);
   const [acik, setAcik]       = useState(false);
@@ -126,8 +128,8 @@ export default function ProgramAtama({ userId, students, color: c }) {
   };
   const adBul = (id) => students.find(s => s.id === id)?.full_name ?? "—";
 
-  return (
-    <Card id="bolum-program">
+  const icerik = (
+    <>
       <SectionTitle title={`Çalışma Programları${atamalar.length ? ` (${atamalar.length})` : ""}`} color={c.mid} />
 
       {!acik ? (
@@ -240,6 +242,13 @@ export default function ProgramAtama({ userId, students, color: c }) {
           }}>Kapat</button>
         </div>
       )}
-    </Card>
+    </>
+  );
+
+  // Gömülü kipte ayırıcı bir çizgiyle üstteki bölümden ayrılır.
+  return gomulu ? (
+    <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #f5f2ee" }}>{icerik}</div>
+  ) : (
+    <Card id="bolum-program">{icerik}</Card>
   );
 }
