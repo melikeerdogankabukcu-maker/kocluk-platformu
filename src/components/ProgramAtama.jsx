@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 import { useStudyPrograms, icerikSatirSayisi, icerikHaftaSatirlari } from "../hooks/useStudyPrograms";
+import { programGorevSatirlari } from "../lib/studyPrograms";
 import { useGruplar } from "../hooks/useGruplar";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
@@ -51,15 +52,37 @@ export default function ProgramAtama({ userId, students, color: c }) {
     if (!p?.icerik?.weeks?.length) { alert("Seçilen programda hafta yok."); return; }
     setIslemde(true);
 
-    // Hedeflerin önceki aktif programlarını pasife al
-    // Eskiyi pasife alamazsak yeni atamayi hic yapma: iki aktif program
-    // kalirsa ogrencinin panelinde hangisi gecerli belirsizlesir.
-    const { hata: pasifHata } = await calistir(
-      supabase.from("program_atamalari")
-        .update({ aktif: false }).in("student_id", hedefler).eq("aktif", true),
-      "Onceki programi pasife alma"
-    );
-    if (pasifHata) { setIslemde(false); return; }
+    // Önceki program ARTIK PASİFE ALINMIYOR: öğrenci birden fazla programı
+    // aynı anda yürütebilsin. Kaldırmak isteyen öğretmen "Kaldır" düğmesini
+    // kullanır.
+
+    // Öğretmenin kendi yazdığı program (hazir = false) doğrudan GÖREVE
+    // dönüşür: öğrenci her şeyi tek listede görüp işaretlesin. Gömülü hazır
+    // programlar ise program kartı olarak atanmaya devam eder — onlar
+    // haftalık yapısıyla takip edilen uzun planlar (52-73 adım) ve göreve
+    // çevrilirse görev listesini boğar.
+    if (p.hazir === false) {
+      const satirlar = hedefler.flatMap(sid =>
+        programGorevSatirlari(p.icerik, {
+          teacherId: userId, studentId: sid, baslangic: form.baslangic,
+        })
+      );
+      if (satirlar.length === 0) {
+        setIslemde(false);
+        alert("Bu programda göreve çevrilebilecek satır yok.");
+        return;
+      }
+      const { hata } = await calistir(
+        supabase.from("tasks").insert(satirlar),
+        "Programi goreve cevirme"
+      );
+      setIslemde(false);
+      if (hata) return;
+      setForm(f => ({ ...f, student_id: "" }));
+      alert(`${satirlar.length} görev oluşturuldu.`);
+      yukle();
+      return;
+    }
 
     // İçeriğin KOPYASI atamayla saklanır: program sonradan düzenlense bile
     // öğrencinin planı ve işaretlediği adımlar kaymaz.
@@ -73,10 +96,13 @@ export default function ProgramAtama({ userId, students, color: c }) {
       hafta_satirlari: icerikHaftaSatirlari(p.icerik),
       tamamlananlar: [],
     };
-    const { error } = await supabase.from("program_atamalari")
-      .insert(hedefler.map(sid => ({ ...ortak, student_id: sid })));
+    const { hata } = await calistir(
+      supabase.from("program_atamalari")
+        .insert(hedefler.map(sid => ({ ...ortak, student_id: sid }))),
+      "Program atama"
+    );
     setIslemde(false);
-    if (error) { alert("Program atanamadı: " + error.message); return; }
+    if (hata) return;
     setForm(f => ({ ...f, student_id: "" }));
     yukle();
   };

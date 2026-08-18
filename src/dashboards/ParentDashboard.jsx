@@ -53,8 +53,10 @@ export default function ParentDashboard({ userId, userName }) {
   // Akıllı analiz (Python backend) — çocuğun genel değerlendirmesi
   const { analiz } = useAnaliz(child?.id);
 
-  // Çocuğun çalışma programı — takvimde salt okunur görünür
-  const { atama: programAtama } = useProgramAtama(child?.id);
+  // Çocuğun çalışma programları — takvimde salt okunur görünür.
+  // Birden fazla program aynı anda aktif olabilir; hepsinin adımları işlenir.
+  const { atamalar: programAtamalari } = useProgramAtama(child?.id);
+  const programOgeleri = programAtamalari.flatMap(a => programTakvimOgeleri(a));
 
   // Çocuğun dersleri (RLS: veli bağlı çocuğun derslerini okuyabilir)
   const { lessons, reportPaid } = useLessons(userId);
@@ -308,7 +310,7 @@ export default function ParentDashboard({ userId, userName }) {
       {/* Ders Takvimi (salt okunur) */}
       <Card id="bolum-ders">
         <SectionTitle title="Ders Takvimi" color={c.mid} />
-        <CalendarMonth lessons={lessons} tasks={tasks} programItems={programTakvimOgeleri(programAtama)}
+        <CalendarMonth lessons={lessons} tasks={tasks} programItems={programOgeleri}
           color={c} renderLesson={renderLesson} renderTask={renderTask} renderProgram={renderProgramOge} />
       </Card>
     </div>

@@ -1436,6 +1436,57 @@ const _tarihStr = (d) =>
 export const atamaProgrami = (atama) =>
   atama?.program_icerik ?? programGetir(atama?.program_id);
 
+// "35 dk" / "35" / "1 saat" -> dakika (int) | null
+const _dakika = (s) => {
+  if (!s) return null;
+  const metin = String(s).toLowerCase();
+  const n = parseInt(metin.replace(/[^0-9]/g, ""), 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return /saat/.test(metin) ? n * 60 : n;
+};
+
+// Öğretmenin kendi yazdığı programı görev satırlarına çevirir.
+//
+// Gömülü (hazir) programlar buradan geçmez: onlar program kartı olarak
+// atanmaya devam eder. Öğretmenin yazdığı program ise doğrudan göreve
+// dönüşür, böylece öğrenci her şeyi tek listede görüp işaretler.
+//
+// Tarih eşlemesi programTakvimOgeleri ile BİREBİR aynı formülü kullanır
+// (baslangic + (hafta-1)*7 + günIndeksi); ikisi ayrışırsa aynı program
+// iki yerde farklı güne düşer. baslangic programın ilk günü kabul edilir,
+// yani haftanın pazartesisi seçilmeli.
+export function programGorevSatirlari(icerik, { teacherId, studentId, baslangic }) {
+  const bas = new Date(baslangic);
+  if (Number.isNaN(bas.getTime())) return [];
+  const satirlar = [];
+
+  (icerik?.weeks ?? []).forEach(w => {
+    (w.days ?? []).forEach((g, gi) => {
+      const gun = new Date(bas);
+      gun.setDate(gun.getDate() + (w.week - 1) * 7 + gi);
+      const tarih = _tarihStr(gun);
+
+      (g.dersler ?? []).forEach(x => {
+        // Başlık önce konudan, yoksa dersten. İkisi de boşsa satır bir iş
+        // tarif etmiyor demektir; göreve çevirmeye değmez.
+        const baslik = (x.konu?.trim() || x.ders?.trim() || "");
+        if (!baslik) return;
+        satirlar.push({
+          teacher_id: teacherId,
+          student_id: studentId,
+          title: baslik,
+          subject: x.ders?.trim() || null,
+          topic: x.konu?.trim() || null,
+          estimated_minutes: _dakika(x.sure),
+          description: x.aciklama?.trim() || null,
+          due_date: tarih,
+        });
+      });
+    });
+  });
+  return satirlar;
+}
+
 export function programTakvimOgeleri(atama) {
   if (!atama) return [];
   const p = atamaProgrami(atama);
@@ -1454,6 +1505,9 @@ export function programTakvimOgeleri(atama) {
         ogeler.push({
           ...x, tarih, anahtar, hafta: w.week,
           id: `${atama.id}-${anahtar}`,
+          // Birden fazla program aynı anda aktif olabildiği için adımın
+          // hangi atamaya ait olduğu taşınmalı; işaretleme buna göre yazılır.
+          atamaId: atama.id,
           tamamlandi: tamam.has(anahtar),
         });
       });

@@ -47,28 +47,29 @@ export default function StudentDashboard({ userId, userName }) {
     school_name: "", grade: "", field_preference: "",
   });
 
-  // Çalışma programı — ayrı kart yok, adımlar takvime işleniyor
-  const { atama: programAtama, satirCevir: programCevir } = useProgramAtama(userId);
-  const programOgeleri = programTakvimOgeleri(programAtama);
+  // Çalışma programları — ayrı kart yok, adımlar takvime işleniyor.
+  // Birden fazla program aynı anda aktif olabilir: yeni atama artık öncekini
+  // pasife almıyor, hepsinin adımları takvimde birlikte görünüyor.
+  const { atamalar: programAtamalari, satirCevir: programCevir } = useProgramAtama(userId);
+  const programOgeleri = programAtamalari.flatMap(a => programTakvimOgeleri(a));
 
-  // Takvimin üstünde duran kompakt program şeridi (ayrı modül yerine)
-  const programOzetSeridi = (() => {
-    if (!programAtama) return null;
-    const p = atamaProgrami(programAtama);
+  // Takvimin üstünde duran kompakt program şeridi — her aktif program için bir tane
+  const programSeridi = (atama) => {
+    const p = atamaProgrami(atama);
     if (!p?.weeks) return null;
-    const yapilan = (programAtama.tamamlananlar ?? []).length;
-    const toplam  = programAtama.toplam_satir || 1;
+    const yapilan = (atama.tamamlananlar ?? []).length;
+    const toplam  = atama.toplam_satir || 1;
     const oran    = Math.round((yapilan / toplam) * 100);
-    const gecen   = Math.floor((Date.now() - new Date(programAtama.baslangic).getTime()) / 86400000);
+    const gecen   = Math.floor((Date.now() - new Date(atama.baslangic).getTime()) / 86400000);
     const hafta   = Math.min(Math.max(Math.floor(gecen / 7) + 1, 1), p.weeks.length);
     const buHafta = p.weeks.find(w => w.week === hafta);
     return (
-      <div style={{
+      <div key={atama.id} style={{
         padding: "10px 12px", borderRadius: 10, marginBottom: 12,
         background: "#FFFAF0", border: "1px solid #F0E2C4",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: "#222", minWidth: 0 }}>{p.title ?? programAtama.program_adi ?? "Çalışma programı"}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "#222", minWidth: 0 }}>{p.title ?? atama.program_adi ?? "Çalışma programı"}</span>
           <span style={{ fontSize: 12, fontWeight: 700, color: "#8a6d1f", flexShrink: 0 }}>%{oran}</span>
         </div>
         <div style={{ fontSize: 10.5, color: "#a08c6a", marginTop: 2 }}>
@@ -80,7 +81,8 @@ export default function StudentDashboard({ userId, userName }) {
         </div>
       </div>
     );
-  })();
+  };
+  const programOzetSeridi = programAtamalari.map(programSeridi).filter(Boolean);
 
   // Akıllı analiz (Python backend) — kendi analiz ve önerilerimiz
   const { analiz, oneriler } = useAnaliz(userId);

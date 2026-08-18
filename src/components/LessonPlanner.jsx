@@ -117,7 +117,7 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
 
   // Takvimde bir çalışma programı adımı — tıklayınca tamamlandı olarak işaretlenir
   const renderProgram = (o) => (
-    <div key={o.id} onClick={() => onProgramCevir?.(o.anahtar)}
+    <div key={o.id} onClick={() => onProgramCevir?.(o.atamaId, o.anahtar)}
       style={{
         display: "flex", alignItems: "flex-start", gap: 9,
         padding: "10px 12px", borderRadius: 10,

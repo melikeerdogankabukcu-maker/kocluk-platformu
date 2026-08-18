@@ -43,7 +43,7 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
 
   const { analiz } = useAnaliz(acik ? studentId : null, aralik);
   const { veri: sinav } = useSinavAnalizi(studentId, acik, aralik);
-  const { atama } = useProgramAtama(acik ? studentId : null);
+  const { atamalar } = useProgramAtama(acik ? studentId : null);
 
   useEffect(() => {
     if (!acik || !studentId) return;
@@ -75,8 +75,13 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
   const s = puan ? seviyeHesapla(puan.xp ?? 0) : null;
 
   // Program ilerlemesi
-  const programOran = atama?.toplam_satir
-    ? Math.round(((atama.tamamlananlar ?? []).length / atama.toplam_satir) * 100) : null;
+  // Birden fazla program aktif olabilir: oran hepsinin toplamı üzerinden.
+  const programToplam = atamalar.reduce((s, a) => s + (a.toplam_satir || 0), 0);
+  const programYapilan = atamalar.reduce((s, a) => s + (a.tamamlananlar ?? []).length, 0);
+  const programOran = programToplam
+    ? Math.round((programYapilan / programToplam) * 100) : null;
+  const programAdi = atamalar.length > 1
+    ? `${atamalar.length} program` : (atamalar[0]?.program_adi ?? "ilerleme");
 
   const bolum = (baslikMetni, icerik) => (
     <div style={{ marginBottom: 16, breakInside: "avoid" }}>
@@ -299,7 +304,7 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
             {/* Program + motivasyon */}
             {(programOran != null || s) && bolum("PROGRAM VE MOTİVASYON", (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {programOran != null && kutu("Program", `%${programOran}`, atama?.program_adi ?? "ilerleme")}
+                {programOran != null && kutu("Program", `%${programOran}`, programAdi)}
                 {s && kutu("Seviye", s.seviye, `${s.xp} XP · güncel`)}
                 {rozetler.length > 0 && kutu("Rozet", rozetler.length, "bu dönemde")}
               </div>
