@@ -761,7 +761,7 @@ export default function TeacherDashboard({ userId, userName }) {
       <div id="bolum-sinav"><SinavGirisFormu students={students} profileMap={profileMap} color={c} onKaydedildi={loadData} /></div>
 
       {/* Çalışma programı: kütüphane + atama */}
-      {/* Program yazma ve atama tek kartta — ProgramAtama içeride gömülü */}
+      {/* Program yazma + atama: atama her programın kendi satırında açılıyor */}
       <ProgramDuzenleyici userId={userId} students={students} color={c} />
 
       {/* Müfredat konularını yönetme */}

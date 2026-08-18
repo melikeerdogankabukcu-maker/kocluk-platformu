@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
 import { useTopics } from "../lib/TopicsContext";
-import { useStudyPrograms, icerikSatirSayisi } from "../hooks/useStudyPrograms";
+import { useStudyPrograms, icerikSatirSayisi, icerikHaftaSatirlari } from "../hooks/useStudyPrograms";
+import { useGruplar } from "../hooks/useGruplar";
+import { programGorevSatirlari } from "../lib/studyPrograms";
+import { calistir } from "../lib/db";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
-import ProgramAtama from "./ProgramAtama";
 import Modal from "./Modal";
 
 const GUNLER = ["PAZARTESİ", "SALI", "ÇARŞAMBA", "PERŞEMBE", "CUMA", "CUMARTESİ", "PAZAR"];
@@ -52,6 +54,102 @@ export default function ProgramDuzenleyici({ userId, students = [], color: c }) 
   const inputStyle = {
     padding: "7px 10px", borderRadius: 8, border: "1.5px solid #f0ede8",
     fontSize: 12, boxSizing: "border-box", width: "100%",
+  };
+
+  // --- Atama: her programın kendi satırında, oka basınca açılır ---
+  const { gruplar } = useGruplar(userId);
+  const [atamalar, setAtamalar]       = useState([]);
+  const [atamaAcik, setAtamaAcik]     = useState(null);   // açık olan programın kodu
+  const [atamaIslemde, setAtamaIslemde] = useState(false);
+  const [atamaForm, setAtamaForm] = useState({
+    student_id: "", baslangic: new Date().toISOString().split("T")[0],
+  });
+
+  const atamalariYukle = useCallback(async () => {
+    const ids = students.map(s => s.id);
+    if (ids.length === 0) { setAtamalar([]); return; }
+    const { veri } = await calistir(
+      supabase.from("program_atamalari").select("*").in("student_id", ids).eq("aktif", true),
+      "Program atamalari", { sessiz: true }
+    );
+    setAtamalar(veri ?? []);
+  }, [students]);
+
+  useEffect(() => { atamalariYukle(); }, [atamalariYukle]);
+
+  const ogrenciAdi = (id) => students.find(s => s.id === id)?.full_name ?? "—";
+
+  const hedefOgrenciler = () => {
+    if (atamaForm.student_id.startsWith("grup:")) {
+      const g = gruplar.find(x => x.id === atamaForm.student_id.slice(5));
+      return g ? g.uyeler : [];
+    }
+    return atamaForm.student_id ? [atamaForm.student_id] : [];
+  };
+
+  const ata = async (p) => {
+    const hedefler = hedefOgrenciler();
+    if (hedefler.length === 0) return;
+    if (!p?.icerik?.weeks?.length) { alert("Seçilen programda hafta yok."); return; }
+    setAtamaIslemde(true);
+
+    // Öğretmenin kendi yazdığı program (hazir = false) doğrudan GÖREVE dönüşür;
+    // gömülü hazır programlar program kartı olarak atanır. Ayrıntılı gerekçe
+    // programGorevSatirlari'nın başında.
+    if (p.hazir === false) {
+      const satirlar = hedefler.flatMap(sid =>
+        programGorevSatirlari(p.icerik, {
+          teacherId: userId, studentId: sid, baslangic: atamaForm.baslangic,
+          programAdi: p.title,
+        })
+      );
+      if (satirlar.length === 0) {
+        setAtamaIslemde(false);
+        alert("Bu programda göreve çevrilebilecek satır yok.");
+        return;
+      }
+      const { hata } = await calistir(
+        supabase.from("tasks").insert(satirlar), "Programi goreve cevirme"
+      );
+      setAtamaIslemde(false);
+      if (hata) return;
+      setAtamaForm(f => ({ ...f, student_id: "" }));
+      alert(`${satirlar.length} görev oluşturuldu.`);
+      return;
+    }
+
+    const ortak = {
+      teacher_id: userId,
+      program_id: p.kod,
+      program_adi: p.title,
+      program_icerik: p.icerik,
+      baslangic: atamaForm.baslangic,
+      toplam_satir: icerikSatirSayisi(p.icerik),
+      hafta_satirlari: icerikHaftaSatirlari(p.icerik),
+      tamamlananlar: [],
+    };
+    const { hata } = await calistir(
+      supabase.from("program_atamalari").insert(hedefler.map(sid => ({ ...ortak, student_id: sid }))),
+      "Program atama"
+    );
+    setAtamaIslemde(false);
+    if (hata) return;
+    setAtamaForm(f => ({ ...f, student_id: "" }));
+    atamalariYukle();
+  };
+
+  const atamaKaldir = async (a) => {
+    if (!window.confirm(`${ogrenciAdi(a.student_id)} için program kaldırılsın mı?
+
+İlerleme kaydı korunur, program pasife alınır.`)) return;
+    setAtamaIslemde(true);
+    const { hata } = await calistir(
+      supabase.from("program_atamalari").update({ aktif: false }).eq("id", a.id),
+      "Program kaldirma"
+    );
+    setAtamaIslemde(false);
+    if (hata) return;
+    atamalariYukle();
   };
 
   const yeniProgram = () => {
@@ -194,8 +292,89 @@ export default function ProgramDuzenleyici({ userId, students = [], color: c }) 
                         }}>Sil</button>
                       </>
                     )}
+                    {/* Atama paneli — öğrenci ve tarih seçimi bu okun altında */}
+                    <button onClick={() => setAtamaAcik(atamaAcik === p.kod ? null : p.kod)}
+                      title="Öğrenciye ata" style={{
+                        fontSize: 11, padding: "3px 8px", borderRadius: 99, border: "none",
+                        background: atamaAcik === p.kod ? c.bg : c.light,
+                        color: atamaAcik === p.kod ? "#fff" : c.text,
+                        cursor: "pointer", fontWeight: 700,
+                      }}>{atamaAcik === p.kod ? "▾" : "▸"}</button>
                   </div>
                 </div>
+
+                {atamaAcik === p.kod && (
+                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px solid #f0ede8",
+                    display: "flex", flexDirection: "column", gap: 7 }}>
+
+                    {/* Bu programın mevcut atamaları */}
+                    {(() => {
+                      const bunun = atamalar.filter(a => a.program_id === p.kod);
+                      if (bunun.length === 0) return null;
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <div style={{ fontSize: 9.5, fontWeight: 700, color: "#aaa" }}>ATANDIĞI ÖĞRENCİLER</div>
+                          {bunun.map(a => {
+                            const yapilan = (a.tamamlananlar ?? []).length;
+                            const oran = a.toplam_satir ? Math.round((yapilan / a.toplam_satir) * 100) : 0;
+                            return (
+                              <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11 }}>
+                                <span style={{ flex: 1, minWidth: 0, color: "#444" }}>
+                                  {ogrenciAdi(a.student_id)}
+                                  <span style={{ color: "#aaa" }}>
+                                    {" · "}{new Date(a.baslangic).toLocaleDateString("tr-TR", { day: "numeric", month: "short" })}
+                                  </span>
+                                </span>
+                                <span style={{ color: c.text, fontWeight: 700, flexShrink: 0 }}>%{oran}</span>
+                                <button onClick={() => atamaKaldir(a)} disabled={atamaIslemde} title="Kaldır" style={{
+                                  background: "none", border: "none", padding: "0 2px",
+                                  color: "#C98A8A", fontSize: 12, cursor: "pointer", flexShrink: 0,
+                                }}>✕</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+
+                    <select value={atamaForm.student_id}
+                      onChange={e => setAtamaForm(f => ({ ...f, student_id: e.target.value }))}
+                      style={{ ...inputStyle, color: atamaForm.student_id ? "#222" : "#aaa" }}>
+                      <option value="">Öğrenci veya grup seç...</option>
+                      {gruplar.filter(g => g.uyeler.length > 0).length > 0 && (
+                        <optgroup label="Gruplar (toplu atama)">
+                          {gruplar.filter(g => g.uyeler.length > 0).map(g => (
+                            <option key={g.id} value={`grup:${g.id}`}>{g.ad} ({g.uyeler.length} öğrenci)</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <optgroup label="Öğrenciler">
+                        {students.map(st => <option key={st.id} value={st.id}>{st.full_name}</option>)}
+                      </optgroup>
+                    </select>
+
+                    <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10, color: "#999", marginBottom: 3 }}>Başlangıç tarihi</div>
+                        <input type="date" value={atamaForm.baslangic}
+                          onChange={e => setAtamaForm(f => ({ ...f, baslangic: e.target.value }))}
+                          style={inputStyle} />
+                      </div>
+                      <button onClick={() => ata(p)} disabled={atamaIslemde || !atamaForm.student_id} style={{
+                        padding: "8px 16px", borderRadius: 9, border: "none", flexShrink: 0,
+                        background: atamaForm.student_id ? c.bg : "#ddd", color: "#fff",
+                        fontSize: 12, fontWeight: 700,
+                        cursor: atamaForm.student_id ? "pointer" : "not-allowed",
+                      }}>{atamaIslemde ? "..." : "Ata"}</button>
+                    </div>
+
+                    <div style={{ fontSize: 10, color: "#aaa", lineHeight: 1.5 }}>
+                      {p.hazir === false
+                        ? "Bu program göreve dönüşür: her adım için öğrencide ayrı görev açılır."
+                        : "Haftalar aralıklı hedef olarak işler; hafta tamamlandığında öğrenci rozet kazanır."}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -418,10 +597,6 @@ export default function ProgramDuzenleyici({ userId, students = [], color: c }) 
           </div>
         </Modal>
       )}
-      {/* Program atama — ayrı kart değil, aynı kartın alt bölümü.
-          Program yazmak ve atamak aynı işin iki adımı, ayrı kartlarda
-          durunca öğretmen ikisi arasında gidip geliyordu. */}
-      <ProgramAtama userId={userId} students={students} color={c} gomulu />
     </Card>
   );
 }
