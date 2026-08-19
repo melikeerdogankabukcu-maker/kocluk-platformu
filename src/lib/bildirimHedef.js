@@ -17,6 +17,11 @@ const HEDEFLER = {
   rozet:    { student: "bolum-rozet",    parent:  "bolum-rozet" },
 };
 
+// Admin öğretmenin üst kümesi ve aynı paneli görüyor; bildirim hedefleri de
+// aynı. Tek tek yazmak yerine türetiliyor ki yeni bir tür eklendiğinde
+// admin'i güncellemeyi unutmak mümkün olmasın.
+Object.values(HEDEFLER).forEach(h => { if (h.teacher) h.admin = h.teacher; });
+
 export const bildirimHedefi = (tur, rol) => HEDEFLER[tur]?.[rol] ?? null;
 
 // Hedefe kaydır ve kısa süre vurgula. Bölüm bulunamazsa sessizce geç.

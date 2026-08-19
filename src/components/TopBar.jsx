@@ -2,7 +2,7 @@ import { COLORS } from "../lib/theme";
 import BildirimZili from "./BildirimZili";
 
 export default function TopBar({ role, userName, userId, onLogout }) {
-  const labels = { student: "Öğrenci", teacher: "Öğretmen", parent: "Veli" };
+  const labels = { student: "Öğrenci", teacher: "Öğretmen", parent: "Veli", admin: "Yönetici" };
   const color = COLORS[role];
   return (
     <div style={{

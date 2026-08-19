@@ -4,3 +4,8 @@ export const COLORS = {
   teacher: { bg: "#534AB7", light: "#EEEDFE", mid: "#7F77DD", text: "#3C3489" },
   parent:  { bg: "#854F0B", light: "#FAEEDA", mid: "#BA7517", text: "#633806" },
 };
+
+// Admin, öğretmenin ÜST KÜMESİ: koçluk yapar, ayrıca ortak müfredatı yönetir.
+// Aynı paneli ve paleti kullanıyor — ayrı bir görünüm gerekmiyor, ayrı palet
+// tanımlansa COLORS[role] her yerde ikinci bir dala ihtiyaç duyardı.
+COLORS.admin = COLORS.teacher;

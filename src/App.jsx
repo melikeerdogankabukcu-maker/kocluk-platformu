@@ -84,7 +84,8 @@ export default function App() {
       <TopBar role={role} userName={userName} userId={user.id} onLogout={handleLogout} />
       <TopicsProvider>
         {role === "student" && <StudentDashboard userId={user.id} userName={userName} />}
-        {role === "teacher" && <TeacherDashboard userId={user.id} userName={userName} />}
+        {/* Admin öğretmenin üst kümesi: aynı paneli görür */}
+        {(role === "teacher" || role === "admin") && <TeacherDashboard userId={user.id} userName={userName} />}
         {role === "parent"  && <ParentDashboard  userId={user.id} userName={userName} />}
       </TopicsProvider>
     </div>
