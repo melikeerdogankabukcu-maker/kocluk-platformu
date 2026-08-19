@@ -35,7 +35,8 @@ const kisaTarih = (d) =>
   d.toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 
 export default function HaftalikProgram({
-  tasks = [], ogrenciAdi, color: c, variant = "buton", baslik = "Haftalık Program",
+  tasks = [], programOgeleri = [], ogrenciAdi, color: c,
+  variant = "buton", baslik = "Haftalık Program",
 }) {
   const [acik, setAcik] = useState(false);
   const [bas, setBas] = useState(() => haftaBasi());
@@ -47,23 +48,50 @@ export default function HaftalikProgram({
   });
   const son = gunler[6];
 
-  // Görevleri güne dağıt
+  // Görevler ve gömülü program adımları farklı şekillerde geliyor; çıktı için
+  // ortak bir biçime indiriliyor. Böylece gün kutusu tek tip satır basıyor.
+  const ogeler = [
+    ...tasks.map(t => ({
+      id: `g-${t.id}`,
+      tarih: t.due_date,
+      baslik: t.title,
+      alt: [t.subject, t.topic,
+        t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
+        t.description].filter(Boolean).join(" · "),
+      bitti: t.is_done,
+      etiket: t.kaynak_program ?? null,
+    })),
+    // Gömülü hazır programların adımları (program_atamalari). Bunlarda baslik
+    // alanı yok — o alan sonradan eklendi ve yalnızca yeni satırlarda var —
+    // bu yüzden konudan, o da yoksa dersten türetiliyor.
+    ...programOgeleri.map(o => ({
+      id: `p-${o.id}`,
+      tarih: o.tarih,
+      baslik: o.baslik?.trim() || o.konu?.trim() || o.ders?.trim() || "Çalışma",
+      alt: [o.ders, o.sure, o.aciklama].filter(Boolean).join(" · "),
+      bitti: o.tamamlandi,
+      etiket: o.hafta ? `${o.hafta}. hafta` : null,
+      oncelik: o.oncelik ?? null,
+    })),
+  ];
+
   const gunlukler = gunler.map(d => {
     const anahtar = gunAnahtari(d);
     return {
       tarih: d,
       anahtar,
-      gorevler: tasks
-        .filter(t => t.due_date === anahtar)
-        .sort((a, b) => (a.subject ?? "").localeCompare(b.subject ?? "")),
+      gorevler: ogeler
+        .filter(o => o.tarih === anahtar)
+        .sort((a, b) => a.baslik.localeCompare(b.baslik, "tr")),
     };
   });
 
   const haftaToplam = gunlukler.reduce((s, g) => s + g.gorevler.length, 0);
-  const haftaBiten  = gunlukler.reduce((s, g) => s + g.gorevler.filter(t => t.is_done).length, 0);
+  const haftaBiten  = gunlukler.reduce((s, g) => s + g.gorevler.filter(t => t.bitti).length, 0);
 
   // Tarihi olmayan bekleyen görevler haftaya düşmüyor ama öğrencinin yapması
   // gereken işler; çıktının altında ayrı bir bölümde listeleniyor.
+  // Program adımlarının tarihi her zaman olur, bu yüzden yalnızca görevler.
   const tarihsiz = tasks.filter(t => !t.due_date && !t.is_done);
 
   const haftaKaydir = (yon) => {
@@ -158,17 +186,22 @@ export default function HaftalikProgram({
                         width: 11, height: 11, border: "1.3px solid #888", borderRadius: 2,
                         display: "inline-flex", alignItems: "center", justifyContent: "center",
                         fontSize: 9, color: "#222", lineHeight: 1,
-                      }}>{t.is_done ? "✓" : ""}</span>
+                      }}>{t.bitti ? "✓" : ""}</span>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: 12, color: "#111", fontWeight: 600 }}>{t.title}</div>
-                        {(t.subject || t.topic || t.estimated_minutes || t.description) && (
-                          <div style={{ fontSize: 10.5, color: "#777", marginTop: 1 }}>
-                            {[t.subject, t.topic,
-                              t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
-                              t.description].filter(Boolean).join(" · ")}
-                          </div>
+                        <div style={{ fontSize: 12, color: "#111", fontWeight: 600 }}>
+                          {t.oncelik ? `${t.oncelik} ` : ""}{t.baslik}
+                        </div>
+                        {t.alt && (
+                          <div style={{ fontSize: 10.5, color: "#777", marginTop: 1 }}>{t.alt}</div>
                         )}
                       </div>
+                      {t.etiket && (
+                        <span style={{
+                          flexShrink: 0, fontSize: 9, color: "#888",
+                          border: "1px solid #e2e2e0", borderRadius: 99, padding: "1px 6px",
+                          maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>{t.etiket}</span>
+                      )}
                     </div>
                   ))}
                 </div>

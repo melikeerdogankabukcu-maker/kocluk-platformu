@@ -602,7 +602,7 @@ export default function StudentDashboard({ userId, userName }) {
       /></div>
 
       {/* Haftalık programın yazdırılabilir hali — takvimin hemen ardında */}
-      <HaftalikProgram tasks={tasks} ogrenciAdi={userName} color={c} variant="kart" />
+      <HaftalikProgram tasks={tasks} programOgeleri={programOgeleri} ogrenciAdi={userName} color={c} variant="kart" />
 
       {/* Test Ekle */}
       <Card id="bolum-test">

@@ -6,6 +6,7 @@ import { COLORS } from "../lib/theme";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { useTopics } from "../lib/TopicsContext";
 import { bolumeGit } from "../lib/bildirimHedef";
+import { programTakvimOgeleri } from "../lib/studyPrograms";
 import SinavGirisFormu from "../components/SinavGirisFormu";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
@@ -31,6 +32,8 @@ export default function TeacherDashboard({ userId, userName }) {
   const [profileMap,  setProfileMap]  = useState({});
   const [submissions, setSubmissions] = useState([]);
   const [recentTests, setRecentTests] = useState([]);
+  // Ogrenci basina gomulu program adimlari (haftalik program ciktisinda kullaniliyor)
+  const [programMap,  setProgramMap]  = useState({});
   const [bagKurulabilir, setBagKurulabilir] = useState(false);  // teacher_students tablosu var mı
 
   // Görev listesi uzun olabilir (bir program tek seferde onlarca görev açar);
@@ -110,9 +113,22 @@ export default function TeacherDashboard({ userId, userName }) {
             .gte("created_at", weekAgo.toISOString())
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] }),
+      studentIds.length > 0
+        ? supabase.from("program_atamalari").select("*")
+            .in("student_id", studentIds).eq("aktif", true)
+        : Promise.resolve({ data: [] }),
     ]);
-    hatalariBildir(sonuclar, ["gorevler", "ogrenci profilleri", "odev gonderimleri", "testler"]);
-    const [{ data: taskData }, { data: profileData }, { data: submissionData }, { data: testData }] = sonuclar;
+    hatalariBildir(sonuclar,
+      ["gorevler", "ogrenci profilleri", "odev gonderimleri", "testler", "program atamalari"]);
+    const [{ data: taskData }, { data: profileData }, { data: submissionData },
+      { data: testData }, { data: atamaData }] = sonuclar;
+
+    // Gomulu programlarin adimlarini ogrenciye gore grupla. Ogretmenin kendi
+    // yazdigi programlar zaten goreve donustugu icin burada yer almaz.
+    const progMap = {};
+    (atamaData ?? []).forEach(a => {
+      (progMap[a.student_id] ??= []).push(...programTakvimOgeleri(a));
+    });
 
     const grouped = {};
     (taskData ?? []).forEach(t => {
@@ -128,6 +144,7 @@ export default function TeacherDashboard({ userId, userName }) {
     setProfileMap(profMap);
     setSubmissions(submissionData ?? []);
     setRecentTests(testData ?? []);
+    setProgramMap(progMap);
     setLoading(false);
   };
 
@@ -522,7 +539,8 @@ export default function TeacherDashboard({ userId, userName }) {
                       baslik={`${s.full_name} — Dönem Raporu`}
                     />
                     <HaftalikProgram
-                      tasks={sTasks} ogrenciAdi={s.full_name} color={c} variant="buton"
+                      tasks={sTasks} programOgeleri={programMap[s.id] ?? []}
+                      ogrenciAdi={s.full_name} color={c} variant="buton"
                       baslik={`${s.full_name} — Haftalık Program`}
                     />
                   </div>
