@@ -25,7 +25,7 @@ import SinavAnalizi from "../components/SinavAnalizi";
 
 export default function TeacherDashboard({ userId, userName }) {
   const c = COLORS.teacher;
-  const { examSubjectsOf, topicsOf } = useTopics();
+  const { sinavTurleri, examSubjectsOf, topicsOf, tumDersler: tumDerslerFn, tumKonular: tumKonularFn, dersinTuru } = useTopics();
   const { gruplar, yukle: gruplariTazele } = useGruplar(userId);
   const [students,    setStudents]    = useState([]);
   const [taskMap,     setTaskMap]     = useState({});
@@ -200,9 +200,12 @@ export default function TeacherDashboard({ userId, userName }) {
   // gorevleri" politikası FOR ALL ve ogrencim_mi(student_id) kontrollü.
   // Ders/konu listeleri TYT ve AYT'nin birleşimi: tasks tablosunda exam_type
   // tutulmuyor, hangi sınavdan geldiği bilinmiyor.
-  const tumDersler = [...new Set([...examSubjectsOf("TYT"), ...examSubjectsOf("AYT")])];
-  const tumKonular = (ders) =>
-    ders ? [...new Set([...topicsOf("TYT", ders), ...topicsOf("AYT", ders)])] : [];
+  // Gorev duzenlemede ders/konu listeleri TUM sinav turlerinin birlesimi:
+  // tasks tablosunda exam_type tutulmuyor, gorevin hangi sinavdan geldigi
+  // bilinmiyor. Once yalnizca TYT+AYT birlestiriliyordu; KPSS/LGS/DGS
+  // eklenince o dersler listede hic gorunmezdi.
+  const tumDersler = tumDerslerFn();
+  const tumKonular = (ders) => tumKonularFn(ders);
 
   const duzenleInput = {
     padding: "6px 9px", borderRadius: 7, border: "1.5px solid #f0ede8",
@@ -240,8 +243,7 @@ export default function TeacherDashboard({ userId, userName }) {
   const gorevKopyala = (t) => {
     // Dersin hangi sınav müfredatında olduğunu bul; hiçbirinde yoksa
     // "Diğer (elle yaz)" kipine düş, ders adı kaybolmasın.
-    const tur = examSubjectsOf("TYT").includes(t.subject) ? "TYT"
-              : examSubjectsOf("AYT").includes(t.subject) ? "AYT" : null;
+    const tur = dersinTuru(t.subject);
     setForm({
       student_id: t.student_id,
       title: t.title ?? "",
@@ -818,8 +820,8 @@ export default function TeacherDashboard({ userId, userName }) {
             </select>
 
             {/* Sınav türü (müfredat seçimi için) */}
-            <div style={{ display: "flex", gap: 8 }}>
-              {["TYT", "AYT"].map(tip => (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {sinavTurleri.map(tip => (
                 <button key={tip} onClick={() => setForm(f => ({ ...f, exam_type: tip, subject: "", topic: "" }))} style={{
                   flex: 1, padding: "7px 0", borderRadius: 10, fontSize: 12, fontWeight: 600,
                   border: `2px solid ${form.exam_type === tip ? c.bg : "#f0ede8"}`,

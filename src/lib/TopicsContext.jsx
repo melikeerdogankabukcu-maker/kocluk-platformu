@@ -8,6 +8,16 @@ import { STATIK_DERSLER } from "./examSubjects";
 // examTopics.js listesine düşülür — uygulama hiçbir durumda konusuz kalmaz.
 const TopicsCtx = createContext(null);
 
+// Sınav türleri artık koda gömülü değil, exam_topics verisinden geliyor —
+// yeni bir müfredat eklendiğinde arayüz kendiliğinden tanıyor. Sıra ise
+// alfabetik olmamalı: öğretmen TYT/AYT'yi en sık kullanıyor, onlar başta
+// dursun. Listede olmayan türler sona alfabetik eklenir.
+const TUR_SIRASI = ["TYT", "AYT", "LGS", "KPSS", "DGS"];
+const turleriSirala = (turler) => [
+  ...TUR_SIRASI.filter(t => turler.includes(t)),
+  ...turler.filter(t => !TUR_SIRASI.includes(t)).sort((a, b) => a.localeCompare(b, "tr")),
+];
+
 // Provider dışında çağrılırsa (ör. izole test) statik listeyle çalışır
 const yedekDeger = {
   EXAM_TOPICS: YEDEK_TOPICS,
@@ -16,6 +26,12 @@ const yedekDeger = {
   dersleriGetir: (tur) => Object.keys(YEDEK_TOPICS[tur] ?? {}) .length
     ? Object.keys(YEDEK_TOPICS[tur])
     : (STATIK_DERSLER[tur] ?? []),
+  sinavTurleri: turleriSirala(Object.keys(YEDEK_TOPICS)),
+  tumDersler: () => [...new Set(Object.values(YEDEK_TOPICS).flatMap(d => Object.keys(d)))],
+  tumKonular: (ders) => !ders ? [] : [...new Set(
+    Object.values(YEDEK_TOPICS).flatMap(d => d[ders] ?? []))],
+  dersinTuru: (ders) =>
+    Object.keys(YEDEK_TOPICS).find(t => Object.keys(YEDEK_TOPICS[t] ?? {}).includes(ders)) ?? null,
   veritabanindan: false,
   loading: false,
   reload: async () => {},
@@ -62,6 +78,18 @@ export function TopicsProvider({ children }) {
         const mufredat = Object.keys(aktif[tur] ?? {});
         return mufredat.length > 0 ? mufredat : (STATIK_DERSLER[tur] ?? []);
       },
+      sinavTurleri: turleriSirala(Object.keys(aktif)),
+      // Bir dersin hangi sınav türünde geçtiğini bilmediğimiz durumlar için
+      // (ör. tasks tablosunda exam_type tutulmuyor) tüm türlerin birleşimi.
+      tumDersler: () => [...new Set(
+        Object.values(aktif).flatMap(d => Object.keys(d))
+      )].sort((a, b) => a.localeCompare(b, "tr")),
+      tumKonular: (ders) => !ders ? [] : [...new Set(
+        Object.values(aktif).flatMap(d => d[ders] ?? [])
+      )],
+      // Dersin ilk geçtiği sınav türü — kopyalama/düzenlemede sekme seçmek için
+      dersinTuru: (ders) =>
+        Object.keys(aktif).find(t => Object.keys(aktif[t] ?? {}).includes(ders)) ?? null,
       veritabanindan: topics != null,
       loading,
       reload: yukle,

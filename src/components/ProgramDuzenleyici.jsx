@@ -30,7 +30,7 @@ const bosHafta = (no) => ({
 // (atama anında içeriğin kopyası alınır).
 export default function ProgramDuzenleyici({ userId, students = [], color: c }) {
   const { programlar, dbden, yukle } = useStudyPrograms();
-  const { examSubjectsOf, topicsOf } = useTopics();
+  const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();
 
   const [acik, setAcik]         = useState(false);
   const [duzenlenen, setDuz]    = useState(null);   // { id?, kod, title, ..., icerik }
@@ -412,9 +412,9 @@ export default function ProgramDuzenleyici({ userId, students = [], color: c }) 
               rows={2} style={{ ...inputStyle, resize: "vertical" }} />
 
             {/* Konu seçici için sınav türü */}
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
               <span style={{ fontSize: 10.5, color: "#888", fontWeight: 600 }}>Konu listesi:</span>
-              {["TYT", "AYT"].map(t => (
+              {sinavTurleri.map(t => (
                 <button key={t} onClick={() => setExamType(t)} style={{
                   padding: "4px 12px", borderRadius: 99, fontSize: 11, fontWeight: 600, cursor: "pointer",
                   border: `1.5px solid ${examType === t ? c.bg : "#f0ede8"}`,

@@ -24,7 +24,7 @@ import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
 
 export default function StudentDashboard({ userId, userName }) {
   const c = COLORS.student;
-  const { examSubjectsOf, topicsOf } = useTopics();
+  const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();
 
   const [tasks,        setTasks]        = useState([]);
   const [testSessions, setTestSessions] = useState([]);
@@ -614,8 +614,8 @@ export default function StudentDashboard({ userId, userName }) {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
             {/* Sınav türü (müfredat seçimi için) */}
-            <div style={{ display: "flex", gap: 8 }}>
-              {["TYT", "AYT"].map(tip => (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {sinavTurleri.map(tip => (
                 <button key={tip} onClick={() => setTestForm(f => ({ ...f, exam_type: tip, subject: "", topic: "" }))} style={{
                   flex: 1, padding: "7px 0", borderRadius: 10, fontSize: 12, fontWeight: 600,
                   border: `2px solid ${testForm.exam_type === tip ? c.bg : "#f0ede8"}`,

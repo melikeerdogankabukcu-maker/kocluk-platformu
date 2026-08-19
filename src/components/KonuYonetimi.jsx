@@ -9,7 +9,7 @@ import SectionTitle from "./SectionTitle";
 // Konu silmek yerine pasife alınır: eski kayıtlar (görev/test/sınav) bozulmaz,
 // konu yalnızca yeni girişlerde seçilemez hale gelir.
 export default function KonuYonetimi({ color: c }) {
-  const { EXAM_TOPICS, examSubjectsOf, veritabanindan, reload } = useTopics();
+  const { EXAM_TOPICS, sinavTurleri, examSubjectsOf, veritabanindan, reload } = useTopics();
 
   const [acik, setAcik]         = useState(false);
   const [examType, setExamType] = useState("TYT");
@@ -104,8 +104,8 @@ export default function KonuYonetimi({ color: c }) {
           )}
 
           {/* Sınav türü */}
-          <div style={{ display: "flex", gap: 6 }}>
-            {["TYT", "AYT"].map(t => (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {sinavTurleri.map(t => (
               <button key={t} onClick={() => turSec(t)} style={{
                 flex: 1, padding: "7px 0", borderRadius: 10, fontSize: 12, fontWeight: 600,
                 border: `2px solid ${examType === t ? c.bg : "#f0ede8"}`,
