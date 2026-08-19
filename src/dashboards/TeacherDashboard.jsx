@@ -11,6 +11,7 @@ import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import GrupYonetimi from "../components/GrupYonetimi";
 import VeliRaporu from "../components/VeliRaporu";
+import HaftalikProgram from "../components/HaftalikProgram";
 import { useGruplar } from "../hooks/useGruplar";
 import ProgramDuzenleyici from "../components/ProgramDuzenleyici";
 import { useAnalizCache } from "../hooks/useAnaliz";
@@ -519,6 +520,10 @@ export default function TeacherDashboard({ userId, userName }) {
                     <VeliRaporu
                       studentId={s.id} studentName={s.full_name} color={c} variant="buton"
                       baslik={`${s.full_name} — Dönem Raporu`}
+                    />
+                    <HaftalikProgram
+                      tasks={sTasks} ogrenciAdi={s.full_name} color={c} variant="buton"
+                      baslik={`${s.full_name} — Haftalık Program`}
                     />
                   </div>
 

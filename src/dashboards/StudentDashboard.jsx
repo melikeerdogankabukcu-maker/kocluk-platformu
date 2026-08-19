@@ -13,6 +13,7 @@ import TaskItem from "../components/TaskItem";
 import ProgressBar from "../components/ProgressBar";
 import AlertChip from "../components/AlertChip";
 import LessonPlanner from "../components/LessonPlanner";
+import HaftalikProgram from "../components/HaftalikProgram";
 import Modal from "../components/Modal";
 import SinavAnalizi from "../components/SinavAnalizi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
@@ -599,6 +600,9 @@ export default function StudentDashboard({ userId, userName }) {
         renderTask={gorevSatiri}
         takvimAlti={takvimAltiBolum}
       /></div>
+
+      {/* Haftalık programın yazdırılabilir hali — takvimin hemen ardında */}
+      <HaftalikProgram tasks={tasks} ogrenciAdi={userName} color={c} variant="kart" />
 
       {/* Test Ekle */}
       <Card id="bolum-test">
