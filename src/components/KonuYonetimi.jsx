@@ -19,6 +19,10 @@ export default function KonuYonetimi({ color: c }) {
   const [yeniKonu, setYeniKonu] = useState("");
   const [duzenlenen, setDuzenlenen] = useState(null); // { konu, yeniAd }
   const [islemde, setIslemde]   = useState(false);
+  // Yeni ders / yeni sınav türü formu. Bir ders ya da sınav türü ancak
+  // en az bir konu satırı varsa "var" olur (ikisi de exam_topics'ten
+  // türetiliyor, ayrı tabloları yok) — o yüzden ilk konu zorunlu.
+  const [yeniForm, setYeniForm] = useState(null);   // { tur, ders, konu, turSerbest }
 
   const dersler = examSubjectsOf(examType);
   const konular = ders ? (EXAM_TOPICS[examType]?.[ders] ?? []) : [];
@@ -54,6 +58,27 @@ export default function KonuYonetimi({ color: c }) {
     if (error) { alert("Konu eklenemedi: " + error.message); return; }
     setYeniKonu("");
     tazele();
+  };
+
+  const yeniKaydet = async () => {
+    const tur = (yeniForm?.tur ?? "").trim();
+    const d   = (yeniForm?.ders ?? "").trim();
+    const k   = (yeniForm?.konu ?? "").trim();
+    if (!tur || !d || !k) { alert("Sınav türü, ders adı ve ilk konu gerekli."); return; }
+    setIslemde(true);
+    // sahip_id kolonunun varsayılanı auth.uid(); koç kendi konusunun sahibi
+    // olur ve RLS'teki "sahip_id = auth.uid()" koşulu sağlanır.
+    const { hata } = await calistir(
+      supabase.from("exam_topics").insert({ exam_type: tur, subject: d, topic: k, sira: 0 }),
+      "Yeni ders ekleme"
+    );
+    setIslemde(false);
+    if (hata) return;
+    setYeniForm(null);
+    setExamType(tur);
+    setDers(d);
+    setPasifler([]);
+    await tazele(d);
   };
 
   const aktiflikDegistir = async (konu, aktif) => {
@@ -113,14 +138,68 @@ export default function KonuYonetimi({ color: c }) {
                 color: examType === t ? "#fff" : "#888", cursor: "pointer",
               }}>{t}</button>
             ))}
+            <button onClick={() => setYeniForm({ tur: "", ders: "", konu: "", turSerbest: true })}
+              title="Yeni sınav türü ekle" style={{
+                padding: "7px 11px", borderRadius: 10, fontSize: 12, fontWeight: 700,
+                border: `1.5px dashed ${c.mid}`, background: "transparent",
+                color: c.mid, cursor: "pointer", flexShrink: 0,
+              }}>+ tür</button>
           </div>
 
           {/* Ders */}
-          <select value={ders} onChange={e => dersSec(e.target.value)}
+          <select value={ders}
+            onChange={e => {
+              if (e.target.value === "__yeni") {
+                setYeniForm({ tur: examType, ders: "", konu: "", turSerbest: false });
+              } else dersSec(e.target.value);
+            }}
             style={{ ...inputStyle, color: ders ? "#222" : "#aaa" }}>
             <option value="">Ders seç...</option>
             {dersler.map(d => <option key={d} value={d}>{d}</option>)}
+            <option value="__yeni">+ Yeni ders ekle...</option>
           </select>
+
+          {yeniForm && (
+            <div style={{
+              display: "flex", flexDirection: "column", gap: 6,
+              padding: 10, borderRadius: 10, background: c.light,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.text }}>
+                {yeniForm.turSerbest ? "YENİ SINAV TÜRÜ" : `YENİ DERS · ${yeniForm.tur}`}
+              </div>
+              {yeniForm.turSerbest && (
+                <input autoFocus placeholder="Sınav türü (ör. ALES, YDS)"
+                  value={yeniForm.tur}
+                  onChange={e => setYeniForm(f => ({ ...f, tur: e.target.value }))}
+                  style={{ ...inputStyle, width: "100%" }} />
+              )}
+              <input autoFocus={!yeniForm.turSerbest}
+                placeholder="Ders adı (ör. Vatandaşlık)"
+                value={yeniForm.ders}
+                onChange={e => setYeniForm(f => ({ ...f, ders: e.target.value }))}
+                style={{ ...inputStyle, width: "100%" }} />
+              <input placeholder="İlk konu (ör. Anayasa)"
+                value={yeniForm.konu}
+                onChange={e => setYeniForm(f => ({ ...f, konu: e.target.value }))}
+                onKeyDown={e => { if (e.key === "Enter") yeniKaydet(); if (e.key === "Escape") setYeniForm(null); }}
+                style={{ ...inputStyle, width: "100%" }} />
+              <div style={{ fontSize: 10, color: c.text, opacity: 0.75, lineHeight: 1.5 }}>
+                Ders ancak en az bir konusu varsa listede görünür, o yüzden ilk konu
+                gerekli. Sonrasını normal konu ekleme ile sürdürebilirsiniz.
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setYeniForm(null)} disabled={islemde} style={{
+                  flex: 1, padding: "8px 0", borderRadius: 9, border: "1px solid #f0ede8",
+                  background: "#fff", color: "#888", fontSize: 12, cursor: "pointer", fontWeight: 600,
+                }}>Vazgeç</button>
+                <button onClick={yeniKaydet} disabled={islemde} style={{
+                  flex: 1, padding: "8px 0", borderRadius: 9, border: "none",
+                  background: c.bg, color: "#fff", fontSize: 12, fontWeight: 700,
+                  cursor: "pointer", opacity: islemde ? 0.7 : 1,
+                }}>{islemde ? "..." : "Ekle"}</button>
+              </div>
+            </div>
+          )}
 
           {ders && (
             <>
