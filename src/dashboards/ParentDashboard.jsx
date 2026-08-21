@@ -122,6 +122,13 @@ export default function ParentDashboard({ userId, userName }) {
   );
 
   // Takvimde salt-okunur ders gösterimi
+  // Katılım rozeti — LessonPlanner'daki ile aynı renkler
+  const KATILIM_ROZET = {
+    geldi:     { label: "Geldi ✓",   bg: "#E8F9F0", color: "#1A6B3C" },
+    gec_geldi: { label: "Geç geldi", bg: "#FFF7E6", color: "#854F0B" },
+    gelmedi:   { label: "Gelmedi",   bg: "#FFF0F0", color: "#A32D2D" },
+  };
+
   const renderLesson = (l) => {
     const st = lessonStatusStyle(l.status);
     return (
@@ -137,9 +144,18 @@ export default function ParentDashboard({ userId, userName }) {
               {l.title ? ` · ${l.title}` : ""}
             </div>
           </div>
-          <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: st.bg, color: st.color, flexShrink: 0 }}>
-            {st.label}
-          </span>
+          <div style={{ display: "flex", gap: 5, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {/* Katılım: veli de görsün. Öğretmen işaretlemediyse hiç çıkmıyor. */}
+            {l.katilim && KATILIM_ROZET[l.katilim] && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 99,
+                background: KATILIM_ROZET[l.katilim].bg, color: KATILIM_ROZET[l.katilim].color,
+              }}>{KATILIM_ROZET[l.katilim].label}</span>
+            )}
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: st.bg, color: st.color }}>
+              {st.label}
+            </span>
+          </div>
         </div>
       </div>
     );

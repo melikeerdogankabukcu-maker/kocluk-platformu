@@ -70,11 +70,16 @@ export function useLessons(userId) {
     await reload();
   };
 
-  // Öğretmen: dersi 'yapıldı' işaretler
-  const markCompleted = async (id) => {
+  // Öğretmen: katılım işaretler ve dersi kapatır.
+  //
+  // Katılım işaretlemek dersi ayrıca "yapıldı" yapıyor (completed): öğrenci
+  // gelmese de o saat harcandı ve genelde ücretlendiriliyor, ödeme akışının
+  // aynen işlemesi gerekiyor. Devamsızlığın XP'ye yansımaması ise
+  // veritabanı tarafında çözüldü (ogrenci_puan gelmediği dersi saymıyor).
+  const katilimIsaretle = async (id, durum) => {
     const { hata } = await calistir(
-      supabase.from("lessons").update({ completed: true }).eq("id", id),
-      "Dersi yapildi isaretleme"
+      supabase.from("lessons").update({ katilim: durum, completed: true }).eq("id", id),
+      "Ders katilimi isaretleme"
     );
     if (hata) return;
     await reload();
@@ -100,5 +105,18 @@ export function useLessons(userId) {
     await reload();
   };
 
-  return { lessons, loading, reload, createLesson, respondLesson, cancelLesson, markCompleted, reportPaid, confirmPaid };
+  // Bir öğrencinin devamsızlık özeti: { toplam, geldi, gec, gelmedi, oran }
+  const katilimOzeti = (studentId) => {
+    const isaretli = lessons.filter(l => l.student_id === studentId && l.katilim);
+    const say = (d) => isaretli.filter(l => l.katilim === d).length;
+    const gelmedi = say("gelmedi");
+    return {
+      toplam: isaretli.length,
+      geldi: say("geldi"), gec: say("gec_geldi"), gelmedi,
+      oran: isaretli.length ? Math.round((gelmedi / isaretli.length) * 100) : 0,
+    };
+  };
+
+  return { lessons, loading, reload, createLesson, respondLesson, cancelLesson,
+           katilimIsaretle, katilimOzeti, reportPaid, confirmPaid };
 }

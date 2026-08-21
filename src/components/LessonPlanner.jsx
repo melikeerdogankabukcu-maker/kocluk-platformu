@@ -18,7 +18,14 @@ import CalendarMonth from "./CalendarMonth";
 export default function LessonPlanner({ userId, role, counterparts, color: c,
   tasks = [], tests = [], programItems = [], onProgramCevir, programOzet,
   renderTask: renderTaskDisari, takvimAlti }) {
-  const { lessons, createLesson, respondLesson, cancelLesson, markCompleted, confirmPaid } = useLessons(userId);
+  const { lessons, createLesson, respondLesson, cancelLesson, katilimIsaretle, katilimOzeti, confirmPaid } = useLessons(userId);
+
+  // Katılım rozeti — işaretlenmiş derslerde herkes görür (veli dahil)
+  const KATILIM = {
+    geldi:     { label: "Geldi ✓",    bg: "#E8F9F0", color: "#1A6B3C" },
+    gec_geldi: { label: "Geç geldi",  bg: "#FFF7E6", color: "#854F0B" },
+    gelmedi:   { label: "Gelmedi",    bg: "#FFF0F0", color: "#A32D2D" },
+  };
 
   // Ödeme durumu rozeti
   const paymentBadge = (ps) => {
@@ -193,16 +200,21 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
             }}>✕ Reddet</button>
           </div>
         )}
-        {/* Öğretmen: onaylı & yapılmamış dersi 'yapıldı' işaretle — sadece günü gelince */}
+        {/* Öğretmen: onaylı & kapanmamış derste katılım işaretler — sadece günü gelince.
+            Katılım işaretlemek dersi de kapatıyor, ayrı "yapıldı" düğmesi kalktı. */}
         {role === "teacher" && l.status === "onaylandi" && !l.completed && (
           l.lesson_date <= todayStr ? (
-            <button onClick={() => markCompleted(l.id)} style={{
-              fontSize: 11, padding: "4px 12px", borderRadius: 99, marginTop: 8,
-              border: "none", background: c.light, color: c.text, cursor: "pointer", fontWeight: 600,
-            }}>✓ Ders yapıldı</button>
+            <div style={{ display: "flex", gap: 5, marginTop: 8, flexWrap: "wrap" }}>
+              {Object.entries(KATILIM).map(([durum, v]) => (
+                <button key={durum} onClick={() => katilimIsaretle(l.id, durum)} style={{
+                  fontSize: 11, padding: "4px 11px", borderRadius: 99, border: "none",
+                  background: v.bg, color: v.color, cursor: "pointer", fontWeight: 600,
+                }}>{v.label}</button>
+              ))}
+            </div>
           ) : (
             <div style={{ fontSize: 10, color: "#bbb", marginTop: 8 }}>
-              Ders günü gelince "yapıldı" işaretlenebilir
+              Ders günü gelince katılım işaretlenebilir
             </div>
           )
         )}
@@ -211,6 +223,12 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
           const pb = paymentBadge(l.payment_status);
           return (
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+              {l.katilim && KATILIM[l.katilim] && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                  background: KATILIM[l.katilim].bg, color: KATILIM[l.katilim].color,
+                }}>{KATILIM[l.katilim].label}</span>
+              )}
               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: c.light, color: c.text }}>Yapıldı ✓</span>
               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: pb.bg, color: pb.color }}>{pb.label}</span>
             </div>
@@ -357,6 +375,43 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
       {/* Takvim */}
       <Card>
         <SectionTitle title="Takvimim" color={c.mid} />
+
+        {/* Devamsızlık özeti — yalnızca öğretmende, yalnızca işaretlenmiş
+            dersi olan öğrenciler için. Katılım işaretlenmemişse satır
+            gösterilmiyor; "0 devamsızlık" ile "hiç işaretlenmemiş" aynı
+            görünmesin. */}
+        {role === "teacher" && (() => {
+          const satirlar = counterparts
+            .map(k => ({ ...k, ozet: katilimOzeti(k.id) }))
+            .filter(k => k.ozet.toplam > 0);
+          if (satirlar.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 12, padding: "9px 11px", borderRadius: 10, background: "#fafaf8" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", marginBottom: 6 }}>
+                DERS KATILIMI
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {satirlar.map(k => (
+                  <div key={k.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5 }}>
+                    <span style={{ flex: 1, minWidth: 0, color: "#444" }}>{k.full_name}</span>
+                    <span style={{ color: "#888", flexShrink: 0 }}>{k.ozet.toplam} ders</span>
+                    {k.ozet.gec > 0 && (
+                      <span style={{ color: "#854F0B", flexShrink: 0 }}>{k.ozet.gec} geç</span>
+                    )}
+                    <span style={{
+                      flexShrink: 0, fontWeight: 700,
+                      color: k.ozet.gelmedi === 0 ? "#1A6B3C" : k.ozet.oran >= 25 ? "#A32D2D" : "#854F0B",
+                    }}>
+                      {k.ozet.gelmedi === 0
+                        ? "devamsızlık yok"
+                        : `${k.ozet.gelmedi} gelmedi · %${k.ozet.oran}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
         {programOzet}
         <CalendarMonth
           lessons={lessons} tasks={tasks} tests={tests} programItems={programItems}
