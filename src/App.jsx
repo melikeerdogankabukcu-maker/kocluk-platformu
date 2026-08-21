@@ -19,9 +19,24 @@ async function fetchUserProfile(userId) {
     .single();
   if (error) {
     console.error("[Kullanici profili]", error);
-    return null;
+    // PGRST116 = single() sifir satir buldu. Bu bir arıza degil, cevap:
+    // profil satiri YOK. Gecici bir okuma hatasindan ayirmak sart --
+    // ikisini de "onayli" saymak, e-posta onayi kapaliyken kayit aninda
+    // oturum acilacagi icin onay kapisini tam da korumasi gereken yerde
+    // acik birakirdi.
+    return { yok: error.code === "PGRST116" };
   }
   return data;
+}
+
+// Profil satiri okunamadiginda kapi ne yapsin?
+//   satir YOK          -> bekletilir. Tanimadigimiz bir hesabi iceri almayiz.
+//   okuma hata verdi   -> iceri alinir. Gecici bir aksaklik yuzunden mevcut
+//                         kullaniciyi kendi uygulamasindan kilitlemek,
+//                         korudugu seyden daha buyuk zarar verir.
+function onayDegeri(profile) {
+  if (profile?.onay_durumu) return profile.onay_durumu;
+  return profile?.yok ? "beklemede" : "onaylandi";
 }
 
 export default function App() {
@@ -42,9 +57,7 @@ export default function App() {
         const profile = await fetchUserProfile(session.user.id);
         setRole(profile?.role ?? "student");
         setUserName(profile?.full_name ?? session.user.email);
-        // Profil okunamazsa onaylı varsayılıyor: kapıyı bir okuma hatası
-        // yüzünden kapatmak, mevcut kullanıcıyı haksız yere dışarıda bırakır.
-        setOnay(profile?.onay_durumu ?? "onaylandi");
+        setOnay(onayDegeri(profile));
       }
       setLoading(false);
     });
@@ -58,7 +71,7 @@ export default function App() {
     const profile = await fetchUserProfile(loggedInUser.id);
     setRole(profile?.role ?? "student");
     setUserName(profile?.full_name ?? loggedInUser.email);
-    setOnay(profile?.onay_durumu ?? "onaylandi");
+    setOnay(onayDegeri(profile));
   };
 
   const handleLogout = async () => {

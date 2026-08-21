@@ -1,6 +1,59 @@
 import { useState } from "react";
 import { supabase } from "./supabase";
 
+// Supabase hataları İngilizce ve teknik geliyor ("email rate limit exceeded").
+// Kullanıcının ekranında ne yapması gerektiği yazsın diye çevriliyor.
+//
+// Önce error.code'a bakılıyor: metin Supabase sürümüyle değişebilir, kod
+// değişmez. Kod tanınmazsa metne düşülüyor, o da tutmazsa ham mesaj
+// gösteriliyor — bilinmeyen bir hatayı yutup "bir şeyler ters gitti"
+// demek, sorunu bulmayı imkânsız kılardı.
+const HATA_KODU = {
+  over_email_send_rate_limit:
+    "Çok fazla e-posta gönderildi. Lütfen bir saat sonra tekrar deneyin.",
+  over_request_rate_limit:
+    "Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin.",
+  invalid_credentials: "E-posta veya şifre hatalı.",
+  email_not_confirmed:
+    "E-posta adresiniz henüz doğrulanmadı. Gelen kutunuzdaki bağlantıya tıklayın.",
+  user_already_exists:
+    "Bu e-posta ile zaten bir hesap var. Giriş yapmayı deneyin.",
+  email_exists: "Bu e-posta ile zaten bir hesap var. Giriş yapmayı deneyin.",
+  weak_password: "Şifre çok zayıf. En az 6 karakter kullanın.",
+  validation_failed: "Bilgileri kontrol edin: e-posta veya şifre geçersiz.",
+  signup_disabled: "Yeni kayıtlar şu anda kapalı.",
+};
+
+const HATA_METNI = [
+  [/email rate limit exceeded/i,
+    "Çok fazla e-posta gönderildi. Lütfen bir saat sonra tekrar deneyin."],
+  // "...after 47 seconds" — kaç saniye kaldığı korunuyor, kullanıcı boşuna denemesin
+  [/only request this after (\d+) seconds?/i,
+    (m) => `Güvenlik gereği ${m[1]} saniye sonra tekrar deneyebilirsiniz.`],
+  [/rate limit|too many requests/i,
+    "Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin."],
+  [/invalid login credentials/i, "E-posta veya şifre hatalı."],
+  [/email not confirmed/i,
+    "E-posta adresiniz henüz doğrulanmadı. Gelen kutunuzdaki bağlantıya tıklayın."],
+  [/already registered|already exists/i,
+    "Bu e-posta ile zaten bir hesap var. Giriş yapmayı deneyin."],
+  [/password should be at least (\d+)/i,
+    (m) => `Şifre en az ${m[1]} karakter olmalı.`],
+  [/unable to validate email|invalid format/i, "E-posta adresi geçersiz."],
+  [/requires a valid password|password.*required/i, "Şifre girin."],
+];
+
+function hataMesaji(error) {
+  if (!error) return "";
+  if (error.code && HATA_KODU[error.code]) return HATA_KODU[error.code];
+  const metin = error.message ?? "";
+  for (const [kalip, karsilik] of HATA_METNI) {
+    const esles = metin.match(kalip);
+    if (esles) return typeof karsilik === "function" ? karsilik(esles) : karsilik;
+  }
+  return metin;
+}
+
 export default function Auth({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -24,7 +77,7 @@ export default function Auth({ onLogin }) {
 
     if (isLogin) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setError(error.message);
+      if (error) setError(hataMesaji(error));
       else onLogin(data.user);
     } else {
       // Ad ve rol metadata olarak gidiyor; profil satırını auth.users
@@ -39,7 +92,7 @@ export default function Auth({ onLogin }) {
       });
 
       if (error) {
-        setError(error.message);
+        setError(hataMesaji(error));
       } else if (!data.session) {
         // Onay bekleniyor — kullanıcı henüz giriş yapmış değil.
         setBilgi(
