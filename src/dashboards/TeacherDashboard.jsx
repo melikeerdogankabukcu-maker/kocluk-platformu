@@ -13,6 +13,7 @@ import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import GrupYonetimi from "../components/GrupYonetimi";
 import VeliRaporu from "../components/VeliRaporu";
 import HaftalikProgram from "../components/HaftalikProgram";
+import Mesajlar from "../components/Mesajlar";
 import { useGruplar } from "../hooks/useGruplar";
 import ProgramDuzenleyici from "../components/ProgramDuzenleyici";
 import { useAnalizCache } from "../hooks/useAnaliz";
@@ -34,6 +35,8 @@ export default function TeacherDashboard({ userId, userName }) {
   const [recentTests, setRecentTests] = useState([]);
   // Ogrenci basina gomulu program adimlari (haftalik program ciktisinda kullaniliyor)
   const [programMap,  setProgramMap]  = useState({});
+  // Mesajlasilabilecek veliler: ogrencilerin family_links kayitlarindan
+  const [veliler,     setVeliler]     = useState([]);
   const [bagKurulabilir, setBagKurulabilir] = useState(false);  // teacher_students tablosu var mı
 
   // Görev listesi uzun olabilir (bir program tek seferde onlarca görev açar);
@@ -117,11 +120,17 @@ export default function TeacherDashboard({ userId, userName }) {
         ? supabase.from("program_atamalari").select("*")
             .in("student_id", studentIds).eq("aktif", true)
         : Promise.resolve({ data: [] }),
+      // Ogrencilerin velileri — mesajlasma kisi listesi icin
+      studentIds.length > 0
+        ? supabase.from("family_links").select("parent_id, student_id")
+            .in("student_id", studentIds)
+        : Promise.resolve({ data: [] }),
     ]);
     hatalariBildir(sonuclar,
-      ["gorevler", "ogrenci profilleri", "odev gonderimleri", "testler", "program atamalari"]);
+      ["gorevler", "ogrenci profilleri", "odev gonderimleri", "testler",
+       "program atamalari", "veli baglantilari"]);
     const [{ data: taskData }, { data: profileData }, { data: submissionData },
-      { data: testData }, { data: atamaData }] = sonuclar;
+      { data: testData }, { data: atamaData }, { data: veliBaglari }] = sonuclar;
 
     // Gomulu programlarin adimlarini ogrenciye gore grupla. Ogretmenin kendi
     // yazdigi programlar zaten goreve donustugu icin burada yer almaz.
@@ -145,6 +154,20 @@ export default function TeacherDashboard({ userId, userName }) {
     setSubmissions(submissionData ?? []);
     setRecentTests(testData ?? []);
     setProgramMap(progMap);
+
+    // Veli adlarini cek; hangi ogrencinin velisi oldugu etikette gosteriliyor
+    const veliIdleri = [...new Set((veliBaglari ?? []).map(v => v.parent_id))];
+    if (veliIdleri.length > 0) {
+      const { veri } = await calistir(
+        supabase.from("users").select("id, full_name").in("id", veliIdleri),
+        "Veli listesi", { sessiz: true }
+      );
+      const ogrenciAdi = Object.fromEntries(studentData.map(s => [s.id, s.full_name]));
+      setVeliler((veri ?? []).map(v => {
+        const bag = (veliBaglari ?? []).find(b => b.parent_id === v.id);
+        return { ...v, etiket: bag ? `· ${ogrenciAdi[bag.student_id] ?? ""} velisi` : "· veli" };
+      }));
+    } else setVeliler([]);
     setLoading(false);
   };
 
@@ -793,6 +816,9 @@ export default function TeacherDashboard({ userId, userName }) {
       <div id="bolum-sinav"><SinavGirisFormu students={students} profileMap={profileMap} color={c} onKaydedildi={loadData} /></div>
 
       {/* Çalışma programı: kütüphane + atama */}
+      {/* Öğrenciler ve velileriyle mesajlaşma */}
+      <Mesajlar userId={userId} kisiler={[...students, ...veliler]} color={c} />
+
       {/* Program yazma + atama: atama her programın kendi satırında açılıyor */}
       <ProgramDuzenleyici userId={userId} students={students} color={c} />
 

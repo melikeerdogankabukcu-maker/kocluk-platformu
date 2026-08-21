@@ -14,6 +14,7 @@ import ProgressBar from "../components/ProgressBar";
 import AlertChip from "../components/AlertChip";
 import LessonPlanner from "../components/LessonPlanner";
 import HaftalikProgram from "../components/HaftalikProgram";
+import Mesajlar from "../components/Mesajlar";
 import Modal from "../components/Modal";
 import SinavAnalizi from "../components/SinavAnalizi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
@@ -600,6 +601,9 @@ export default function StudentDashboard({ userId, userName }) {
         renderTask={gorevSatiri}
         takvimAlti={takvimAltiBolum}
       /></div>
+
+      {/* Öğretmenleriyle mesajlaşma */}
+      <Mesajlar userId={userId} kisiler={teachers} color={c} baslik="Öğretmenlerim" />
 
       {/* Haftalık programın yazdırılabilir hali — takvimin hemen ardında */}
       <HaftalikProgram tasks={tasks} programOgeleri={programOgeleri} ogrenciAdi={userName} color={c} variant="kart" />

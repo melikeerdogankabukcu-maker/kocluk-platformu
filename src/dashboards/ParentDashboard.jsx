@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
-import { hatalariBildir } from "../lib/db";
+import { calistir, hatalariBildir } from "../lib/db";
 import { COLORS } from "../lib/theme";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { computeTopicProgress } from "../lib/progressHelpers";
@@ -18,6 +18,7 @@ import Rozetler from "../components/Rozetler";
 import SeviyeAvatar from "../components/SeviyeAvatar";
 import VeliRaporu from "../components/VeliRaporu";
 import { useProgramAtama } from "../hooks/useProgramAtama";
+import Mesajlar from "../components/Mesajlar";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
 
 export default function ParentDashboard({ userId, userName }) {
@@ -25,6 +26,10 @@ export default function ParentDashboard({ userId, userName }) {
   const [child, setChild] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Mesajlaşma kişi listesi. Aşağıdaki effect içinde doldurulduğu için
+  // tanımı effect'ten ÖNCE olmak zorunda — sonra tanımlansaydı setOgretmenler
+  // "declared before use" ile çalışma anında patlardı.
+  const [ogretmenler, setOgretmenler] = useState([]);
 
   useEffect(() => {
     const load = async () => {
@@ -39,12 +44,24 @@ export default function ParentDashboard({ userId, userName }) {
       const sonuclar = await Promise.all([
         supabase.from("users").select("id, full_name").eq("id", studentId).single(),
         supabase.from("tasks").select("*").eq("student_id", studentId).order("created_at", { ascending: false }),
+        // Cocugun onayli ogretmenleri — mesajlasma kisi listesi
+        supabase.from("teacher_students").select("teacher_id")
+          .eq("student_id", studentId).eq("durum", "onaylandi"),
       ]);
-      hatalariBildir(sonuclar, ["cocuk bilgisi", "gorevler"]);
-      const [{ data: studentData }, { data: taskData }] = sonuclar;
+      hatalariBildir(sonuclar, ["cocuk bilgisi", "gorevler", "cocugun ogretmenleri"]);
+      const [{ data: studentData }, { data: taskData }, { data: bagData }] = sonuclar;
 
       setChild(studentData);
       setTasks(taskData ?? []);
+
+      const ogrIdleri = (bagData ?? []).map(b => b.teacher_id);
+      if (ogrIdleri.length > 0) {
+        const { veri } = await calistir(
+          supabase.from("users").select("id, full_name").in("id", ogrIdleri),
+          "Ogretmen listesi", { sessiz: true }
+        );
+        setOgretmenler(veri ?? []);
+      }
       setLoading(false);
     };
     load();
@@ -308,6 +325,9 @@ export default function ParentDashboard({ userId, userName }) {
       </Card>
 
       {/* Ders Takvimi (salt okunur) */}
+      {/* Çocuğun öğretmenleriyle mesajlaşma */}
+      <Mesajlar userId={userId} kisiler={ogretmenler} color={c} baslik="Öğretmenler" />
+
       <Card id="bolum-ders">
         <SectionTitle title="Ders Takvimi" color={c.mid} />
         <CalendarMonth lessons={lessons} tasks={tasks} programItems={programOgeleri}

@@ -15,6 +15,7 @@ const HEDEFLER = {
   odeme:    { student: "bolum-ders",     teacher: "bolum-ders",  parent: "bolum-odeme" },
   baglanti: { student: "bolum-baglanti", teacher: "bolum-baglanti" },
   rozet:    { student: "bolum-rozet",    parent:  "bolum-rozet" },
+  mesaj:    { student: "bolum-mesaj",    teacher: "bolum-mesaj", parent: "bolum-mesaj" },
 };
 
 // Admin öğretmenin üst kümesi ve aynı paneli görüyor; bildirim hedefleri de
