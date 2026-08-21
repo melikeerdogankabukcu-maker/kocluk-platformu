@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "../supabase";
 import { EXAM_TOPICS as YEDEK_TOPICS } from "./examTopics";
-import { STATIK_DERSLER } from "./examSubjects";
+import { STATIK_DERSLER, dersleriSirala } from "./examSubjects";
 
 // Konu başlıkları veritabanında (exam_topics) tutulur ve öğretmen panelinden
 // yönetilir. Tablo henüz oluşturulmadıysa ya da okunamazsa koddaki
@@ -21,17 +21,24 @@ const turleriSirala = (turler) => [
 // Provider dışında çağrılırsa (ör. izole test) statik listeyle çalışır
 const yedekDeger = {
   EXAM_TOPICS: YEDEK_TOPICS,
-  examSubjectsOf: (tur) => Object.keys(YEDEK_TOPICS[tur] ?? {}),
+  examSubjectsOf: (tur) => dersleriSirala(tur, Object.keys(YEDEK_TOPICS[tur] ?? {})),
   topicsOf: (tur, ders) => YEDEK_TOPICS[tur]?.[ders] ?? [],
-  dersleriGetir: (tur) => Object.keys(YEDEK_TOPICS[tur] ?? {}) .length
-    ? Object.keys(YEDEK_TOPICS[tur])
-    : (STATIK_DERSLER[tur] ?? []),
+  dersleriGetir: (tur) => dersleriSirala(tur,
+    Object.keys(YEDEK_TOPICS[tur] ?? {}).length
+      ? Object.keys(YEDEK_TOPICS[tur])
+      : (STATIK_DERSLER[tur] ?? [])),
   sinavTurleri: turleriSirala(Object.keys(YEDEK_TOPICS)),
   tumDersler: () => [...new Set(Object.values(YEDEK_TOPICS).flatMap(d => Object.keys(d)))],
   tumKonular: (ders) => !ders ? [] : [...new Set(
     Object.values(YEDEK_TOPICS).flatMap(d => d[ders] ?? []))],
-  dersinTuru: (ders) =>
-    Object.keys(YEDEK_TOPICS).find(t => Object.keys(YEDEK_TOPICS[t] ?? {}).includes(ders)) ?? null,
+  dersinTuru: (ders, konu = null) => {
+    const turler = turleriSirala(Object.keys(YEDEK_TOPICS));
+    if (konu) {
+      const tam = turler.find(t => (YEDEK_TOPICS[t]?.[ders] ?? []).includes(konu));
+      if (tam) return tam;
+    }
+    return turler.find(t => Object.keys(YEDEK_TOPICS[t] ?? {}).includes(ders)) ?? null;
+  },
   veritabanindan: false,
   loading: false,
   reload: async () => {},
@@ -90,12 +97,13 @@ export function TopicsProvider({ userId, children }) {
     const aktif = topics ?? YEDEK_TOPICS;
     return {
       EXAM_TOPICS: aktif,
-      examSubjectsOf: (tur) => Object.keys(aktif[tur] ?? {}),
+      examSubjectsOf: (tur) => dersleriSirala(tur, Object.keys(aktif[tur] ?? {})),
       topicsOf: (tur, ders) => aktif[tur]?.[ders] ?? [],
       // Sınav giriş formu için: TYT/AYT müfredattan, LGS/Okul Sınavı sabit listeden
+      // Sınav sonucu girerken dersler kâğıttaki oturum sırasıyla listelensin
       dersleriGetir: (tur) => {
         const mufredat = Object.keys(aktif[tur] ?? {});
-        return mufredat.length > 0 ? mufredat : (STATIK_DERSLER[tur] ?? []);
+        return dersleriSirala(tur, mufredat.length > 0 ? mufredat : (STATIK_DERSLER[tur] ?? []));
       },
       sinavTurleri: turleriSirala(Object.keys(aktif)),
       // Bir dersin hangi sınav türünde geçtiğini bilmediğimiz durumlar için
@@ -107,8 +115,20 @@ export function TopicsProvider({ userId, children }) {
         Object.values(aktif).flatMap(d => d[ders] ?? [])
       )],
       // Dersin ilk geçtiği sınav türü — kopyalama/düzenlemede sekme seçmek için
-      dersinTuru: (ders) =>
-        Object.keys(aktif).find(t => Object.keys(aktif[t] ?? {}).includes(ders)) ?? null,
+      // Görevde exam_type tutulmadığı için dersin hangi sınava ait olduğu
+      // tahmin ediliyor. KONU da verilirse kesin sonuç alınır: aynı ders
+      // birden fazla sınavda geçebiliyor (Matematik hem TYT hem AYT'de) ve
+      // exam_type alfabetik sıralandığı için AYT hep önce bulunuyordu —
+      // TYT görevi kopyalanınca AYT sekmesi açılıyordu.
+      dersinTuru: (ders, konu = null) => {
+        if (!ders) return null;
+        const turler = turleriSirala(Object.keys(aktif));   // TYT, AYT, LGS, ...
+        if (konu) {
+          const tam = turler.find(t => (aktif[t]?.[ders] ?? []).includes(konu));
+          if (tam) return tam;
+        }
+        return turler.find(t => Object.keys(aktif[t] ?? {}).includes(ders)) ?? null;
+      },
       veritabanindan: topics != null,
       loading,
       reload: yukle,

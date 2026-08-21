@@ -243,7 +243,9 @@ export default function TeacherDashboard({ userId, userName }) {
   const gorevKopyala = (t) => {
     // Dersin hangi sınav müfredatında olduğunu bul; hiçbirinde yoksa
     // "Diğer (elle yaz)" kipine düş, ders adı kaybolmasın.
-    const tur = dersinTuru(t.subject);
+    // Konu da veriliyor: aynı ders birden fazla sınavda geçebiliyor,
+    // konu eşleşmesi hangi sınava ait olduğunu kesinleştiriyor.
+    const tur = dersinTuru(t.subject, t.topic);
     setForm({
       student_id: t.student_id,
       title: t.title ?? "",
