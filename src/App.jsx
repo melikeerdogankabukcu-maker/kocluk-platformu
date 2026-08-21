@@ -82,7 +82,7 @@ export default function App() {
       fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
     }}>
       <TopBar role={role} userName={userName} userId={user.id} onLogout={handleLogout} />
-      <TopicsProvider>
+      <TopicsProvider userId={user.id}>
         {role === "student" && <StudentDashboard userId={user.id} userName={userName} />}
         {/* Admin öğretmenin üst kümesi: aynı paneli görür */}
         {(role === "teacher" || role === "admin") && <TeacherDashboard userId={user.id} userName={userName} />}

@@ -790,7 +790,7 @@ export default function TeacherDashboard({ userId, userName }) {
       <ProgramDuzenleyici userId={userId} students={students} color={c} />
 
       {/* Müfredat konularını yönetme */}
-      <KonuYonetimi color={c} />
+      <KonuYonetimi userId={userId} color={c} />
 
       {/* Görev Atama Formu */}
       <Card id="bolum-gorevler">

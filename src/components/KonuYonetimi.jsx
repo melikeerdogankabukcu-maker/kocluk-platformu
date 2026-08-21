@@ -8,13 +8,17 @@ import SectionTitle from "./SectionTitle";
 // Öğretmenin müfredat konularını yönettiği ekran (exam_topics tablosu).
 // Konu silmek yerine pasife alınır: eski kayıtlar (görev/test/sınav) bozulmaz,
 // konu yalnızca yeni girişlerde seçilemez hale gelir.
-export default function KonuYonetimi({ color: c }) {
+// aktif/agirlik artık KOÇ BAZLI: exam_topics'teki kolonlar global taban,
+// öğretmenin gizlediği konular ogretmen_konu_tercihi tablosunda tutuluyor.
+// Böylece bir koçun konuyu pasife alması diğerini etkilemiyor.
+export default function KonuYonetimi({ userId, color: c }) {
   const { EXAM_TOPICS, sinavTurleri, examSubjectsOf, veritabanindan, reload } = useTopics();
 
   const [acik, setAcik]         = useState(false);
   const [examType, setExamType] = useState("TYT");
   const [ders, setDers]         = useState("");
   const [pasifler, setPasifler] = useState([]);       // pasife alınmış konular
+  const [konuIdleri, setKonuIdleri] = useState({});   // { konuAdı: exam_topics.id }
   const [pasifGoster, setPasifGoster] = useState(false);
   const [yeniKonu, setYeniKonu] = useState("");
   const [duzenlenen, setDuzenlenen] = useState(null); // { konu, yeniAd }
@@ -34,12 +38,24 @@ export default function KonuYonetimi({ color: c }) {
 
   const pasifleriYukle = async (tur, d) => {
     if (!d) return setPasifler([]);
-    const { veri } = await calistir(
+    // Bu ders altındaki tüm konular + bu koçun tercihleri; etkin pasifler
+    // ikisinin birleşiminden çıkıyor (tercih varsa o, yoksa tablodaki taban).
+    const { veri: satirlar } = await calistir(
       supabase.from("exam_topics")
-        .select("topic").eq("exam_type", tur).eq("subject", d).eq("aktif", false).order("sira"),
-      "Pasif konulari yukleme", { sessiz: true }
+        .select("id, topic, aktif").eq("exam_type", tur).eq("subject", d).order("sira"),
+      "Konulari yukleme", { sessiz: true }
     );
-    setPasifler((veri ?? []).map(r => r.topic));
+    const { veri: tercihler } = await calistir(
+      supabase.from("ogretmen_konu_tercihi")
+        .select("exam_topic_id, aktif").eq("teacher_id", userId),
+      "Konu tercihleri", { sessiz: true }
+    );
+    const harita = {};
+    (tercihler ?? []).forEach(r => { if (r.aktif != null) harita[r.exam_topic_id] = r.aktif; });
+    setKonuIdleri(Object.fromEntries((satirlar ?? []).map(r => [r.topic, r.id])));
+    setPasifler((satirlar ?? [])
+      .filter(r => (harita[r.id] ?? r.aktif) === false)
+      .map(r => r.topic));
   };
 
   const dersSec = (d) => { setDers(d); setDuzenlenen(null); pasifleriYukle(examType, d); };
@@ -82,11 +98,20 @@ export default function KonuYonetimi({ color: c }) {
   };
 
   const aktiflikDegistir = async (konu, aktif) => {
+    const konuId = konuIdleri[konu];
+    if (!konuId) { alert("Konu kimliği bulunamadı, sayfayı yenileyin."); return; }
     setIslemde(true);
-    const { error } = await supabase.from("exam_topics")
-      .update({ aktif }).eq("exam_type", examType).eq("subject", ders).eq("topic", konu);
+    // exam_topics.aktif'e DOKUNULMUYOR: o global taban ve yalnızca admin'in
+    // konuyu tamamen emekliye ayırma yolu. Koçun gizlemesi kendi satırına
+    // yazılıyor, diğer koçları etkilemiyor.
+    const { hata } = await calistir(
+      supabase.from("ogretmen_konu_tercihi")
+        .upsert({ teacher_id: userId, exam_topic_id: konuId, aktif, updated_at: new Date().toISOString() },
+                { onConflict: "teacher_id,exam_topic_id" }),
+      "Konu tercihi kaydetme"
+    );
     setIslemde(false);
-    if (error) { alert("İşlem başarısız: " + error.message); return; }
+    if (hata) return;
     tazele();
   };
 

@@ -37,7 +37,12 @@ const yedekDeger = {
   reload: async () => {},
 };
 
-export function TopicsProvider({ children }) {
+// userId: giriş yapmış kullanıcı. Öğretmense kendi konu tercihleri (hangi
+// konuyu gizlediği) yüklenip uygulanır. Öğrencide sorgu boş döner —
+// RLS teacher_id = auth.uid() istiyor — ve öğrenci TAM müfredatı görür.
+// Bu bilinçli: konuyu gizlemek koçun kendi listesini sadeleştirmesi
+// içindir, öğrencinin çalıştığı konuyu seçmesini engellememeli.
+export function TopicsProvider({ userId, children }) {
   const [topics,  setTopics]  = useState(null);   // null → yedeğe düş
   const [loading, setLoading] = useState(true);
 
@@ -45,8 +50,7 @@ export function TopicsProvider({ children }) {
     setLoading(true);
     const { data, error } = await supabase
       .from("exam_topics")
-      .select("exam_type, subject, topic, sira")
-      .eq("aktif", true)
+      .select("id, exam_type, subject, topic, sira, aktif")
       .order("exam_type", { ascending: true })
       .order("subject",   { ascending: true })
       .order("sira",      { ascending: true });
@@ -54,16 +58,31 @@ export function TopicsProvider({ children }) {
     // Tablo yoksa / boşsa / hata varsa koddaki listeyle devam
     if (error || !data || data.length === 0) {
       setTopics(null);
-    } else {
-      const harita = {};
-      data.forEach(r => {
-        (harita[r.exam_type] ??= {});
-        (harita[r.exam_type][r.subject] ??= []).push(r.topic);
-      });
-      setTopics(harita);
+      setLoading(false);
+      return;
     }
+
+    // Öğretmenin kendi tercihleri. Tablo henüz yoksa (migration
+    // çalışmadıysa) sessizce boş geçilir, taban değerler kullanılır.
+    let tercih = {};
+    if (userId) {
+      const { data: t } = await supabase
+        .from("ogretmen_konu_tercihi")
+        .select("exam_topic_id, aktif")
+        .eq("teacher_id", userId);
+      (t ?? []).forEach(r => { if (r.aktif != null) tercih[r.exam_topic_id] = r.aktif; });
+    }
+
+    const harita = {};
+    data.forEach(r => {
+      // Etkin aktiflik: koçun tercihi varsa o, yoksa tablodaki taban.
+      if ((tercih[r.id] ?? r.aktif) === false) return;
+      (harita[r.exam_type] ??= {});
+      (harita[r.exam_type][r.subject] ??= []).push(r.topic);
+    });
+    setTopics(harita);
     setLoading(false);
-  }, []);
+  }, [userId]);
 
   useEffect(() => { yukle(); }, [yukle]);
 
