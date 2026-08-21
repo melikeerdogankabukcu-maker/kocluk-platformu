@@ -410,13 +410,20 @@ export default function SinavAnalizi({
                               <div style={{ fontSize: 11, color: "#777", marginTop: 3, lineHeight: 1.5 }}>
                                 {o.sinyaller.join(" · ")}
                               </div>
-                              {/* Konu ağırlığı: sık soru çıkan konu öne alınır */}
-                              {o.agirlik > 1.05 && (
+                              {/* Konu kaybı: soru sayısı × kaçırma oranı.
+                                  "Sık soru çıkan konu" etiketinin yerini aldı —
+                                  artık öğrenciye özel ve sayısı gösterilebiliyor. */}
+                              {o.kayip > 0.15 && (
                                 <div style={{ fontSize: 10, color: "#7B4FA0", marginTop: 4, fontWeight: 600 }}>
-                                  ⬆ Sık soru çıkan konu
-                                  {o.agirlik_kaynak === "manuel"
-                                    ? " (öğretmen ağırlığı)"
-                                    : o.gozlem > 0 ? ` (${o.gozlem} kez karşılaşıldı)` : ""}
+                                  ⬆ Sınav başına ~{o.kayip.toFixed(1)} net kaybı
+                                  {o.sinav_sayisi > 0 && (
+                                    <span style={{ fontWeight: 500 }}>
+                                      {" "}· {o.sinav_sayisi} sınavın {o.kacirma}'inde kaçırdın
+                                    </span>
+                                  )}
+                                  {o.agirlik_kaynak === "manuel" && (
+                                    <span style={{ fontWeight: 500 }}> · öğretmen soru sayısı</span>
+                                  )}
                                 </div>
                               )}
                             </div>
