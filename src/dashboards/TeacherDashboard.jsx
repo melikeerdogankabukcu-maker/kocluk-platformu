@@ -15,6 +15,7 @@ import VeliRaporu from "../components/VeliRaporu";
 import HaftalikProgram from "../components/HaftalikProgram";
 import Mesajlar from "../components/Mesajlar";
 import DenetimKaydi from "../components/DenetimKaydi";
+import RolYonetimi from "../components/RolYonetimi";
 import { useGruplar } from "../hooks/useGruplar";
 import ProgramDuzenleyici from "../components/ProgramDuzenleyici";
 import { useAnalizCache } from "../hooks/useAnaliz";
@@ -820,6 +821,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
       {/* Denetim kaydı — yalnızca admin. Rol kontrolü BURADA yapılıyor:
           RLS admin olmayana boş liste döndürüyor (hata değil), o yüzden
           bileşen kendini gizleyemez, "Kayıt yok" yazardı. */}
+      {role === "admin" && <RolYonetimi userId={userId} color={c} />}
       {role === "admin" && <DenetimKaydi color={c} />}
 
       {/* Öğrenciler ve velileriyle mesajlaşma */}

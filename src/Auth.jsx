@@ -44,7 +44,10 @@ export default function Auth({ onLogin }) {
         // Onay bekleniyor — kullanıcı henüz giriş yapmış değil.
         setBilgi(
           `${email} adresine bir doğrulama bağlantısı gönderdik. ` +
-          `Bağlantıya tıkladıktan sonra giriş yapabilirsiniz.`
+          `Bağlantıya tıkladıktan sonra giriş yapabilirsiniz.` +
+          (role === "teacher"
+            ? " Öğretmen yetkisi için yöneticinin onayı gerekiyor."
+            : "")
         );
         setIsLogin(true);
         setPassword("");
@@ -105,6 +108,19 @@ export default function Auth({ onLogin }) {
                 }}>{r.label}</button>
               ))}
             </div>
+            {/* Öğretmen seçimi SESSİZCE yok sayılıyordu: güvenlik gereği hesap
+                öğrenci olarak açılıyor ve yönetici onayı gerekiyor. Seçenek
+                duruyor ki talep kayda geçsin, ama ne olacağı artık yazıyor. */}
+            {role === "teacher" && (
+              <div style={{
+                fontSize: 11, color: "#854F0B", background: "#FFF7E6",
+                padding: "8px 11px", borderRadius: 9, marginTop: 8, lineHeight: 1.5,
+              }}>
+                Öğretmen hesapları <b>yönetici onayıyla</b> açılır. Kaydınız önce
+                öğrenci olarak oluşturulur; yönetici onayladıktan sonra öğretmen
+                paneline geçersiniz.
+              </div>
+            )}
           </div>
         )}
 
