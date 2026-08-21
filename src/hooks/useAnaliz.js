@@ -1,6 +1,23 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "../lib/config";
 
+// Analiz servisi Render'ın ücretsiz katmanında; 15 dakika hareketsizlikten
+// sonra uykuya geçiyor ve ilk istek konteyner ayağa kalkana kadar bekliyor
+// (uyanıkken ~0.2sn, uykudan ~10sn). Kullanıcı "Akıllı Analiz"e basana
+// kadar beklemesin diye panel açılır açılmaz servise boş bir istek atıp
+// arka planda uyandırıyoruz. Yanıtı kimse okumuyor, hata da umursanmıyor —
+// tek amacı konteyneri ayağa kaldırmak.
+let uyandirmaDenendi = false;
+export function servisiUyandir() {
+  if (uyandirmaDenendi) return;          // oturum başına bir kez yeter
+  uyandirmaDenendi = true;
+  fetch(`${API_URL}/`, { cache: "no-store" }).catch(() => {});
+}
+
+// Uyanma bu süreyi aşarsa kullanıcıya "servis uyanıyor" denir; boş bir
+// bekleme ekranı yerine ne olduğunu bilsin.
+export const UYANMA_ESIGI_MS = 2500;
+
 // Tek bir öğrenci için Python analiz backend'inden "analiz" + "öneriler" verisini
 // bileşen yüklendiğinde (ya da studentId değiştiğinde) çeker.
 //
@@ -11,6 +28,7 @@ export function useAnaliz(studentId, aralik = null) {
   const [analiz,   setAnaliz]   = useState(null);
   const [oneriler, setOneriler] = useState([]);
   const [loading,  setLoading]  = useState(false);
+  const [uyaniyor, setUyaniyor] = useState(false);
 
   useEffect(() => {
     if (!studentId) return;
@@ -23,6 +41,7 @@ export function useAnaliz(studentId, aralik = null) {
 
     const getir = async () => {
       setLoading(true);
+      const sayac = setTimeout(() => { if (!iptalEdildi) setUyaniyor(true); }, UYANMA_ESIGI_MS);
       try {
         const [analizRes, onerilerRes] = await Promise.all([
           fetch(`${API_URL}/analiz/${studentId}${ek}`),
@@ -41,14 +60,15 @@ export function useAnaliz(studentId, aralik = null) {
           setOneriler([]);
         }
       }
-      if (!iptalEdildi) setLoading(false);
+      clearTimeout(sayac);
+      if (!iptalEdildi) { setUyaniyor(false); setLoading(false); }
     };
 
     getir();
     return () => { iptalEdildi = true; };
   }, [studentId, aralik?.baslangic, aralik?.bitis]);
 
-  return { analiz, oneriler, loading };
+  return { analiz, oneriler, loading, uyaniyor };
 }
 
 // Birden fazla öğrencinin analizini "satıra tıklayınca getir + önbelleğe al" mantığıyla
@@ -59,6 +79,7 @@ export function useAnalizCache() {
   const [analizCache,   setAnalizCache]   = useState({});
   const [onerilerCache, setOnerilerCache] = useState({});
   const [loadingFor,    setLoadingFor]    = useState(null);
+  const [uyaniyorFor,   setUyaniyorFor]   = useState(null);
 
   const toggle = async (studentId) => {
     if (expandedId === studentId) {
@@ -69,6 +90,7 @@ export function useAnalizCache() {
     if (analizCache[studentId]) return; // zaten önbellekte var, tekrar çekme
 
     setLoadingFor(studentId);
+    const sayac = setTimeout(() => setUyaniyorFor(studentId), UYANMA_ESIGI_MS);
     try {
       const [analizRes, onerilerRes] = await Promise.all([
         fetch(`${API_URL}/analiz/${studentId}`),
@@ -81,6 +103,8 @@ export function useAnalizCache() {
     } catch {
       setAnalizCache(prev => ({ ...prev, [studentId]: null }));
     }
+    clearTimeout(sayac);
+    setUyaniyorFor(null);
     setLoadingFor(null);
   };
 
@@ -90,5 +114,6 @@ export function useAnalizCache() {
     getAnaliz:   (studentId) => analizCache[studentId],
     getOneriler: (studentId) => onerilerCache[studentId] ?? [],
     isLoading:   (studentId) => loadingFor === studentId,
+    isUyaniyor:  (studentId) => uyaniyorFor === studentId,
   };
 }

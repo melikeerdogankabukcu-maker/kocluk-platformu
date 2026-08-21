@@ -64,7 +64,7 @@ export default function TeacherDashboard({ userId, userName }) {
     setForm(f => ({ ...f, due_dates: f.due_dates.filter(x => x !== t) }));
 
   // Öğrenci analizi (Python backend) — satıra tıklayınca getir + önbelleğe al
-  const { expandedId: expandedStudent, toggle: toggleAnaliz, getAnaliz, getOneriler, isLoading: isLoadingAnalizFor } = useAnalizCache();
+  const { expandedId: expandedStudent, toggle: toggleAnaliz, getAnaliz, getOneriler, isLoading: isLoadingAnalizFor, isUyaniyor: isUyaniyorAnalizFor } = useAnalizCache();
 
   const loadData = async () => {
     // Yalnızca bu öğretmene bağlı öğrenciler. teacher_students tablosu henüz
@@ -335,6 +335,7 @@ export default function TeacherDashboard({ userId, userName }) {
           const sAnaliz   = getAnaliz(s.id);
           const sOneriler = getOneriler(s.id);
           const isLoadingThis = isLoadingAnalizFor(s.id);
+            const isUyaniyorThis = isUyaniyorAnalizFor(s.id);
 
           return (
             <div key={s.id} style={{ borderBottom: i < students.length - 1 ? "1px solid #f5f2ee" : "none" }}>
@@ -548,7 +549,11 @@ export default function TeacherDashboard({ userId, userName }) {
                   </div>
 
                   {isLoadingThis ? (
-                    <div style={{ fontSize: 12, color: "#aaa" }}>Analiz yükleniyor...</div>
+                    <div style={{ fontSize: 12, color: "#aaa" }}>
+                      {isUyaniyorThis
+                        ? "Analiz servisi uyanıyor, birkaç saniye..."
+                        : "Analiz yükleniyor..."}
+                    </div>
                   ) : !sAnaliz ? (
                     <div style={{ fontSize: 12, color: "#aaa" }}>
                       Analiz alınamadı — backend çalışıyor mu? ({API_URL})

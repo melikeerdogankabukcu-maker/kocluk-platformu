@@ -3,6 +3,7 @@ import { supabase } from "./supabase";
 import { calistir } from "./lib/db";
 import Auth from "./Auth";
 import TopBar from "./components/TopBar";
+import { servisiUyandir } from "./hooks/useAnaliz";
 import { TopicsProvider } from "./lib/TopicsContext";
 import StudentDashboard from "./dashboards/StudentDashboard";
 import TeacherDashboard from "./dashboards/TeacherDashboard";
@@ -32,6 +33,10 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
+        // Analiz servisi Render'ın ücretsiz katmanında uykuya geçiyor.
+        // Kullanıcı "Akıllı Analiz"e basana kadar beklemesin diye burada,
+        // panel açılırken arka planda uyandırılıyor.
+        servisiUyandir();
         setUser(session.user);
         const profile = await fetchUserProfile(session.user.id);
         setRole(profile?.role ?? "student");
@@ -42,6 +47,9 @@ export default function App() {
   }, []);
 
   const handleLogin = async (loggedInUser) => {
+    // Taze girişte getSession çalışmaz (yalnızca mount'ta); servisi burada
+    // da uyandırmazsak yeni giren kullanıcı soğuk başlangıcı yiyor.
+    servisiUyandir();
     setUser(loggedInUser);
     const profile = await fetchUserProfile(loggedInUser.id);
     setRole(profile?.role ?? "student");

@@ -16,7 +16,7 @@ export default function SinavAnalizi({
   const [acik, setAcik] = useState(false);
   const [secilenTur, setSecilenTur] = useState(null);
   const [acikDers, setAcikDers] = useState(null);
-  const { veri, loading, hata } = useSinavAnalizi(studentId, hemenYukle || acik);
+  const { veri, loading, hata, uyaniyor } = useSinavAnalizi(studentId, hemenYukle || acik);
 
   const turler   = veri?.turler ?? {};
   const turAdlari = Object.keys(turler);
@@ -54,7 +54,7 @@ export default function SinavAnalizi({
   const teaser = ozet
     ? `${aktifTur} · son ${ozet.son_net ?? "—"} net${ozet.degisim != null ? ` · ${ozet.degisim > 0 ? "+" : ""}${ozet.degisim}` : ""}`
     : hata ? "Analiz alınamadı — backend çalışıyor mu?"
-    : loading ? "Yükleniyor..."
+    : loading ? (uyaniyor ? "Analiz servisi uyanıyor..." : "Yükleniyor...")
     : "Henüz sınav kaydı yok";
 
   const tetikleyici = variant === "buton" ? (
@@ -83,7 +83,14 @@ export default function SinavAnalizi({
       {acik && (
         <Modal title={baslik} onClose={() => setAcik(false)}>
           {loading ? (
-            <div style={{ fontSize: 13, color: "#aaa", padding: "16px 0", textAlign: "center" }}>Analiz yükleniyor...</div>
+            <div style={{ fontSize: 13, color: "#aaa", padding: "16px 0", textAlign: "center", lineHeight: 1.6 }}>
+                {uyaniyor ? (
+                  <>Analiz servisi uyanıyor...<br />
+                    <span style={{ fontSize: 11.5 }}>
+                      Ücretsiz sunucu hareketsizlikte uykuya geçiyor, ilk istek birkaç saniye sürer.
+                    </span></>
+                ) : "Analiz yükleniyor..."}
+              </div>
           ) : hata ? (
             <div style={{ fontSize: 13, color: "#aaa", padding: "16px 0", textAlign: "center" }}>
               Analiz alınamadı — analiz servisi çalışmıyor olabilir.

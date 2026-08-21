@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "../lib/config";
+import { UYANMA_ESIGI_MS } from "./useAnaliz";
 
 // Sınav analizi verisini Python backend'inden çeker.
 // Yalnızca gerektiğinde (modal açılınca) çağrılsın diye "etkin" bayrağı alır.
@@ -7,6 +8,7 @@ export function useSinavAnalizi(studentId, etkin = true, aralik = null) {
   const [veri,    setVeri]    = useState(null);
   const [loading, setLoading] = useState(false);
   const [hata,    setHata]    = useState(false);
+  const [uyaniyor, setUyaniyor] = useState(false);
 
   useEffect(() => {
     if (!studentId || !etkin) return;
@@ -19,6 +21,7 @@ export function useSinavAnalizi(studentId, etkin = true, aralik = null) {
     const getir = async () => {
       setLoading(true);
       setHata(false);
+      const sayac = setTimeout(() => { if (!iptalEdildi) setUyaniyor(true); }, UYANMA_ESIGI_MS);
       try {
         const res = await fetch(`${API_URL}/sinav-analizi/${studentId}${ek}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -28,12 +31,13 @@ export function useSinavAnalizi(studentId, etkin = true, aralik = null) {
         // Backend kapalıysa sayfanın geri kalanı çalışmaya devam etsin
         if (!iptalEdildi) { setVeri(null); setHata(true); }
       }
-      if (!iptalEdildi) setLoading(false);
+      clearTimeout(sayac);
+      if (!iptalEdildi) { setUyaniyor(false); setLoading(false); }
     };
 
     getir();
     return () => { iptalEdildi = true; };
   }, [studentId, etkin, aralik?.baslangic, aralik?.bitis]);
 
-  return { veri, loading, hata };
+  return { veri, loading, hata, uyaniyor };
 }
