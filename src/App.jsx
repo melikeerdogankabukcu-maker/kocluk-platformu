@@ -14,7 +14,7 @@ async function fetchUserProfile(userId) {
   // ogrenci paneliyle karsilasir. Hatayi yutmak yerine gorunur kil.
   const { data, error } = await supabase
     .from("users")
-    .select("role, full_name")
+    .select("role, full_name, onay_durumu")
     .eq("id", userId)
     .single();
   if (error) {
@@ -28,6 +28,7 @@ export default function App() {
   const [role, setRole] = useState(null);
   const [user, setUser] = useState(null);
   const [userName, setUserName] = useState("");
+  const [onay, setOnay] = useState("onaylandi");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,6 +42,9 @@ export default function App() {
         const profile = await fetchUserProfile(session.user.id);
         setRole(profile?.role ?? "student");
         setUserName(profile?.full_name ?? session.user.email);
+        // Profil okunamazsa onaylı varsayılıyor: kapıyı bir okuma hatası
+        // yüzünden kapatmak, mevcut kullanıcıyı haksız yere dışarıda bırakır.
+        setOnay(profile?.onay_durumu ?? "onaylandi");
       }
       setLoading(false);
     });
@@ -54,6 +58,7 @@ export default function App() {
     const profile = await fetchUserProfile(loggedInUser.id);
     setRole(profile?.role ?? "student");
     setUserName(profile?.full_name ?? loggedInUser.email);
+    setOnay(profile?.onay_durumu ?? "onaylandi");
   };
 
   const handleLogout = async () => {
@@ -82,6 +87,39 @@ export default function App() {
   );
 
   if (!user) return <Auth onLogin={handleLogin} />;
+
+  // Onay kapısı: yönetici onaylayana kadar panel açılmıyor. Reddedilen de
+  // aynı yerde duruyor ama farklı mesajla — hesabın ne durumda olduğunu
+  // bilmeden bekleyip durmasın.
+  if (onay !== "onaylandi") {
+    const reddedildi = onay === "reddedildi";
+    return (
+      <div style={{
+        minHeight: "100vh", background: "#f7f4ef",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+        fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
+      }}>
+        <div style={{
+          background: "#fff", borderRadius: 20, padding: "34px 30px",
+          maxWidth: 420, width: "100%", border: "1px solid #f0ede8", textAlign: "center",
+        }}>
+          <div style={{ fontSize: 34, marginBottom: 12 }}>{reddedildi ? "🚫" : "⏳"}</div>
+          <h2 style={{ fontSize: 19, fontWeight: 700, color: "#111", marginBottom: 8 }}>
+            {reddedildi ? "Hesabınız onaylanmadı" : "Hesabınız onay bekliyor"}
+          </h2>
+          <p style={{ fontSize: 13, color: "#777", lineHeight: 1.6, marginBottom: 20 }}>
+            {reddedildi
+              ? "Bu hesap yönetici tarafından onaylanmadı. Bir yanlışlık olduğunu düşünüyorsanız koçunuzla iletişime geçin."
+              : `Merhaba ${userName}. Kaydınız alındı, yöneticinin onayından sonra panelinize erişebileceksiniz.`}
+          </p>
+          <button onClick={handleLogout} style={{
+            padding: "10px 22px", borderRadius: 10, border: "1.5px solid #f0ede8",
+            background: "#fff", color: "#888", fontSize: 13, cursor: "pointer", fontWeight: 600,
+          }}>Çıkış yap</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{

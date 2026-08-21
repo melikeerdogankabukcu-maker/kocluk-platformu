@@ -25,7 +25,7 @@ export default function RolYonetimi({ userId, color: c }) {
   const yukle = useCallback(async () => {
     setLoading(true);
     const { veri } = await calistir(
-      supabase.from("users").select("id, full_name, email, role, talep_rol, created_at")
+      supabase.from("users").select("id, full_name, email, role, talep_rol, onay_durumu, created_at")
         .order("created_at", { ascending: false }),
       "Kullanici listesi", { sessiz: true }
     );
@@ -54,9 +54,31 @@ export default function RolYonetimi({ userId, color: c }) {
     yukle();
   };
 
-  // Öğretmen talebi olanlar üstte
-  const bekleyen = kisiler.filter(k => k.talep_rol && k.talep_rol !== k.role);
-  const digerleri = kisiler.filter(k => !(k.talep_rol && k.talep_rol !== k.role));
+  const onayVer = async (kisi, durum) => {
+    const reddet = durum === "reddedildi";
+    if (!window.confirm(
+      reddet
+        ? `${kisi.full_name} hesabı reddedilsin mi?
+
+Kullanıcı uygulamaya giremez; karar sonradan değiştirilebilir.`
+        : `${kisi.full_name} hesabı onaylansın mı?`
+    )) return;
+    setIslemde(kisi.id);
+    const { hata } = await calistir(
+      supabase.from("users").update({ onay_durumu: durum }).eq("id", kisi.id),
+      "Hesap onayi"
+    );
+    setIslemde(null);
+    if (hata) return;
+    yukle();
+  };
+
+  // İşlem bekleyenler üstte: onay bekleyen hesaplar ve öğretmen talepleri
+  const islemBekler = (k) =>
+    k.onay_durumu === "beklemede" || (k.talep_rol && k.talep_rol !== k.role);
+  const bekleyen  = kisiler.filter(islemBekler);
+  const digerleri = kisiler.filter(k => !islemBekler(k));
+  const onayBekleyen = kisiler.filter(k => k.onay_durumu === "beklemede").length;
 
   const satir = (k, vurgulu) => (
     <div key={k.id} style={{
@@ -76,10 +98,33 @@ export default function RolYonetimi({ userId, color: c }) {
         color: k.role === "admin" ? c.text : "#777",
       }}>{ROL_ADI[k.role] ?? k.role}</span>
 
-      {vurgulu && (
+      {k.talep_rol && k.talep_rol !== k.role && (
         <span style={{ flexShrink: 0, fontSize: 10, color: "#854F0B", fontWeight: 600 }}>
           {ROL_ADI[k.talep_rol] ?? k.talep_rol} istedi
         </span>
+      )}
+
+      {/* Onay durumu — onaylı hesaplarda rozet gösterilmiyor, gürültü olurdu */}
+      {k.onay_durumu !== "onaylandi" && (
+        <span style={{
+          flexShrink: 0, fontSize: 9.5, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
+          background: k.onay_durumu === "reddedildi" ? "#FFF0F0" : "#FFF7E6",
+          color:      k.onay_durumu === "reddedildi" ? "#A32D2D" : "#854F0B",
+        }}>{k.onay_durumu === "reddedildi" ? "reddedildi" : "onay bekliyor"}</span>
+      )}
+
+      {/* Onay/ret — kendi hesabı ve diğer yöneticiler hariç */}
+      {k.id !== userId && k.role !== "admin" && k.onay_durumu !== "onaylandi" && (
+        <button onClick={() => onayVer(k, "onaylandi")} disabled={islemde === k.id} style={{
+          flexShrink: 0, fontSize: 10, padding: "3px 9px", borderRadius: 99, border: "none",
+          background: "#E8F9F0", color: "#1A6B3C", cursor: "pointer", fontWeight: 700,
+        }}>Onayla</button>
+      )}
+      {k.id !== userId && k.role !== "admin" && k.onay_durumu !== "reddedildi" && (
+        <button onClick={() => onayVer(k, "reddedildi")} disabled={islemde === k.id} style={{
+          flexShrink: 0, fontSize: 10, padding: "3px 9px", borderRadius: 99, border: "none",
+          background: "#FFF0F0", color: "#A32D2D", cursor: "pointer", fontWeight: 600,
+        }}>Reddet</button>
       )}
 
       {/* Kendi rolünü değiştiremesin: admin kendini düşürürse paneli kaybeder */}
@@ -101,7 +146,7 @@ export default function RolYonetimi({ userId, color: c }) {
   return (
     <Card id="bolum-rol">
       <SectionTitle
-        title={`Rol Yönetimi${bekleyen.length > 0 ? ` (${bekleyen.length} talep)` : ""}`}
+        title={`Kullanıcı Yönetimi${bekleyen.length > 0 ? ` (${bekleyen.length})` : ""}`}
         color={c.mid}
       />
 
@@ -111,7 +156,9 @@ export default function RolYonetimi({ userId, color: c }) {
           border: `1.5px dashed ${c.mid}`, background: "transparent",
           color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
         }}>
-          👤 Kullanıcı rolleri{bekleyen.length > 0 ? ` · ${bekleyen.length} bekleyen talep` : ""}
+          👤 Kullanıcılar{onayBekleyen > 0
+            ? ` · ${onayBekleyen} hesap onay bekliyor`
+            : bekleyen.length > 0 ? ` · ${bekleyen.length} bekleyen talep` : ""}
         </button>
       ) : loading ? (
         <div style={{ fontSize: 12.5, color: "#aaa", padding: "12px 0", textAlign: "center" }}>
@@ -122,7 +169,7 @@ export default function RolYonetimi({ userId, color: c }) {
           {bekleyen.length > 0 && (
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#854F0B", marginBottom: 5 }}>
-                BEKLEYEN TALEPLER
+                İŞLEM BEKLEYENLER
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {bekleyen.map(k => satir(k, true))}

@@ -122,7 +122,7 @@ export default function StudentDashboard({ userId, userName }) {
     // Bağlı öğretmenler; tablo yoksa (migration çalışmadıysa) hepsine düşülür
     if (tch.error) {
       const { veri } = await calistir(
-        supabase.from("users").select("id, full_name").eq("role", "teacher"),
+        supabase.from("users").select("id, full_name").eq("role", "teacher").eq("onay_durumu", "onaylandi"),
         "Ogretmen listesi", { sessiz: true }
       );
       setTeachers(veri ?? []);

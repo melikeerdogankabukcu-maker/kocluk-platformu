@@ -81,7 +81,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
     let studentData = [];
     if (bagHata) {
       const { data, error } = await supabase
-        .from("users").select("id, full_name, email").eq("role", "student");
+        .from("users").select("id, full_name, email").eq("role", "student").eq("onay_durumu", "onaylandi");
       if (error) console.error("[Ogrenci listesi]", error);
       studentData = data ?? [];
     } else {

@@ -29,7 +29,11 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
 
     // Karşı taraftaki herkesin adı (aday listesi + görünen ad için)
     const { data: kisilerData, error: kisiHatasi } = await supabase
-      .from("users").select("id, full_name, email").eq("role", karsiRol);
+      .from("users").select("id, full_name, email")
+      .eq("role", karsiRol)
+      // Onaylanmamış hesaplar aday listesinde çıkmasın: yönetici kabul
+      // etmeden kimse bağlantı kurulabilir hale gelmemeli.
+      .eq("onay_durumu", "onaylandi");
     if (kisiHatasi) console.error("[Aday kisi listesi]", kisiHatasi);
     const harita = {};
     (kisilerData ?? []).forEach(k => { harita[k.id] = k; });
