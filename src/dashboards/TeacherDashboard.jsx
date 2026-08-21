@@ -14,6 +14,7 @@ import GrupYonetimi from "../components/GrupYonetimi";
 import VeliRaporu from "../components/VeliRaporu";
 import HaftalikProgram from "../components/HaftalikProgram";
 import Mesajlar from "../components/Mesajlar";
+import DenetimKaydi from "../components/DenetimKaydi";
 import { useGruplar } from "../hooks/useGruplar";
 import ProgramDuzenleyici from "../components/ProgramDuzenleyici";
 import { useAnalizCache } from "../hooks/useAnaliz";
@@ -24,7 +25,7 @@ import AlertChip from "../components/AlertChip";
 import LessonPlanner from "../components/LessonPlanner";
 import SinavAnalizi from "../components/SinavAnalizi";
 
-export default function TeacherDashboard({ userId, userName }) {
+export default function TeacherDashboard({ userId, userName, role }) {
   const c = COLORS.teacher;
   const { sinavTurleri, examSubjectsOf, topicsOf, tumDersler: tumDerslerFn, tumKonular: tumKonularFn, dersinTuru } = useTopics();
   const { gruplar, yukle: gruplariTazele } = useGruplar(userId);
@@ -816,6 +817,11 @@ export default function TeacherDashboard({ userId, userName }) {
       <div id="bolum-sinav"><SinavGirisFormu students={students} profileMap={profileMap} color={c} onKaydedildi={loadData} /></div>
 
       {/* Çalışma programı: kütüphane + atama */}
+      {/* Denetim kaydı — yalnızca admin. Rol kontrolü BURADA yapılıyor:
+          RLS admin olmayana boş liste döndürüyor (hata değil), o yüzden
+          bileşen kendini gizleyemez, "Kayıt yok" yazardı. */}
+      {role === "admin" && <DenetimKaydi color={c} />}
+
       {/* Öğrenciler ve velileriyle mesajlaşma */}
       <Mesajlar userId={userId} kisiler={[...students, ...veliler]} color={c} />
 
