@@ -169,7 +169,17 @@ export default function ParentDashboard({ userId, userName }) {
     <div style={{ padding: 40, textAlign: "center" }}>
       <div style={{ fontSize: 32, marginBottom: 12 }}>👨‍👩‍👦</div>
       <div style={{ fontSize: 15, fontWeight: 600, color: "#333" }}>Henüz bir öğrenci bağlantısı yok</div>
-      <div style={{ fontSize: 13, color: "#aaa", marginTop: 6 }}>Öğretmeninizden hesabınızı bağlamasını isteyin.</div>
+      {/* Eski metin "öğretmeninizden isteyin" diyordu ama öğretmende böyle
+          bir düğme yoktu — veli çıkmaza giriyordu. Artık bağ, kayıt
+          onaylanırken kuruluyor; burası yalnızca eksik kaldığı durum. */}
+      <div style={{
+        fontSize: 13, color: "#777", marginTop: 8, lineHeight: 1.6,
+        maxWidth: 380, marginLeft: "auto", marginRight: "auto",
+      }}>
+        Hesabınız henüz bir öğrenciye bağlanmadı. Koçunuza <b>çocuğunuzun
+        platformda kayıtlı e-posta adresini</b> iletin; bağlantıyı kurduğunda
+        çocuğunuzun gelişimi burada görünmeye başlayacak.
+      </div>
     </div>
   );
 

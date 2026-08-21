@@ -60,6 +60,10 @@ export default function Auth({ onLogin }) {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("student");
+  // Veli kaydında çocuğun e-postası. Zorunlu DEĞİL: velinin e-postayı
+  // bilmediği durumda kayıt tıkanmasın. Bağı zaten yönetici onay
+  // ekranındaki seçimi kuruyor, bu alan orayı ön-dolduruyor.
+  const [ogrenciEmail, setOgrenciEmail] = useState("");
   const [error, setError] = useState("");
   const [bilgi, setBilgi] = useState("");
   const [loading, setLoading] = useState(false);
@@ -88,7 +92,14 @@ export default function Auth({ onLogin }) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName.trim(), role } },
+        options: {
+          data: {
+            full_name: fullName.trim(),
+            role,
+            // Tetikleyici yalnızca veli kaydında okuyor
+            ogrenci_email: role === "parent" ? ogrenciEmail.trim() : "",
+          },
+        },
       });
 
       if (error) {
@@ -172,6 +183,35 @@ export default function Auth({ onLogin }) {
                 Öğretmen hesapları <b>yönetici onayıyla</b> açılır. Kaydınız önce
                 öğrenci olarak oluşturulur; yönetici onayladıktan sonra öğretmen
                 paneline geçersiniz.
+              </div>
+            )}
+
+            {/* Veli, çocuğunu kayıt anında bildiriyor. Yönetici onaylarken
+                bu e-postanın hangi öğrenciye denk geldiğini AD olarak
+                görüyor, böylece yanlış adres onaydan önce yakalanıyor. */}
+            {role === "parent" && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>
+                  Çocuğunuzun e-posta adresi
+                  <span style={{ color: "#aaa", fontWeight: 400 }}> (biliyorsanız)</span>
+                </label>
+                <input
+                  type="email" value={ogrenciEmail}
+                  onChange={e => setOgrenciEmail(e.target.value)}
+                  placeholder="ogrenci@example.com"
+                  style={{
+                    width: "100%", padding: "10px 14px", borderRadius: 10, fontSize: 14,
+                    border: "1.5px solid #f0ede8", outline: "none", boxSizing: "border-box",
+                  }}
+                />
+                <div style={{
+                  fontSize: 11, color: "#854F0B", background: "#FFF7E6",
+                  padding: "8px 11px", borderRadius: 9, marginTop: 8, lineHeight: 1.5,
+                }}>
+                  Çocuğunuzun platformdaki hesabının e-postasını yazın. Yönetici
+                  kaydınızı onayladığında hesabınız <b>doğrudan çocuğunuza bağlanır</b>.
+                  Bilmiyorsanız boş bırakabilirsiniz — bağlantıyı yönetici kurar.
+                </div>
               </div>
             )}
           </div>

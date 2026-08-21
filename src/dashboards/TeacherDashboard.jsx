@@ -10,6 +10,7 @@ import { programTakvimOgeleri } from "../lib/studyPrograms";
 import SinavGirisFormu from "../components/SinavGirisFormu";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
+import VeliBaglantilari from "../components/VeliBaglantilari";
 import GrupYonetimi from "../components/GrupYonetimi";
 import VeliRaporu from "../components/VeliRaporu";
 import HaftalikProgram from "../components/HaftalikProgram";
@@ -765,6 +766,11 @@ export default function TeacherDashboard({ userId, userName, role }) {
       {bagKurulabilir && (
         <div id="bolum-baglanti"><BaglantiYonetimi userId={userId} rol="teacher" color={c} onDegisti={loadData} /></div>
       )}
+
+      {/* Veli bağları — öğrenci bağlantısının hemen ardında: önce öğrenci
+          eklenir, sonra velisi. Normalde bağ veli onayında otomatik kurulur;
+          bu kart e-posta yanlışsa veya ikinci çocuk eklenecekse kullanılır. */}
+      <VeliBaglantilari userId={userId} rol={role} color={c} />
 
       {/* Gruplar — toplu görev/program ataması için. Bağlantı yönetiminin
           hemen ardında: önce öğrenci eklenir, sonra gruplanır. */}
