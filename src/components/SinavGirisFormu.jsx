@@ -6,7 +6,10 @@ import { netHesapla, netKuraliMetni } from "../lib/netHelpers";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 
-const SINAV_TURLERI = ["TYT", "AYT", "LGS", "Okul Sınavı"];
+// Sınav türleri müfredattan geliyor (TYT/AYT/LGS/KPSS/DGS); "Okul Sınavı"
+// müfredatı olmayan serbest tür olduğu için sona elle ekleniyor. Sabit liste
+// tutulsaydı KPSS/DGS müfredata eklendiği hâlde sınav girişinde çıkmazdı.
+const SERBEST_TUR = "Okul Sınavı";
 
 // Öğretmenin sınav sonucu girdiği form.
 // Her ders için yalnızca doğru/yanlış girilir; net ve boş otomatik hesaplanır
@@ -15,7 +18,8 @@ const SINAV_TURLERI = ["TYT", "AYT", "LGS", "Okul Sınavı"];
 // birden fazla soru olabileceği için konular adetli tutulur ve toplam,
 // o kategorinin soru sayısını AŞAMAZ.
 export default function SinavGirisFormu({ students, profileMap = {}, color: c, onKaydedildi }) {
-  const { dersleriGetir, topicsOf } = useTopics();
+  const { sinavTurleri, dersleriGetir, topicsOf } = useTopics();
+  const sinavSecenekleri = [...sinavTurleri, SERBEST_TUR];
   const [acik,   setAcik]   = useState(false);
   const [saving, setSaving] = useState(false);
   const [examType, setExamType] = useState("TYT");
@@ -219,8 +223,8 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
             {students.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
           </select>
 
-          <div style={{ display: "flex", gap: 6 }}>
-            {SINAV_TURLERI.map(tur => (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {sinavSecenekleri.map(tur => (
               <button key={tur} onClick={() => turDegistir(tur)} style={{
                 flex: 1, padding: "7px 0", borderRadius: 10, fontSize: 11, fontWeight: 600,
                 border: `2px solid ${examType === tur ? c.bg : "#f0ede8"}`,

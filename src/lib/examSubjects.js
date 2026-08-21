@@ -23,10 +23,12 @@ export const DERS_SIRASI = {
         "Matematik", "Geometri",
         "Fizik", "Kimya", "Biyoloji"],
 
-  // 1) Matematik 40 · 2) Fen 40 · 3) Edebiyat–Sosyal-1 40
+  // 1) Matematik 40 · 2) Fen 40 · 3) Edebiyat–Sosyal-1 40 · 4) Sosyal-2 40
+  // "Tarih"/"Coğrafya" 3. testtekiler (Tarih-1/Coğrafya-1)
   AYT: ["Matematik", "Geometri",
         "Fizik", "Kimya", "Biyoloji",
-        "Edebiyat", "Tarih", "Coğrafya"],
+        "Edebiyat", "Tarih", "Coğrafya",
+        "Tarih-2", "Coğrafya-2", "Felsefe Grubu", "Din Kültürü"],
 
   // 1) Sözel oturum · 2) Sayısal oturum
   LGS: ["Türkçe", "İnkılap Tarihi", "Din Kültürü", "İngilizce",

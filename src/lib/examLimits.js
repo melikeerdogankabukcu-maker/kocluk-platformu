@@ -16,6 +16,10 @@ export const EXAM_LIMITS = {
     "Felsefe": 5,
     "Din Kültürü": 5,
   },
+  // AYT dört testten oluşur; "Tarih" ve "Coğrafya" 3. testteki
+  // Tarih-1 / Coğrafya-1'dir (adları geçmiş veriyi kopartmamak için
+  // değiştirilmedi). Tarih-2, Coğrafya-2, Felsefe Grubu ve Din Kültürü
+  // 4. testi (Sosyal Bilimler-2, 40 soru) oluşturur.
   AYT: {
     "Matematik": 30,
     "Geometri": 10,
@@ -25,6 +29,10 @@ export const EXAM_LIMITS = {
     "Edebiyat": 24,
     "Tarih": 10,
     "Coğrafya": 6,
+    "Tarih-2": 11,
+    "Coğrafya-2": 11,
+    "Felsefe Grubu": 12,
+    "Din Kültürü": 6,
   },
   LGS: {
     "Türkçe": 20,
@@ -34,14 +42,38 @@ export const EXAM_LIMITS = {
     "Din Kültürü": 10,
     "İngilizce": 10,
   },
+
+  // KPSS ve DGS soru sayıları YAKLAŞIKTIR: bizim ders ayrımımız ÖSYM'nin
+  // test gruplarından daha ince. ÖSYM "Genel Yetenek – Matematik" testini
+  // 30 soru olarak veriyor, içindeki geometri sorularını ayırmıyor; biz
+  // Matematik/Geometri diye tuttuğumuz için bölüştürdük. Toplamlar doğru,
+  // ders bazlı dağılım tahmindir — Konu Yönetimi'nden değiştirilemez,
+  // gerekirse bu dosyadan güncellenir.
+  KPSS: {
+    "Türkçe": 30,          // Genel Yetenek 60
+    "Matematik": 24,
+    "Geometri": 6,
+    "Tarih": 27,           // Genel Kültür 60
+    "Coğrafya": 18,
+    "Vatandaşlık": 15,
+    "Eğitim Bilimleri": 80, // ayrı oturum
+  },
+
+  DGS: {
+    "Matematik": 40,       // Sayısal Bölüm 60
+    "Geometri": 20,
+    "Türkçe": 50,          // Sözel Bölüm 60
+    "Mantık": 10,
+  },
 };
 
 // AYT'de öğrencinin alanına göre girdiği dersler. TYT herkes için aynıdır.
-// (SÖZ için Tarih-2/Coğrafya-2/Felsefe/Din AYT dersleri müfredatta olmadığından
-//  şimdilik tanımlı değil — eklenirse buraya yazılır.)
 export const AYT_ALAN_DERSLERI = {
   sayisal:      ["Matematik", "Geometri", "Fizik", "Kimya", "Biyoloji"],
   esit_agirlik: ["Matematik", "Geometri", "Edebiyat", "Tarih", "Coğrafya"],
+  // Sözel: Edebiyat–Sosyal-1 + Sosyal Bilimler-2 testleri
+  sozel:        ["Edebiyat", "Tarih", "Coğrafya",
+                 "Tarih-2", "Coğrafya-2", "Felsefe Grubu", "Din Kültürü"],
 };
 
 // Alan tercihine göre AYT ders listesini süzer; alan bilinmiyorsa hepsi gösterilir.
