@@ -415,14 +415,11 @@ export default function SinavAnalizi({
                                   artık öğrenciye özel ve sayısı gösterilebiliyor. */}
                               {o.kayip > 0.15 && (
                                 <div style={{ fontSize: 10, color: "#7B4FA0", marginTop: 4, fontWeight: 600 }}>
-                                  ⬆ Sınav başına ~{o.kayip.toFixed(1)} net kaybı
+                                  ⬆ Sınav başına ~{o.kayip.toFixed(1)} soru kaybı
                                   {o.sinav_sayisi > 0 && (
                                     <span style={{ fontWeight: 500 }}>
                                       {" "}· {o.sinav_sayisi} sınavın {o.kacirma}'inde kaçırdın
                                     </span>
-                                  )}
-                                  {o.agirlik_kaynak === "manuel" && (
-                                    <span style={{ fontWeight: 500 }}> · öğretmen soru sayısı</span>
                                   )}
                                 </div>
                               )}

@@ -19,7 +19,6 @@ export default function KonuYonetimi({ userId, color: c }) {
   const [ders, setDers]         = useState("");
   const [pasifler, setPasifler] = useState([]);       // pasife alınmış konular
   const [konuIdleri, setKonuIdleri] = useState({});   // { konuAdı: exam_topics.id }
-  const [soruSayilari, setSoruSayilari] = useState({}); // { konuAdı: ortalama soru sayısı }
   const [pasifGoster, setPasifGoster] = useState(false);
   const [yeniKonu, setYeniKonu] = useState("");
   const [duzenlenen, setDuzenlenen] = useState(null); // { konu, yeniAd }
@@ -43,24 +42,17 @@ export default function KonuYonetimi({ userId, color: c }) {
     // ikisinin birleşiminden çıkıyor (tercih varsa o, yoksa tablodaki taban).
     const { veri: satirlar } = await calistir(
       supabase.from("exam_topics")
-        .select("id, topic, aktif, agirlik").eq("exam_type", tur).eq("subject", d).order("sira"),
+        .select("id, topic, aktif").eq("exam_type", tur).eq("subject", d).order("sira"),
       "Konulari yukleme", { sessiz: true }
     );
     const { veri: tercihler } = await calistir(
       supabase.from("ogretmen_konu_tercihi")
-        .select("exam_topic_id, aktif, agirlik").eq("teacher_id", userId),
+        .select("exam_topic_id, aktif").eq("teacher_id", userId),
       "Konu tercihleri", { sessiz: true }
     );
     const harita = {};
-    const agirlikHarita = {};
-    (tercihler ?? []).forEach(r => {
-      if (r.aktif != null) harita[r.exam_topic_id] = r.aktif;
-      if (r.agirlik != null) agirlikHarita[r.exam_topic_id] = r.agirlik;
-    });
+    (tercihler ?? []).forEach(r => { if (r.aktif != null) harita[r.exam_topic_id] = r.aktif; });
     setKonuIdleri(Object.fromEntries((satirlar ?? []).map(r => [r.topic, r.id])));
-    // Öğretmenin girdiği soru sayısı yoksa tablodaki taban gösterilir.
-    setSoruSayilari(Object.fromEntries((satirlar ?? []).map(
-      r => [r.topic, agirlikHarita[r.id] ?? r.agirlik ?? ""])));
     setPasifler((satirlar ?? [])
       .filter(r => (harita[r.id] ?? r.aktif) === false)
       .map(r => r.topic));
@@ -117,30 +109,6 @@ export default function KonuYonetimi({ userId, color: c }) {
         .upsert({ teacher_id: userId, exam_topic_id: konuId, aktif, updated_at: new Date().toISOString() },
                 { onConflict: "teacher_id,exam_topic_id" }),
       "Konu tercihi kaydetme"
-    );
-    setIslemde(false);
-    if (hata) return;
-    tazele();
-  };
-
-  // Ortalama soru sayısı: "bu konudan sınavda kaç soru çıkıyor". Analizde
-  // kayıp = soru sayısı × kaçırma oranı olarak kullanılıyor. Girilmezse
-  // dersin toplam sorusu konu adedine bölünerek tahmin ediliyor.
-  const soruSayisiKaydet = async (konu, deger) => {
-    const konuId = konuIdleri[konu];
-    if (!konuId) return;
-    const sayi = deger === "" ? null : Number(deger);
-    if (sayi !== null && (!Number.isFinite(sayi) || sayi < 0)) {
-      alert("Soru sayısı 0 veya daha büyük bir sayı olmalı.");
-      return;
-    }
-    setIslemde(true);
-    const { hata } = await calistir(
-      supabase.from("ogretmen_konu_tercihi")
-        .upsert({ teacher_id: userId, exam_topic_id: konuId, agirlik: sayi,
-                  updated_at: new Date().toISOString() },
-                { onConflict: "teacher_id,exam_topic_id" }),
-      "Soru sayisi kaydetme"
     );
     setIslemde(false);
     if (hata) return;
@@ -301,15 +269,6 @@ export default function KonuYonetimi({ userId, color: c }) {
                       ) : (
                         <>
                           <span style={{ flex: 1, fontSize: 12, color: "#333", minWidth: 0 }}>{k}</span>
-                          <input
-                            type="number" min="0" step="0.5" placeholder="soru"
-                            title="Bu konudan sınavda ortalama kaç soru çıkıyor? Boş bırakılırsa tahmin edilir."
-                            value={soruSayilari[k] ?? ""}
-                            onChange={e => setSoruSayilari(m => ({ ...m, [k]: e.target.value }))}
-                            onBlur={e => soruSayisiKaydet(k, e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                            style={{ ...inputStyle, width: 58, padding: "3px 6px", fontSize: 11,
-                              textAlign: "center", flexShrink: 0 }} />
                           <button onClick={() => setDuzenlenen({ konu: k, yeniAd: k })} title="Adını değiştir" style={{
                             fontSize: 11, padding: "3px 9px", borderRadius: 99,
                             border: "1px solid #f0ede8", background: "#fff", color: "#888", cursor: "pointer",
