@@ -34,6 +34,9 @@ export default function StudentDashboard({ userId, userName }) {
   const [submissions,     setSubmissions]     = useState({});  // { task_id: submission }
   const [uploadingTaskId, setUploadingTaskId] = useState(null);
   const [teachers,        setTeachers]        = useState([]);
+  // Velisi — mesajlaşma kişi listesinde çıkıyor. loadAll içinde
+  // doldurulduğu için tanımı yukarıda olmak zorunda.
+  const [veliler,         setVeliler]         = useState([]);
   const [profile,      setProfile]      = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showProfileForm, setShowProfileForm] = useState(false);
@@ -101,7 +104,7 @@ export default function StudentDashboard({ userId, userName }) {
   const testFileInputRef = useRef(null);
 
   const loadAll = async () => {
-    const [t, ts, er, prof, sub, tch] = await Promise.all([
+    const [t, ts, er, prof, sub, tch, vel] = await Promise.all([
       supabase.from("tasks").select("*").eq("student_id", userId).order("created_at", { ascending: false }),
       supabase.from("test_sessions").select("*").eq("student_id", userId).order("created_at", { ascending: false }),
       supabase.from("exam_results").select("*").eq("student_id", userId).order("exam_date", { ascending: false }),
@@ -109,9 +112,12 @@ export default function StudentDashboard({ userId, userName }) {
       supabase.from("homework_submissions").select("*").eq("student_id", userId),
       supabase.from("teacher_students").select("teacher_id")
         .eq("student_id", userId).eq("durum", "onaylandi"),
+      // Velisi — mesajlaşma kişi listesi için
+      supabase.from("family_links").select("parent_id").eq("student_id", userId),
     ]);
-    hatalariBildir([t, ts, er, prof, sub, tch],
-      ["gorevler", "testler", "sinavlar", "profil", "odev gonderimleri", "bagli ogretmenler"]);
+    hatalariBildir([t, ts, er, prof, sub, tch, vel],
+      ["gorevler", "testler", "sinavlar", "profil", "odev gonderimleri",
+       "bagli ogretmenler", "veli baglantisi"]);
     setTasks(t.data ?? []);
     setTestSessions(ts.data ?? []);
     setExamResults(er.data ?? []);
@@ -136,6 +142,17 @@ export default function StudentDashboard({ userId, userName }) {
         : { veri: [] };
       setTeachers(veri ?? []);
     }
+
+    // Veli adları
+    const veliIdleri = (vel.data ?? []).map(v => v.parent_id);
+    if (veliIdleri.length > 0) {
+      const { veri } = await calistir(
+        supabase.from("users").select("id, full_name").in("id", veliIdleri),
+        "Veli listesi", { sessiz: true }
+      );
+      setVeliler(veri ?? []);
+    } else setVeliler([]);
+
     const profData = prof.data ?? null;
     setProfile(profData);
     if (profData) {
@@ -602,8 +619,11 @@ export default function StudentDashboard({ userId, userName }) {
         takvimAlti={takvimAltiBolum}
       /></div>
 
-      {/* Öğretmenleriyle mesajlaşma */}
-      <Mesajlar userId={userId} kisiler={teachers} color={c} baslik="Öğretmenlerim" />
+      {/* Koçları ve velisiyle mesajlaşma */}
+      <Mesajlar userId={userId} color={c} baslik="Mesajlar" kisiler={[
+        ...teachers.map(t => ({ ...t, etiket: "· koç" })),
+        ...veliler.map(v => ({ ...v, etiket: "· veliniz" })),
+      ]} />
 
       {/* Haftalık programın yazdırılabilir hali — takvimin hemen ardında */}
       <HaftalikProgram tasks={tasks} programOgeleri={programOgeleri} ogrenciAdi={userName} color={c} variant="kart" />

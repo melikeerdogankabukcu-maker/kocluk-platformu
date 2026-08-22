@@ -40,6 +40,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const [programMap,  setProgramMap]  = useState({});
   // Mesajlasilabilecek veliler: ogrencilerin family_links kayitlarindan
   const [veliler,     setVeliler]     = useState([]);
+  // Diğer koçlar (yönetici dahil) — personel kendi arasında yazışabilsin
+  const [koclar,      setKoclar]      = useState([]);
   const [bagKurulabilir, setBagKurulabilir] = useState(false);  // teacher_students tablosu var mı
 
   // Görev listesi uzun olabilir (bir program tek seferde onlarca görev açar);
@@ -171,6 +173,19 @@ export default function TeacherDashboard({ userId, userName, role }) {
         return { ...v, etiket: bag ? `· ${ogrenciAdi[bag.student_id] ?? ""} velisi` : "· veli" };
       }));
     } else setVeliler([]);
+
+    // Diğer koçlar. Kendisi listede çıkmasın; mesajlasabilir_mi zaten
+    // kişinin kendine yazmasını reddediyor ama listede görünmesi anlamsız.
+    const { veri: kocData } = await calistir(
+      supabase.from("users").select("id, full_name, role")
+        .in("role", ["teacher", "admin"]).eq("onay_durumu", "onaylandi"),
+      "Koc listesi", { sessiz: true }
+    );
+    setKoclar((kocData ?? [])
+      .filter(k => k.id !== userId)
+      .map(k => ({ id: k.id, full_name: k.full_name,
+                   etiket: k.role === "admin" ? "· yönetici" : "· koç" })));
+
     setLoading(false);
   };
 
@@ -830,8 +845,11 @@ export default function TeacherDashboard({ userId, userName, role }) {
       {role === "admin" && <RolYonetimi userId={userId} color={c} />}
       {role === "admin" && <DenetimKaydi color={c} />}
 
-      {/* Öğrenciler ve velileriyle mesajlaşma */}
-      <Mesajlar userId={userId} kisiler={[...students, ...veliler]} color={c} />
+      {/* Öğrenciler, veliler ve diğer koçlarla mesajlaşma */}
+      <Mesajlar userId={userId} color={c} kisiler={[
+        ...students.map(s => ({ ...s, etiket: "· öğrenci" })),
+        ...veliler, ...koclar,
+      ]} />
 
       {/* Program yazma + atama: atama her programın kendi satırında açılıyor */}
       <ProgramDuzenleyici userId={userId} students={students} color={c} />

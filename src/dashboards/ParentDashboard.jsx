@@ -190,6 +190,13 @@ export default function ParentDashboard({ userId, userName }) {
   // Konu ilerlemesi: görevlerden otomatik hesaplanır (elle giriş kaldırıldı)
   const progressList = computeTopicProgress(tasks);
 
+  // Yazışılabilecek kişiler: çocuk ve koçları. Çocuk EN ÜSTTE — velinin
+  // en doğal muhatabı o. Buraya kadar geldiysek child zaten dolu.
+  const mesajKisileri = [
+    { ...child, etiket: "· çocuğunuz" },
+    ...ogretmenler.map(o => ({ ...o, etiket: "· koç" })),
+  ];
+
   // Ödeme takibi — yalnızca öğretmenin 'yapıldı' işaretlediği dersler
   const completedLessons = lessons.filter(l => l.completed);
   const paidCount     = completedLessons.filter(l => l.payment_status === "odendi").length;
@@ -351,8 +358,8 @@ export default function ParentDashboard({ userId, userName }) {
       </Card>
 
       {/* Ders Takvimi (salt okunur) */}
-      {/* Çocuğun öğretmenleriyle mesajlaşma */}
-      <Mesajlar userId={userId} kisiler={ogretmenler} color={c} baslik="Öğretmenler" />
+      {/* Çocuk ve koçlarıyla mesajlaşma */}
+      <Mesajlar userId={userId} kisiler={mesajKisileri} color={c} baslik="Mesajlar" />
 
       <Card id="bolum-ders">
         <SectionTitle title="Ders Takvimi" color={c.mid} />
