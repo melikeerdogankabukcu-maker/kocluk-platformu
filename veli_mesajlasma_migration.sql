@@ -43,22 +43,27 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   );
 $$;
 
--- Bu öğrenci benim onaylı öğrencim mi? (öğretmen için)
-CREATE OR REPLACE FUNCTION public.ogrencim_mi(p_ogrenci UUID)
-RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM teacher_students
-    WHERE student_id = p_ogrenci
-      AND teacher_id = auth.uid()
-      AND durum = 'onaylandi'
-  );
-$$;
+-- Öğretmen tarafı için ogrencim_mi() ZATEN VAR (teacher_students_migration)
+-- ve gövdesi birebir aynı: teacher_id = auth.uid() AND durum = 'onaylandi'.
+-- Yeniden tanımlanmıyor, çünkü:
+--
+--   1) Parametresi p_student; CREATE OR REPLACE parametre adını
+--      değiştiremez (42P13). DROP etmek ise 15'ten fazla RLS politikasının
+--      bağlı olduğu bir fonksiyonu CASCADE ile silmek demekti.
+--
+--   2) Yetkilerine de DOKUNULMUYOR. Bazı politikalar (örn.
+--      guvenlik_duzeltme_migration.sql:33) "TO authenticated" demeden
+--      yazılmış, yani PUBLIC'e uygulanıyor. EXECUTE yetkisi PUBLIC'ten
+--      alınırsa politika DEĞERLENDİRİLEMEZ ve sorgu boş sonuç yerine
+--      HATA döner. Kod tabanında bu zaten bilerek böyle bırakılmış.
+--
+-- Sızıntı yolu değil: auth.uid()'e bakıp boolean dönüyor, oturumsuz
+-- çağırana zaten false diyor.
 
-REVOKE ALL ON FUNCTION public.cocugum_mu(UUID)  FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.ogrencim_mi(UUID) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.cocugum_mu(UUID)  TO authenticated;
-GRANT EXECUTE ON FUNCTION public.ogrencim_mi(UUID) TO authenticated;
+-- cocugum_mu yalnızca "TO authenticated" politikalardan çağrıldığı için
+-- anon'dan almak güvenli: anon o politikaları hiç değerlendirmiyor.
+REVOKE ALL ON FUNCTION public.cocugum_mu(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cocugum_mu(UUID) TO authenticated;
 
 
 -- ------------------------------------------------------------
