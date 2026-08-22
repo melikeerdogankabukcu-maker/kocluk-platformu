@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { API_URL } from "../lib/config";
+import { analizGetir } from "../lib/analizApi";
 import { UYANMA_ESIGI_MS } from "./useAnaliz";
 
 // Sınav analizi verisini Python backend'inden çeker.
@@ -23,7 +23,7 @@ export function useSinavAnalizi(studentId, etkin = true, aralik = null) {
       setHata(false);
       const sayac = setTimeout(() => { if (!iptalEdildi) setUyaniyor(true); }, UYANMA_ESIGI_MS);
       try {
-        const res = await fetch(`${API_URL}/sinav-analizi/${studentId}${ek}`);
+        const res = await analizGetir(`/sinav-analizi/${studentId}${ek}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!iptalEdildi) setVeri(data);

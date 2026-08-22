@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "../lib/config";
+import { analizGetir } from "../lib/analizApi";
 
 // Analiz servisi Render'ın ücretsiz katmanında; 15 dakika hareketsizlikten
 // sonra uykuya geçiyor ve ilk istek konteyner ayağa kalkana kadar bekliyor
@@ -44,8 +45,8 @@ export function useAnaliz(studentId, aralik = null) {
       const sayac = setTimeout(() => { if (!iptalEdildi) setUyaniyor(true); }, UYANMA_ESIGI_MS);
       try {
         const [analizRes, onerilerRes] = await Promise.all([
-          fetch(`${API_URL}/analiz/${studentId}${ek}`),
-          fetch(`${API_URL}/oneriler/${studentId}`),
+          analizGetir(`/analiz/${studentId}${ek}`),
+          analizGetir(`/oneriler/${studentId}`),
         ]);
         const analizData   = await analizRes.json();
         const onerilerData = await onerilerRes.json();
@@ -93,8 +94,8 @@ export function useAnalizCache() {
     const sayac = setTimeout(() => setUyaniyorFor(studentId), UYANMA_ESIGI_MS);
     try {
       const [analizRes, onerilerRes] = await Promise.all([
-        fetch(`${API_URL}/analiz/${studentId}`),
-        fetch(`${API_URL}/oneriler/${studentId}`),
+        analizGetir(`/analiz/${studentId}`),
+        analizGetir(`/oneriler/${studentId}`),
       ]);
       const analizData   = await analizRes.json();
       const onerilerData = await onerilerRes.json();
