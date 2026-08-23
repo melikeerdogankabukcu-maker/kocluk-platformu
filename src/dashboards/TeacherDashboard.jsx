@@ -11,6 +11,7 @@ import SinavGirisFormu from "../components/SinavGirisFormu";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import VeliBaglantilari from "../components/VeliBaglantilari";
+import OgretmenProfili from "../components/OgretmenProfili";
 import GrupYonetimi from "../components/GrupYonetimi";
 import VeliRaporu from "../components/VeliRaporu";
 import HaftalikProgram from "../components/HaftalikProgram";
@@ -776,6 +777,9 @@ export default function TeacherDashboard({ userId, userName, role }) {
           );
         })}
       </Card>
+
+      {/* Mesleki profil — öğrenciler koçlarının branşını buradan görüyor */}
+      <OgretmenProfili userId={userId} color={c} />
 
       {/* Öğrenci listesi yönetimi (teacher_students) */}
       {bagKurulabilir && (

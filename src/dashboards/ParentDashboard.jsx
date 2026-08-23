@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
+import { branslariEkle, kocEtiketi } from "../lib/branslar";
 import { COLORS } from "../lib/theme";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { computeTopicProgress } from "../lib/progressHelpers";
@@ -60,7 +61,7 @@ export default function ParentDashboard({ userId, userName }) {
           supabase.from("users").select("id, full_name").in("id", ogrIdleri),
           "Ogretmen listesi", { sessiz: true }
         );
-        setOgretmenler(veri ?? []);
+        setOgretmenler(await branslariEkle(veri ?? []));
       }
       setLoading(false);
     };
@@ -194,7 +195,7 @@ export default function ParentDashboard({ userId, userName }) {
   // en doğal muhatabı o. Buraya kadar geldiysek child zaten dolu.
   const mesajKisileri = [
     { ...child, etiket: "· çocuğunuz" },
-    ...ogretmenler.map(o => ({ ...o, etiket: "· koç" })),
+    ...ogretmenler.map(o => ({ ...o, etiket: kocEtiketi(o) })),
   ];
 
   // Ödeme takibi — yalnızca öğretmenin 'yapıldı' işaretlediği dersler

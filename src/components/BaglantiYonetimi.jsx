@@ -36,13 +36,26 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
       // etmeden kimse bağlantı kurulabilir hale gelmemeli.
       .eq("onay_durumu", "onaylandi");
     if (kisiHatasi) console.error("[Aday kisi listesi]", kisiHatasi);
+
+    // Öğrenci karşı tarafta öğretmen görüyorsa branşı da gelsin: birden
+    // fazla koçu olan öğrenci hangisine ne soracağını bilmeli.
+    // Ayrı sorgu, gömülü ilişki yerine: PostgREST'in ilişkiyi tanımasına
+    // bağlı kalmıyoruz, tanımazsa sessizce boş dönerdi.
+    let bransHarita = {};
+    if (!ogretmenMiyim && (kisilerData ?? []).length > 0) {
+      const { data: profiller } = await supabase
+        .from("ogretmen_profilleri").select("id, brans, unvan")
+        .in("id", kisilerData.map(k => k.id));
+      (profiller ?? []).forEach(p => { bransHarita[p.id] = p; });
+    }
+
     const harita = {};
-    (kisilerData ?? []).forEach(k => { harita[k.id] = k; });
+    (kisilerData ?? []).forEach(k => { harita[k.id] = { ...k, ...bransHarita[k.id] }; });
     setKisiler(harita);
 
     const mevcut = new Set((satirlar ?? []).map(b => b[karsiAlan]));
     setAdaylar((kisilerData ?? []).filter(k => !mevcut.has(k.id)));
-  }, [userId, benimAlan, karsiAlan, karsiRol]);
+  }, [userId, benimAlan, karsiAlan, karsiRol, ogretmenMiyim]);
 
   useEffect(() => { if (acik) yukle(); }, [acik, yukle]);
 
@@ -155,7 +168,17 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
                   return (
                     <div key={b[karsiAlan]} style={{ ...satirStil, background: "#fafaf8", flexWrap: "wrap" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, color: "#333", fontWeight: 500 }}>{ad(b)}</div>
+                        <div style={{ fontSize: 12.5, color: "#333", fontWeight: 500 }}>
+                          {ad(b)}
+                          {k?.brans && (
+                            <span style={{
+                              fontSize: 9.5, fontWeight: 700, marginLeft: 6,
+                              padding: "1px 7px", borderRadius: 99,
+                              background: c.light, color: c.text,
+                            }}>{k.brans}</span>
+                          )}
+                        </div>
+                        {k?.unvan && <div style={{ fontSize: 10.5, color: "#888" }}>{k.unvan}</div>}
                         {k?.email && <div style={{ fontSize: 10.5, color: "#aaa" }}>{k.email}</div>}
                       </div>
                       {/* Şifre sıfırlama yalnızca öğretmen tarafında: öğrenci

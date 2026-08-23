@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
+import { branslariEkle, kocEtiketi } from "../lib/branslar";
 import { COLORS } from "../lib/theme";
 import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
@@ -140,7 +141,7 @@ export default function StudentDashboard({ userId, userName }) {
             "Bagli ogretmenler", { sessiz: true }
           )
         : { veri: [] };
-      setTeachers(veri ?? []);
+      setTeachers(await branslariEkle(veri ?? []));
     }
 
     // Veli adları
@@ -621,7 +622,7 @@ export default function StudentDashboard({ userId, userName }) {
 
       {/* Koçları ve velisiyle mesajlaşma */}
       <Mesajlar userId={userId} color={c} baslik="Mesajlar" kisiler={[
-        ...teachers.map(t => ({ ...t, etiket: "· koç" })),
+        ...teachers.map(t => ({ ...t, etiket: kocEtiketi(t) })),
         ...veliler.map(v => ({ ...v, etiket: "· veliniz" })),
       ]} />
 
