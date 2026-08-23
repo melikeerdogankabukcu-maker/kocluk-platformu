@@ -27,15 +27,21 @@ export default function RolYonetimi({ userId, color: c }) {
   // sunucu o an users'tan okusaydı, veli ekranı gördüğümüzle tıkladığımız
   // an arasında değeri değiştirip başka öğrenciye bağlanabilirdi.
   const [secilenOgrenci, setSecilenOgrenci] = useState({});
+  const [kurumlar, setKurumlar] = useState([]);
 
   const yukle = useCallback(async () => {
     setLoading(true);
-    const { veri } = await calistir(
-      supabase.from("users")
-        .select("id, full_name, email, role, talep_rol, onay_durumu, talep_ogrenci_email, created_at")
-        .order("created_at", { ascending: false }),
-      "Kullanici listesi", { sessiz: true }
-    );
+    const [{ veri }, { veri: kl }] = await Promise.all([
+      calistir(
+        supabase.from("users")
+          .select("id, full_name, email, role, talep_rol, onay_durumu, talep_ogrenci_email, kurum_id, kurum_rolu, created_at")
+          .order("created_at", { ascending: false }),
+        "Kullanici listesi", { sessiz: true }
+      ),
+      calistir(supabase.from("kurumlar").select("id, ad").order("ad"),
+        "Kurum listesi", { sessiz: true }),
+    ]);
+    setKurumlar(kl ?? []);
     const liste = veri ?? [];
     setKisiler(liste);
 
@@ -71,6 +77,38 @@ export default function RolYonetimi({ userId, color: c }) {
         .update({ role: yeniRol, talep_rol: null })
         .eq("id", kisi.id),
       "Rol degistirme"
+    );
+    if (hata) { setIslemde(null); return; }
+
+    // Kurgu "her koç kendi kurumu": öğretmen yapılan kişinin kurumu yoksa
+    // kendi kurumu açılıp yöneticisi yapılıyor. Kurumu zaten varsa
+    // dokunulmuyor — bir okula bağlıysa oradan koparmak istemeyiz.
+    if (yeniRol === "teacher" && !kisi.kurum_id) {
+      const { veri: kurum } = await calistir(
+        supabase.from("kurumlar")
+          .insert({ ad: kisi.full_name || "Kurum", tur: "bireysel", sahip_id: kisi.id })
+          .select("id").single(),
+        "Kurum olusturma"
+      );
+      if (kurum) {
+        await calistir(
+          supabase.from("users")
+            .update({ kurum_id: kurum.id, kurum_rolu: "yonetici" })
+            .eq("id", kisi.id),
+          "Kuruma baglama"
+        );
+      }
+    }
+
+    setIslemde(null);
+    yukle();
+  };
+
+  const kurumDegistir = async (kisi, kurumId) => {
+    setIslemde(kisi.id);
+    const { hata } = await calistir(
+      supabase.from("users").update({ kurum_id: kurumId || null }).eq("id", kisi.id),
+      "Kurum degistirme"
     );
     setIslemde(null);
     if (hata) return;
@@ -174,6 +212,28 @@ export default function RolYonetimi({ userId, color: c }) {
           flexShrink: 0, fontSize: 10, padding: "3px 9px", borderRadius: 99, border: "none",
           background: "#FFF0F0", color: "#A32D2D", cursor: "pointer", fontWeight: 600,
         }}>Reddet</button>
+      )}
+
+      {/* Kurum — kimin hangi kurumda olduğu ve taşıma. Bir okul kurmak
+          buradan öğretmenleri o kuruma taşımakla oluyor. */}
+      {kurumlar.length > 0 && (
+        <select
+          value={k.kurum_id ?? ""}
+          onChange={e => kurumDegistir(k, e.target.value)}
+          disabled={islemde === k.id}
+          title="Bağlı olduğu kurum"
+          style={{
+            flexShrink: 0, maxWidth: 150, fontSize: 10, padding: "3px 6px",
+            borderRadius: 8, border: "1px solid #f0ede8", background: "#fff",
+            color: k.kurum_id ? "#666" : "#c66",
+          }}
+        >
+          <option value="">kurumsuz</option>
+          {kurumlar.map(kr => <option key={kr.id} value={kr.id}>{kr.ad}</option>)}
+        </select>
+      )}
+      {k.kurum_rolu === "yonetici" && k.kurum_id && (
+        <span style={{ flexShrink: 0, fontSize: 9, color: "#888" }} title="Kurum yöneticisi">👑</span>
       )}
 
       {/* Şifre sıfırlama — yönetici hesapları hedef olamaz (hesap devralma
