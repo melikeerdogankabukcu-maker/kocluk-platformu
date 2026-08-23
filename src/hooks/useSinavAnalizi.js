@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { analizGetir } from "../lib/analizApi";
+import { analizGetir } from "../lib/servisApi";
 import { UYANMA_ESIGI_MS } from "./useAnaliz";
 
 // Sınav analizi verisini Python backend'inden çeker.

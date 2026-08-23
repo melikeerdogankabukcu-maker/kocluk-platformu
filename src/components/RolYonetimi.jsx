@@ -3,6 +3,7 @@ import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
+import SifreSifirlaDugmesi from "./SifreSifirlaDugmesi";
 
 // Rol yönetimi — yalnızca admin.
 //
@@ -135,7 +136,7 @@ export default function RolYonetimi({ userId, color: c }) {
       background: vurgulu ? "#FFF7E6" : "transparent",
       borderBottom: vurgulu ? "none" : "1px solid #fafaf8",
     }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, flexWrap: "wrap" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ color: "#333", fontWeight: vurgulu ? 600 : 400 }}>{k.full_name}</div>
         <div style={{ fontSize: 10, color: "#aaa" }}>{k.email}</div>
@@ -174,6 +175,10 @@ export default function RolYonetimi({ userId, color: c }) {
           background: "#FFF0F0", color: "#A32D2D", cursor: "pointer", fontWeight: 600,
         }}>Reddet</button>
       )}
+
+      {/* Şifre sıfırlama — yönetici hesapları hedef olamaz (hesap devralma
+          olurdu), kendi hesabı da listede değil */}
+      {k.id !== userId && k.role !== "admin" && <SifreSifirlaDugmesi kisi={k} kompakt />}
 
       {/* Kendi rolünü değiştiremesin: admin kendini düşürürse paneli kaybeder */}
       {k.id !== userId && k.role !== "admin" && (

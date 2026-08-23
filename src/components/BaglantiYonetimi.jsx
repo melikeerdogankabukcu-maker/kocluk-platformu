@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
+import SifreSifirlaDugmesi from "./SifreSifirlaDugmesi";
 
 // Öğretmen ↔ öğrenci bağlarını yönetir. Aynı bileşen iki panelde de kullanılır;
 // rol yalnızca "karşı tarafın" kim olduğunu belirler.
@@ -152,11 +153,15 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
                 {onayli.map(b => {
                   const k = kisiler[b[karsiAlan]];
                   return (
-                    <div key={b[karsiAlan]} style={{ ...satirStil, background: "#fafaf8" }}>
+                    <div key={b[karsiAlan]} style={{ ...satirStil, background: "#fafaf8", flexWrap: "wrap" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12.5, color: "#333", fontWeight: 500 }}>{ad(b)}</div>
                         {k?.email && <div style={{ fontSize: 10.5, color: "#aaa" }}>{k.email}</div>}
                       </div>
+                      {/* Şifre sıfırlama yalnızca öğretmen tarafında: öğrenci
+                          kendi öğretmeninin şifresini sıfırlayamaz. Sunucu da
+                          zaten reddediyor, düğmeyi göstermek yanıltıcı olurdu. */}
+                      {ogretmenMiyim && k && <SifreSifirlaDugmesi kisi={k} kompakt />}
                       <button onClick={() => kaldir(b, ad(b))} disabled={islemde} style={{
                         fontSize: 11, padding: "4px 10px", borderRadius: 99, border: "none",
                         background: "#FFF0F0", color: "#A32D2D", cursor: "pointer", fontWeight: 600, flexShrink: 0,

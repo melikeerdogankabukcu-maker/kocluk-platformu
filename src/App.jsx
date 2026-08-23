@@ -3,6 +3,7 @@ import { supabase } from "./supabase";
 import { calistir } from "./lib/db";
 import Auth from "./Auth";
 import TopBar from "./components/TopBar";
+import SifreBelirle from "./components/SifreBelirle";
 import { servisiUyandir } from "./hooks/useAnaliz";
 import { TopicsProvider } from "./lib/TopicsContext";
 import StudentDashboard from "./dashboards/StudentDashboard";
@@ -14,7 +15,7 @@ async function fetchUserProfile(userId) {
   // ogrenci paneliyle karsilasir. Hatayi yutmak yerine gorunur kil.
   const { data, error } = await supabase
     .from("users")
-    .select("role, full_name, onay_durumu")
+    .select("role, full_name, onay_durumu, sifre_degistirmeli")
     .eq("id", userId)
     .single();
   if (error) {
@@ -44,6 +45,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [userName, setUserName] = useState("");
   const [onay, setOnay] = useState("onaylandi");
+  // Koç geçici şifre atadıysa panel yerine "yeni şifre belirle" ekranı
+  const [sifreDegistir, setSifreDegistir] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export default function App() {
         setRole(profile?.role ?? "student");
         setUserName(profile?.full_name ?? session.user.email);
         setOnay(onayDegeri(profile));
+        setSifreDegistir(profile?.sifre_degistirmeli === true);
       }
       setLoading(false);
     });
@@ -72,6 +76,7 @@ export default function App() {
     setRole(profile?.role ?? "student");
     setUserName(profile?.full_name ?? loggedInUser.email);
     setOnay(onayDegeri(profile));
+    setSifreDegistir(profile?.sifre_degistirmeli === true);
   };
 
   const handleLogout = async () => {
@@ -79,6 +84,7 @@ export default function App() {
     setUser(null);
     setRole(null);
     setUserName("");
+    setSifreDegistir(false);
   };
 
   if (loading) return (
@@ -133,6 +139,16 @@ export default function App() {
       </div>
     );
   }
+
+  // Şifre kapısı onay kapısından SONRA: onaylanmamış birine şifre
+  // belirletmenin anlamı yok, zaten içeri giremeyecek.
+  if (sifreDegistir) return (
+    <SifreBelirle
+      userId={user.id} userName={userName}
+      onTamam={() => setSifreDegistir(false)}
+      onCikis={handleLogout}
+    />
+  );
 
   return (
     <div style={{

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "../lib/config";
-import { analizGetir } from "../lib/analizApi";
+import { analizGetir } from "../lib/servisApi";
 
 // Analiz servisi Render'ın ücretsiz katmanında; 15 dakika hareketsizlikten
 // sonra uykuya geçiyor ve ilk istek konteyner ayağa kalkana kadar bekliyor
