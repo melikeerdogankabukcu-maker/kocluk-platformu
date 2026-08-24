@@ -20,6 +20,7 @@ import SeviyeAvatar from "../components/SeviyeAvatar";
 import VeliRaporu from "../components/VeliRaporu";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import Mesajlar from "../components/Mesajlar";
+import HaftalikOzet from "../components/HaftalikOzet";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
 
 export default function ParentDashboard({ userId, userName }) {
@@ -359,6 +360,9 @@ export default function ParentDashboard({ userId, userName }) {
       </Card>
 
       {/* Ders Takvimi (salt okunur) */}
+      {/* Çocuğun hafta hafta gelişimi */}
+      <HaftalikOzet studentId={child.id} color={c} baslik="Haftalık Gelişim" />
+
       {/* Çocuk ve koçlarıyla mesajlaşma */}
       <Mesajlar userId={userId} kisiler={mesajKisileri} color={c} baslik="Mesajlar" />
 

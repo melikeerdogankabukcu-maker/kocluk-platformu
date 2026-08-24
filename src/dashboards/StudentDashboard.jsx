@@ -20,6 +20,7 @@ import HaftalikProgram from "../components/HaftalikProgram";
 import Mesajlar from "../components/Mesajlar";
 import Modal from "../components/Modal";
 import SinavAnalizi from "../components/SinavAnalizi";
+import HaftalikOzet from "../components/HaftalikOzet";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import Rozetler from "../components/Rozetler";
 import SeviyeAvatar from "../components/SeviyeAvatar";
@@ -677,6 +678,8 @@ export default function StudentDashboard({ userId, userName }) {
       <HaftalikProgram tasks={tasks} programOgeleri={programOgeleri} ogrenciAdi={userName} color={c} variant="kart" />
 
       {/* Test Ekle */}
+      <HaftalikOzet studentId={userId} color={c} baslik="Haftalık Gelişimim" />
+
       <Card id="bolum-test">
         <SectionTitle title="Test Çözdüm" color={c.mid} />
         {!showTestForm ? (

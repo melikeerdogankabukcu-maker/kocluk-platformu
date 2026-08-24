@@ -14,6 +14,7 @@ import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import VeliBaglantilari from "../components/VeliBaglantilari";
 import OgretmenProfili from "../components/OgretmenProfili";
+import HaftalikOzet from "../components/HaftalikOzet";
 import GrupYonetimi from "../components/GrupYonetimi";
 import VeliRaporu from "../components/VeliRaporu";
 import HaftalikProgram from "../components/HaftalikProgram";
@@ -887,6 +888,12 @@ export default function TeacherDashboard({ userId, userName, role }) {
           );
         })}
       </Card>
+
+      {/* Hafta hafta gelişim — ogrenci_haftalik serisinden */}
+      {students.length > 0 && (
+        <HaftalikOzet students={students} color={c} yenilenebilir
+          baslik="Haftalık Gelişim" />
+      )}
 
       {/* Mesleki profil — öğrenciler koçlarının branşını buradan görüyor */}
       <OgretmenProfili userId={userId} color={c} />
