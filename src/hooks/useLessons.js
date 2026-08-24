@@ -61,6 +61,36 @@ export function useLessons(userId) {
     await reload();
   };
 
+  // Planlanmış dersin tarih / saat / yer bilgisini değiştirir.
+  //
+  // ONAYI SIFIRLIYOR. Ders çift taraflı onaylanan bir sözleşme: saati ya
+  // da yeri tek taraflı değiştirip "onaylı" bırakmak, karşı tarafın kabul
+  // ettiği şeyi ona sormadan başkalaştırmak olurdu — öğrenci eski saatte
+  // beklerken ders başka bir zamana kaymış olurdu. Değişiklikten sonra
+  // ders yeniden "beklemede"ye düşüyor ve karşı taraf onaylıyor.
+  //
+  // created_by da güncelleniyor: onay bekleyenler listesi "teklifi ben
+  // yapmadıysam onayımı bekliyor" mantığıyla süzülüyor. Düzenleyen kişi
+  // son teklifi yapan taraf olduğu için burada güncellenmezse, kendi
+  // yaptığı değişikliği kendisi onaylamak zorunda kalırdı.
+  const updateLesson = async (lesson, patch) => {
+    const amTeacher = userId === lesson.teacher_id;
+    const yeni = { ...patch };
+    if (lesson.status === "onaylandi" || lesson.status === "beklemede") {
+      yeni.status           = "beklemede";
+      yeni.created_by       = userId;
+      yeni.teacher_approved = amTeacher;
+      yeni.student_approved = !amTeacher;
+    }
+    const { hata } = await calistir(
+      supabase.from("lessons").update(yeni).eq("id", lesson.id),
+      "Ders guncelleme"
+    );
+    if (hata) return { hata };
+    await reload();
+    return {};
+  };
+
   const cancelLesson = async (id) => {
     const { hata } = await calistir(
       supabase.from("lessons").update({ status: "iptal" }).eq("id", id),
@@ -117,6 +147,6 @@ export function useLessons(userId) {
     };
   };
 
-  return { lessons, loading, reload, createLesson, respondLesson, cancelLesson,
+  return { lessons, loading, reload, createLesson, respondLesson, updateLesson, cancelLesson,
            katilimIsaretle, katilimOzeti, reportPaid, confirmPaid };
 }

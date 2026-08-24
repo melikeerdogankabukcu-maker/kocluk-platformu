@@ -208,6 +208,7 @@ export default function StudentDashboard({ userId, userName }) {
       uploading={uploadingTaskId === t.id}
       onFileSelect={handleHomeworkUpload}
       onFileRemove={handleHomeworkDosyaSil}
+      ogretmenOnayi={t.ogretmen_onayi} onayNotu={t.onay_notu}
     />
   );
 

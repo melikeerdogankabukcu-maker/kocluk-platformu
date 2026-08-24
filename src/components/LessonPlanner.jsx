@@ -18,7 +18,7 @@ import CalendarMonth from "./CalendarMonth";
 export default function LessonPlanner({ userId, role, counterparts, color: c,
   tasks = [], tests = [], programItems = [], onProgramCevir, programOzet,
   renderTask: renderTaskDisari, takvimAlti }) {
-  const { lessons, createLesson, respondLesson, cancelLesson, katilimIsaretle, katilimOzeti, confirmPaid } = useLessons(userId);
+  const { lessons, createLesson, respondLesson, updateLesson, cancelLesson, katilimIsaretle, katilimOzeti, confirmPaid } = useLessons(userId);
 
   // Katılım rozeti — işaretlenmiş derslerde herkes görür (veli dahil)
   const KATILIM = {
@@ -38,6 +38,38 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
 
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
+  // Düzenlenen ders: { id, lesson_date, start_time, end_time, location, meeting_link }
+  const [duzenlenen,   setDuzenlenen]   = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  const duzenlemeyeBasla = (l) => setDuzenlenen({
+    id:           l.id,
+    lesson_date:  l.lesson_date  ?? "",
+    // time alanları "14:30:00" gelebiliyor; input[type=time] "14:30" bekliyor,
+    // saniyeli değer verilirse alan BOŞ açılır ve öğretmen saati silinmiş sanır
+    start_time:   (l.start_time ?? "").slice(0, 5),
+    end_time:     (l.end_time   ?? "").slice(0, 5),
+    location:     l.location     ?? "",
+    meeting_link: l.meeting_link ?? "",
+  });
+
+  const kaydetDuzenleme = async () => {
+    if (!duzenlenen?.lesson_date || !duzenlenen.start_time) return;
+    const ders = lessons.find(l => l.id === duzenlenen.id);
+    if (!ders) { setDuzenlenen(null); return; }
+    setKaydediliyor(true);
+    const cevrimici = ders.lesson_type === "online";
+    const { hata } = await updateLesson(ders, {
+      lesson_date:  duzenlenen.lesson_date,
+      start_time:   duzenlenen.start_time,
+      end_time:     duzenlenen.end_time || null,
+      location:     cevrimici ? null : (duzenlenen.location     || null),
+      meeting_link: cevrimici ? (duzenlenen.meeting_link || null) : null,
+    });
+    setKaydediliyor(false);
+    if (hata) return;
+    setDuzenlenen(null);
+  };
   const [form, setForm] = useState({
     counterpart_id: "", lesson_type: "yuzyuze",
     location: "", meeting_link: "",
@@ -234,12 +266,70 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
             </div>
           );
         })()}
-        {/* İptal — yapılmamış onaylı ders veya kendi bekleyen teklifim */}
-        {((l.status === "onaylandi" && !l.completed) || (l.status === "beklemede" && mine)) && (
-          <button onClick={() => cancelLesson(l.id)} style={{
-            fontSize: 10, padding: "3px 10px", borderRadius: 99, marginTop: 8, marginLeft: 6,
-            border: "1px solid #f0ede8", background: "#fff", color: "#999", cursor: "pointer",
-          }}>İptal et</button>
+        {/* Düzenleme formu — tarih, saat, yer değiştirilebiliyor */}
+        {duzenlenen?.id === l.id && (
+          <div style={{
+            marginTop: 8, padding: "9px 10px", borderRadius: 9,
+            background: "#fff", border: "1.5px solid #f0ede8",
+            display: "flex", flexDirection: "column", gap: 6,
+          }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <input type="date" value={duzenlenen.lesson_date}
+                onChange={e => setDuzenlenen(d => ({ ...d, lesson_date: e.target.value }))}
+                style={{ ...inputStyle, fontSize: 12, padding: "7px 9px", flex: "1 1 130px" }} />
+              <input type="time" value={duzenlenen.start_time}
+                onChange={e => setDuzenlenen(d => ({ ...d, start_time: e.target.value }))}
+                style={{ ...inputStyle, fontSize: 12, padding: "7px 9px", flex: "1 1 90px" }} />
+              <input type="time" value={duzenlenen.end_time}
+                onChange={e => setDuzenlenen(d => ({ ...d, end_time: e.target.value }))}
+                style={{ ...inputStyle, fontSize: 12, padding: "7px 9px", flex: "1 1 90px" }} />
+            </div>
+            {l.lesson_type === "online" ? (
+              <input value={duzenlenen.meeting_link} placeholder="Görüşme bağlantısı"
+                onChange={e => setDuzenlenen(d => ({ ...d, meeting_link: e.target.value }))}
+                style={{ ...inputStyle, fontSize: 12, padding: "7px 9px" }} />
+            ) : (
+              <input value={duzenlenen.location} placeholder="Yer / adres"
+                onChange={e => setDuzenlenen(d => ({ ...d, location: e.target.value }))}
+                style={{ ...inputStyle, fontSize: 12, padding: "7px 9px" }} />
+            )}
+            <div style={{ fontSize: 10, color: "#854F0B", background: "#FFF7E6",
+              padding: "6px 9px", borderRadius: 8, lineHeight: 1.45 }}>
+              Değişiklikten sonra ders <b>yeniden onay bekleyecek</b>.{" "}
+              {otherName(l)} yeni zamanı onaylayana kadar kesinleşmiş sayılmaz.
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={kaydetDuzenleme} disabled={kaydediliyor || !duzenlenen.lesson_date || !duzenlenen.start_time}
+                style={{
+                  flex: 1, fontSize: 11.5, padding: "7px 0", borderRadius: 9, border: "none",
+                  background: (duzenlenen.lesson_date && duzenlenen.start_time) ? c.bg : "#ddd",
+                  color: "#fff", fontWeight: 700, cursor: "pointer",
+                }}>{kaydediliyor ? "Kaydediliyor..." : "Kaydet"}</button>
+              <button onClick={() => setDuzenlenen(null)} style={{
+                fontSize: 11.5, padding: "7px 14px", borderRadius: 9,
+                border: "1.5px solid #f0ede8", background: "#fff", color: "#888", cursor: "pointer",
+              }}>Vazgeç</button>
+            </div>
+          </div>
+        )}
+
+        {/* Düzenle / İptal — yapılmamış onaylı ders veya bekleyen teklif.
+            Tamamlanmış ya da iptal edilmiş ders değiştirilemiyor. */}
+        {((l.status === "onaylandi" && !l.completed) || l.status === "beklemede") && (
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            {duzenlenen?.id !== l.id && (
+              <button onClick={() => duzenlemeyeBasla(l)} style={{
+                fontSize: 10, padding: "3px 10px", borderRadius: 99,
+                border: "1px solid #f0ede8", background: "#fff", color: "#777", cursor: "pointer",
+              }}>✎ Düzenle</button>
+            )}
+            {((l.status === "onaylandi" && !l.completed) || (l.status === "beklemede" && mine)) && (
+              <button onClick={() => cancelLesson(l.id)} style={{
+                fontSize: 10, padding: "3px 10px", borderRadius: 99,
+                border: "1px solid #f0ede8", background: "#fff", color: "#999", cursor: "pointer",
+              }}>İptal et</button>
+            )}
+          </div>
         )}
       </div>
     );

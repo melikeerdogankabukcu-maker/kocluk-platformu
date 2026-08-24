@@ -4,10 +4,23 @@ import { calistir } from "../lib/db";
 import { odevDosyalari, DOSYA_SINIRI } from "../lib/odevDosyalari";
 
 // Görev öğesi: tamamlandı checkbox'ı + ödev yükleme / durum gösterimi
-export default function TaskItem({ id, done, label, sub, color, onToggle, submission, uploading, onFileSelect, onFileRemove }) {
+export default function TaskItem({ id, done, label, sub, color, onToggle, submission, uploading,
+  onFileSelect, onFileRemove, ogretmenOnayi = null, onayNotu = null }) {
   const [checked, setChecked] = useState(done);
   const [saving,  setSaving]  = useState(false);
   const fileInputRef = useRef(null);
+
+  // done DIŞARIDAN değiştiğinde kutucuk da değişmeli. checked yalnızca
+  // ilk mount'ta done'dan alınıyor ve satır aynı key ile yeniden
+  // kullanıldığı için React bileşeni yeniden kurmuyor: koç görevi
+  // doğrulayıp is_done'ı değiştirdiğinde öğrencinin kutucuğu eski
+  // halinde kalırdı. Effect yerine render sırasında ayarlanıyor —
+  // React'in bu durum için önerdiği yol, fazladan bir render turu yok.
+  const [oncekiDone, setOncekiDone] = useState(done);
+  if (done !== oncekiDone) {
+    setOncekiDone(done);
+    setChecked(done);
+  }
 
   // Hem yeni (dosyalar) hem eski (file_url) bicimi anliyor
   const dosyalar = odevDosyalari(submission);
@@ -74,6 +87,14 @@ export default function TaskItem({ id, done, label, sub, color, onToggle, submis
 
         {/* Ödev alanı */}
         <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+          {/* Koçun fiziksel doğrulaması — ödev dosyası olmadan da olabilir */}
+          {ogretmenOnayi && (
+            <span style={{
+              fontSize: 11, padding: "2px 9px", borderRadius: 99, fontWeight: 600,
+              background: ogretmenOnayi === "onaylandi" ? "#E8F9F0" : "#FFF0F0",
+              color:      ogretmenOnayi === "onaylandi" ? "#1A6B3C" : "#A32D2D",
+            }}>{ogretmenOnayi === "onaylandi" ? "Koç doğruladı ✓" : "İade edildi ↩"}</span>
+          )}
           {/* Durum rozeti */}
           {badge && (
             <span style={{
@@ -130,10 +151,15 @@ export default function TaskItem({ id, done, label, sub, color, onToggle, submis
           )}
         </div>
 
-        {/* Öğretmen notu */}
+        {/* Öğretmen notu — ödev incelemesinden ya da görev iadesinden */}
         {submission?.teacher_note && (
           <div style={{ fontSize: 11, color: "#888", marginTop: 4, fontStyle: "italic" }}>
             Öğretmen: "{submission.teacher_note}"
+          </div>
+        )}
+        {onayNotu && (
+          <div style={{ fontSize: 11, color: "#A32D2D", marginTop: 4, fontStyle: "italic" }}>
+            Koç: "{onayNotu}"
           </div>
         )}
 

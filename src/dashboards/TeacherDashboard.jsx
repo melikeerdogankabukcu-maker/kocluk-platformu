@@ -318,6 +318,42 @@ export default function TeacherDashboard({ userId, userName, role }) {
     loadData();
   };
 
+  // Koçun görevi fiziksel olarak doğrulaması.
+  //
+  // is_done da BİRLİKTE set ediliyor. Asıl ihtiyaç şuydu: öğrenci
+  // işaretlemeyi unutmuş ama iş yapılmış; koç defteri görüp kapatabilmeli.
+  // Yalnızca onay kolonunu yazsaydık görev öğrencide "yapılacak" olarak
+  // durmaya devam eder, iki yerde iki farklı gerçek olurdu.
+  //
+  // İade tersini yapıyor: görev yeniden "yapılacak"a düşüyor ki
+  // öğrencinin listesinde yeniden çıksın.
+  const gorevDogrula = async (t, karar) => {
+    const onay = karar === "onaylandi";
+    let not = null;
+    if (!onay) {
+      not = window.prompt(
+        `"${t.title}" iade edilecek.\n\n` +
+        `Öğrenci görevi yeniden "yapılacak" olarak görecek.\n` +
+        `Sebebini yazabilirsiniz (isteğe bağlı):`, ""
+      );
+      if (not === null) return;            // vazgeçildi
+    }
+    setSaving(true);
+    const { hata } = await calistir(
+      supabase.from("tasks").update({
+        ogretmen_onayi: karar,
+        onay_notu:      not?.trim() || null,
+        onaylayan_id:   userId,
+        onay_tarihi:    new Date().toISOString(),
+        is_done:        onay,
+      }).eq("id", t.id),
+      onay ? "Gorev dogrulama" : "Gorev iadesi"
+    );
+    setSaving(false);
+    if (hata) return;
+    loadData();
+  };
+
   const handleReview = async (submissionId, status, note = null) => {
     const { hata } = await calistir(
       supabase.from("homework_submissions").update({
@@ -548,6 +584,33 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                   borderRadius: 99, background: c.light, color: c.text,
                                   maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                                 }}>{t.kaynak_program}</span>
+                              )}
+                              {/* Doğrulama rozeti — koç bir karar verdiyse görünür */}
+                              {t.ogretmen_onayi && (
+                                <span title={t.onay_notu ?? undefined} style={{
+                                  flexShrink: 0, fontSize: 9.5, fontWeight: 700,
+                                  padding: "1px 6px", borderRadius: 99,
+                                  background: t.ogretmen_onayi === "onaylandi" ? "#E8F9F0" : "#FFF0F0",
+                                  color:      t.ogretmen_onayi === "onaylandi" ? "#1A6B3C" : "#A32D2D",
+                                }}>{t.ogretmen_onayi === "onaylandi" ? "doğrulandı" : "iade"}</span>
+                              )}
+                              {/* Fiziksel doğrulama. Öğrenci işaretlememiş olsa
+                                  bile koç "yapıldığını gördüm" diyebiliyor —
+                                  asıl ihtiyaç buydu; doğrulama is_done'ı da
+                                  birlikte set ediyor. */}
+                              {t.ogretmen_onayi !== "onaylandi" && (
+                                <button onClick={() => gorevDogrula(t, "onaylandi")} disabled={saving}
+                                  title="Yapıldığını gördüm — doğrula" style={{
+                                    flexShrink: 0, background: "none", border: "none", padding: "0 2px",
+                                    color: "#1A6B3C", fontSize: 12, cursor: "pointer", fontWeight: 700,
+                                  }}>✓</button>
+                              )}
+                              {t.ogretmen_onayi !== "iade_edildi" && (
+                                <button onClick={() => gorevDogrula(t, "iade_edildi")} disabled={saving}
+                                  title="İade et — tekrar yapılsın" style={{
+                                    flexShrink: 0, background: "none", border: "none", padding: "0 2px",
+                                    color: "#C98A8A", fontSize: 12, cursor: "pointer", fontWeight: 700,
+                                  }}>↩</button>
                               )}
                               <button onClick={() => gorevKopyala(t)} title="Kopyala — Görev Ata formunu bu görevle doldurur" style={{
                                 flexShrink: 0, background: "none", border: "none", padding: "0 2px",
