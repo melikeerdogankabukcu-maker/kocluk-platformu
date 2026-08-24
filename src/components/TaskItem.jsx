@@ -1,4 +1,5 @@
 import { odevDosyalari } from "../lib/odevDosyalari";
+import { testOzetMetni } from "../lib/testHelpers";
 
 // Görev öğesi: durum + koç doğrulaması.
 //
@@ -57,7 +58,7 @@ export default function TaskItem({ done, label, sub, color, submission,
               fontSize: 11, padding: "2px 9px", borderRadius: 99,
               background: "#F8F3FC", color: "#7a5c92", fontWeight: 600,
             }}>
-              🧪 {t.correct_count ?? 0}/{t.question_count ?? 0}
+              🧪 {testOzetMetni(t)}
               {(t.dosyalar?.length || t.file_url) ? " · görselli" : ""}
             </span>
           ))}

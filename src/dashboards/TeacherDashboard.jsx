@@ -8,6 +8,7 @@ import { useTopics } from "../lib/TopicsContext";
 import { bolumeGit } from "../lib/bildirimHedef";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
 import { odevDosyalari } from "../lib/odevDosyalari";
+import { testOzetMetni } from "../lib/testHelpers";
 import SinavGirisFormu from "../components/SinavGirisFormu";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
@@ -936,7 +937,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
                       fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99,
                       background: oran >= 70 ? "#E8F9F0" : oran >= 50 ? "#FFF7E6" : "#FFF0F0",
                       color:      oran >= 70 ? "#1A6B3C" : oran >= 50 ? "#854F0B" : "#A32D2D",
-                    }}>{t.correct_count}/{t.question_count} · %{oran}</span>
+                    }}>{testOzetMetni(t)}{oran !== null ? ` · %${oran}` : ""}</span>
                   )}
                 </div>
               </div>

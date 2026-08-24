@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLessons } from "../hooks/useLessons";
 import { fmtTime, lessonStatusStyle, lessonTypeLabel, toDateStr } from "../lib/lessonHelpers";
+import { testOzetMetni } from "../lib/testHelpers";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import CalendarMonth from "./CalendarMonth";
@@ -145,8 +146,7 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
             🧪 {t.subject}{t.topic ? ` · ${t.topic}` : ""}
           </div>
           <div style={{ fontSize: 11, color: "#9b7fb0", marginTop: 1 }}>
-            {t.correct_count}/{t.question_count} doğru
-            {t.question_count > 0 ? ` · %${Math.round((t.correct_count / t.question_count) * 100)}` : ""}
+            {testOzetMetni(t)}
           </div>
         </div>
         {t.file_url && (

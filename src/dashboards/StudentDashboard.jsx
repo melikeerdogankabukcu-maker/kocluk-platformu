@@ -7,6 +7,7 @@ import { COLORS } from "../lib/theme";
 import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { computeTopicProgress } from "../lib/progressHelpers";
+import { testOzeti, testOzetMetni } from "../lib/testHelpers";
 import { useAnaliz } from "../hooks/useAnaliz";
 import Card from "../components/Card";
 import SectionTitle from "../components/SectionTitle";
@@ -99,9 +100,12 @@ export default function StudentDashboard({ userId, userName }) {
   const [testForm,      setTestForm]      = useState({
     exam_type: "TYT", subject: "", topic: "",
     custom_subject: "", custom_topic: "",
-    question_count: "", correct_count: "",
+    question_count: "", correct_count: "", wrong_count: "",
     task_id: "",                     // hangi görevi yerine getiriyor (boş olabilir)
   });
+  // Formdaki sayıların özeti — boş ve net anlık görünsün
+  const testOzet = testOzeti(testForm);
+
   // Teste eklenecek çözüm görselleri. Tek dosyaydı; ödevdeki gibi birden
   // fazla sayfa yüklenebilmeli.
   const [testFiles, setTestFiles] = useState([]);
@@ -342,6 +346,7 @@ export default function StudentDashboard({ userId, userName }) {
         topic:          konu || null,
         question_count: parseInt(testForm.question_count),
         correct_count:  parseInt(testForm.correct_count) || 0,
+        yanlis_count:   testForm.wrong_count === "" ? null : (parseInt(testForm.wrong_count) || 0),
         task_id:        testForm.task_id || null,
         dosyalar:       yuklenen,
         // Eski kod yolları ve raporlar yalnızca file_url'i biliyor
@@ -350,7 +355,7 @@ export default function StudentDashboard({ userId, userName }) {
       });
       if (error) throw error;
 
-      setTestForm({ exam_type: "TYT", subject: "", topic: "", custom_subject: "", custom_topic: "", question_count: "", correct_count: "", task_id: "" });
+      setTestForm({ exam_type: "TYT", subject: "", topic: "", custom_subject: "", custom_topic: "", question_count: "", correct_count: "", wrong_count: "", task_id: "" });
       setTestFiles([]);
       setShowTestForm(false);
       loadAll();
@@ -748,12 +753,15 @@ export default function StudentDashboard({ userId, userName }) {
               </select>
             )}
             <div style={{ display: "flex", gap: 8 }}>
-              <input placeholder="Toplam soru" type="number" value={testForm.question_count}
+              <input placeholder="Toplam" type="number" min="0" value={testForm.question_count}
                 onChange={e => setTestForm(f => ({ ...f, question_count: e.target.value }))}
-                style={{ ...inputStyle, flex: 1 }} />
-              <input placeholder="Doğru sayısı" type="number" value={testForm.correct_count}
+                style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+              <input placeholder="Doğru" type="number" min="0" value={testForm.correct_count}
                 onChange={e => setTestForm(f => ({ ...f, correct_count: e.target.value }))}
-                style={{ ...inputStyle, flex: 1 }} />
+                style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+              <input placeholder="Yanlış" type="number" min="0" value={testForm.wrong_count}
+                onChange={e => setTestForm(f => ({ ...f, wrong_count: e.target.value }))}
+                style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
             </div>
 
             {/* Çözüm görselleri — birden fazla sayfa yüklenebiliyor */}
@@ -807,9 +815,22 @@ export default function StudentDashboard({ userId, userName }) {
                 setTestFiles(l => [...l, ...secilenler]);
               }} />
 
-            {testForm.question_count > 0 && testForm.correct_count !== "" && (
-              <div style={{ fontSize: 12, color: c.text, background: c.light, padding: "8px 12px", borderRadius: 8 }}>
-                Doğruluk oranı: %{Math.round((parseInt(testForm.correct_count) / parseInt(testForm.question_count)) * 100)}
+            {/* Boş sayısı hesaplanıyor, ayrı bir alan olarak SORULMUYOR:
+                üçü de elle girilseydi birbiriyle çelişebilirdi. Toplamı
+                aşan giriş burada anında görünüyor. */}
+            {testOzet && (
+              <div style={{
+                fontSize: 12, padding: "8px 12px", borderRadius: 8,
+                background: testOzet.gecersiz ? "#FFF0F0" : c.light,
+                color:      testOzet.gecersiz ? "#A32D2D" : c.text,
+              }}>
+                {testOzet.gecersiz
+                  ? `Doğru + yanlış (${testOzet.dogru + testOzet.yanlis}) toplam soruyu (${testOzet.toplam}) aşıyor.`
+                  : <>
+                      Boş: <b>{testOzet.bos}</b>
+                      {" · "}Net: <b>{testOzet.net}</b>
+                      {" · "}Doğruluk: %{testOzet.oran}
+                    </>}
               </div>
             )}
             <div style={{ display: "flex", gap: 8 }}>
@@ -825,6 +846,7 @@ export default function StudentDashboard({ userId, userName }) {
             <div>
               <span style={{ fontSize: 13, fontWeight: 500, color: "#222" }}>{t.subject}</span>
               {t.topic && <span style={{ fontSize: 11, color: "#aaa", marginLeft: 6 }}>{t.topic}</span>}
+              <div style={{ fontSize: 11, color: "#999", marginTop: 1 }}>{testOzetMetni(t)}</div>
               <div style={{ fontSize: 11, color: "#bbb", marginTop: 1 }}>{new Date(t.created_at).toLocaleDateString("tr-TR")}</div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
