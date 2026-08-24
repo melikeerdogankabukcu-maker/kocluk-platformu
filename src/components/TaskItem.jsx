@@ -1,12 +1,18 @@
 import { useState, useRef } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
+import { odevDosyalari, DOSYA_SINIRI } from "../lib/odevDosyalari";
 
 // Görev öğesi: tamamlandı checkbox'ı + ödev yükleme / durum gösterimi
-export default function TaskItem({ id, done, label, sub, color, onToggle, submission, uploading, onFileSelect }) {
+export default function TaskItem({ id, done, label, sub, color, onToggle, submission, uploading, onFileSelect, onFileRemove }) {
   const [checked, setChecked] = useState(done);
   const [saving,  setSaving]  = useState(false);
   const fileInputRef = useRef(null);
+
+  // Hem yeni (dosyalar) hem eski (file_url) bicimi anliyor
+  const dosyalar = odevDosyalari(submission);
+  // Onaylanmis teslimin icerigi degismemeli
+  const kaldirilabilir = !!onFileRemove && submission?.status !== "onaylandi";
 
   const handleToggle = async (e) => {
     e.stopPropagation();
@@ -31,8 +37,13 @@ export default function TaskItem({ id, done, label, sub, color, onToggle, submis
     onaylandi:   { text: "Onaylandı ✓",   bg: "#E8F9F0", color: "#1A6B3C" },
     iade_edildi: { text: "İade edildi ↩",  bg: "#FFF0F0", color: "#A32D2D" },
   };
-  const badge     = submission ? statusStyle[submission.status] : null;
-  const canUpload = !submission || submission.status === "iade_edildi";
+  const badge = submission ? statusStyle[submission.status] : null;
+  // Eskiden yalnızca "gönderim yok" ya da "iade edildi" halinde
+  // yüklenebiliyordu; ilk dosya yüklenince buton kayboluyordu. Artık
+  // ONAYLANANA KADAR dosya eklenebiliyor — ödev iki seferde teslim
+  // edilebilsin diye. Onaylanmış teslime dokunulmuyor.
+  const canUpload = !submission || submission.status !== "onaylandi";
+  const doluMu    = dosyalar.length >= DOSYA_SINIRI;
 
   return (
     <div style={{
@@ -70,15 +81,39 @@ export default function TaskItem({ id, done, label, sub, color, onToggle, submis
               background: badge.bg, color: badge.color, fontWeight: 600,
             }}>{badge.text}</span>
           )}
-          {/* Görüntüle linki */}
-          {submission?.file_url && (
-            <a href={submission.file_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{
-              fontSize: 11, padding: "2px 9px", borderRadius: 99,
-              background: "#f5f2ee", color: "#555", textDecoration: "none",
-            }}>📎 Görüntüle</a>
-          )}
+          {/* Yüklenen dosyalar — her biri ayrı ayrı açılabilir ve
+              (onaylanmadıysa) kaldırılabilir. Tek bir "Görüntüle" linki
+              vardı; birden fazla dosyada hangisinin açıldığı belirsizdi. */}
+          {dosyalar.map((d, i) => (
+            <span key={d.url} style={{
+              display: "inline-flex", alignItems: "center", gap: 3,
+              fontSize: 11, padding: "2px 4px 2px 9px", borderRadius: 99,
+              background: "#f5f2ee", color: "#555", maxWidth: 190,
+            }}>
+              <a href={d.url} target="_blank" rel="noreferrer"
+                onClick={e => e.stopPropagation()}
+                title={d.ad}
+                style={{
+                  color: "#555", textDecoration: "none",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                📎 {dosyalar.length > 1 ? `${i + 1}. ` : ""}{d.ad}
+              </a>
+              {kaldirilabilir && (
+                <button
+                  onClick={e => { e.stopPropagation(); onFileRemove?.(id, d.url); }}
+                  disabled={uploading}
+                  title="Bu dosyayı kaldır"
+                  style={{
+                    border: "none", background: "transparent", cursor: "pointer",
+                    color: "#a99", fontSize: 12, lineHeight: 1, padding: "0 3px",
+                  }}
+                >✕</button>
+              )}
+            </span>
+          ))}
           {/* Yükleme butonu */}
-          {canUpload && (
+          {canUpload && !doluMu && (
             <button onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
               disabled={uploading} style={{
                 fontSize: 11, padding: "2px 9px", borderRadius: 99,
@@ -86,7 +121,11 @@ export default function TaskItem({ id, done, label, sub, color, onToggle, submis
                 color: color, cursor: uploading ? "not-allowed" : "pointer",
                 fontWeight: 600, opacity: uploading ? 0.7 : 1,
               }}>
-              {uploading ? "Yükleniyor..." : submission?.status === "iade_edildi" ? "📎 Tekrar Yükle" : "📎 Ödev Yükle"}
+              {uploading
+                ? "Yükleniyor..."
+                : dosyalar.length > 0
+                  ? `📎 Dosya ekle (${dosyalar.length}/${DOSYA_SINIRI})`
+                  : submission?.status === "iade_edildi" ? "📎 Tekrar Yükle" : "📎 Ödev Yükle"}
             </button>
           )}
         </div>
@@ -102,11 +141,12 @@ export default function TaskItem({ id, done, label, sub, color, onToggle, submis
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept="image/*,application/pdf"
           style={{ display: "none" }}
           onChange={e => {
-            const file = e.target.files?.[0];
-            if (file) onFileSelect?.(id, file);
+            const secilenler = Array.from(e.target.files ?? []);
+            if (secilenler.length > 0) onFileSelect?.(id, secilenler);
             e.target.value = "";
           }}
         />

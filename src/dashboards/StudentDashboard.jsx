@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
 import { branslariEkle, kocEtiketi } from "../lib/branslar";
+import { odevDosyalari, storageYolu, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
 import { COLORS } from "../lib/theme";
 import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
@@ -206,6 +207,7 @@ export default function StudentDashboard({ userId, userName }) {
       submission={submissions[t.id] ?? null}
       uploading={uploadingTaskId === t.id}
       onFileSelect={handleHomeworkUpload}
+      onFileRemove={handleHomeworkDosyaSil}
     />
   );
 
@@ -319,24 +321,52 @@ export default function StudentDashboard({ userId, userName }) {
     loadAll();
   };
 
-  const handleHomeworkUpload = async (taskId, file) => {
+  // Ödev yükleme. Birden fazla dosya seçilebiliyor ve seçilenler mevcut
+  // dosyaların ÜSTÜNE YAZILMIYOR, sonuna EKLENİYOR: öğrenci ödevini iki
+  // seferde (önce ilk sayfa, sonra ikinci) teslim edebilsin. Yanlış dosya
+  // eklenirse tek tek kaldırılabiliyor.
+  const handleHomeworkUpload = async (taskId, files) => {
+    const secilenler = Array.from(files ?? []);
+    if (secilenler.length === 0) return;
+
+    const mevcut = odevDosyalari(submissions[taskId]);
+    if (mevcut.length + secilenler.length > DOSYA_SINIRI) {
+      alert(`Bir ödeve en fazla ${DOSYA_SINIRI} dosya eklenebilir. ` +
+            `Şu an ${mevcut.length} dosya var.`);
+      return;
+    }
+    const buyuk = secilenler.find(f => f.size > BOYUT_SINIRI_MB * 1024 * 1024);
+    if (buyuk) {
+      alert(`"${buyuk.name}" çok büyük. Dosya başına sınır ${BOYUT_SINIRI_MB} MB.`);
+      return;
+    }
+
     setUploadingTaskId(taskId);
     try {
-      const path = `${userId}/${taskId}`;
-      const { error: uploadError } = await supabase.storage
-        .from("homework")
-        .upload(path, file, { upsert: true, contentType: file.type });
-      if (uploadError) throw uploadError;
+      const damga = Date.now();
+      const yeniler = [];
+      for (let i = 0; i < secilenler.length; i++) {
+        const dosya = secilenler[i];
+        const yol = yeniDosyaYolu(userId, taskId, dosya.name, i, damga);
+        const { error: yuklemeHatasi } = await supabase.storage
+          .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
+        if (yuklemeHatasi) throw yuklemeHatasi;
+        const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
+        yeniler.push({ url: publicUrl, ad: dosya.name });
+      }
 
-      const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(path);
+      const tumu = [...mevcut, ...yeniler];
 
       // Supabase hata FIRLATMAZ; error okunmazsa yukleme basarisiz olsa
       // bile catch tetiklenmez ve ogrenci odevi gonderildi sanir.
       const { error: kayitHatasi } = await supabase.from("homework_submissions").upsert({
         task_id:      taskId,
         student_id:   userId,
-        file_url:     publicUrl,
-        file_name:    file.name,
+        dosyalar:     tumu,
+        // Eski paketler ve eski kod yolları yalnızca file_url'i biliyor;
+        // ilk dosyayla dolduruluyor ki hiçbir yerde "dosya yok" görünmesin.
+        file_url:     tumu[0]?.url  ?? null,
+        file_name:    tumu[0]?.ad   ?? null,
         status:       "beklemede",
         teacher_note: null,
         submitted_at: new Date().toISOString(),
@@ -347,7 +377,50 @@ export default function StudentDashboard({ userId, userName }) {
       loadAll();
     } catch (err) {
       console.error("Ödev yükleme hatası:", err);
-      alert("Yükleme sırasında bir hata oluştu. Konsolu kontrol et.");
+      alert("Yükleme sırasında bir hata oluştu: " + (err?.message ?? "bilinmeyen hata"));
+    } finally {
+      setUploadingTaskId(null);
+    }
+  };
+
+  // Yanlış eklenen dosyayı kaldır. Öğretmen onayladıktan sonra
+  // kaldırılamıyor — onaylanmış bir teslimin içeriği değişmemeli.
+  const handleHomeworkDosyaSil = async (taskId, url) => {
+    const gonderim = submissions[taskId];
+    if (!gonderim || gonderim.status === "onaylandi") return;
+    const kalan = odevDosyalari(gonderim).filter(d => d.url !== url);
+    if (!window.confirm("Bu dosya ödevden kaldırılsın mı?")) return;
+
+    setUploadingTaskId(taskId);
+    try {
+      const { error: kayitHatasi } = await supabase.from("homework_submissions")
+        .update({
+          dosyalar:  kalan,
+          file_url:  kalan[0]?.url ?? null,
+          file_name: kalan[0]?.ad  ?? null,
+        })
+        .eq("id", gonderim.id);
+      if (kayitHatasi) throw kayitHatasi;
+
+      // Kayıt güncellendikten SONRA depodan siliniyor. Ters sırada,
+      // güncelleme başarısız olursa dosya silinmiş ama kayıtta duruyor
+      // olurdu: öğrenciye görünen ama açılmayan bir bağlantı.
+      //
+      // Depo silmesi başarısız olursa AKIŞ DURMUYOR: kayıt zaten
+      // güncellendi, öğrenci açısından dosya kalktı. Geriye yalnızca
+      // kimsenin ulaşamadığı bir dosya kalır. Kullanıcıya hata
+      // göstermek, aslında işe yaramış bir işlemi başarısız gibi
+      // gösterirdi — ama sessizce yutmuyoruz, konsola yazıyoruz.
+      const yol = storageYolu(url);
+      if (yol) {
+        const { error: depoHatasi } = await supabase.storage.from("homework").remove([yol]);
+        if (depoHatasi) console.error("[Odev dosyasi depodan silinemedi]", yol, depoHatasi);
+      }
+
+      loadAll();
+    } catch (err) {
+      console.error("Dosya kaldırma hatası:", err);
+      alert("Dosya kaldırılamadı: " + (err?.message ?? "bilinmeyen hata"));
     } finally {
       setUploadingTaskId(null);
     }

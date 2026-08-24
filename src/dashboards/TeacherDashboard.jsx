@@ -7,6 +7,7 @@ import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { useTopics } from "../lib/TopicsContext";
 import { bolumeGit } from "../lib/bildirimHedef";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
+import { odevDosyalari } from "../lib/odevDosyalari";
 import SinavGirisFormu from "../components/SinavGirisFormu";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
@@ -729,10 +730,21 @@ export default function TeacherDashboard({ userId, userName, role }) {
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-                  <a href={sub.file_url} target="_blank" rel="noreferrer" style={{
-                    fontSize: 11, padding: "3px 10px", borderRadius: 99,
-                    background: "#f5f2ee", color: "#555", textDecoration: "none",
-                  }}>📎 Görüntüle</a>
+                  {/* Öğrenci birden fazla dosya yükleyebiliyor; hepsi tek
+                      tek açılabilmeli. Tek "Görüntüle" linki yalnızca
+                      ilkini gösterirdi ve öğretmen gerisini göremezdi. */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
+                    {odevDosyalari(sub).map((d, i, hepsi) => (
+                      <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
+                        title={d.ad}
+                        style={{
+                          fontSize: 11, padding: "3px 10px", borderRadius: 99,
+                          background: "#f5f2ee", color: "#555", textDecoration: "none",
+                          maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}>📎 {hepsi.length > 1 ? `${i + 1}. ` : ""}{d.ad}</a>
+                    ))}
+                  </div>
                   <div style={{ display: "flex", gap: 4 }}>
                     <button onClick={() => handleReview(sub.id, "onaylandi")} style={{
                       fontSize: 11, padding: "3px 10px", borderRadius: 99,
