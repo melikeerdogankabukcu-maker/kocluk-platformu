@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
 import { branslariEkle, kocEtiketi } from "../lib/branslar";
-import { odevDosyalari, storageYolu, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
+import { yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
 import { COLORS } from "../lib/theme";
 import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
@@ -34,7 +34,6 @@ export default function StudentDashboard({ userId, userName }) {
   const [examResults,  setExamResults]  = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [submissions,     setSubmissions]     = useState({});  // { task_id: submission }
-  const [uploadingTaskId, setUploadingTaskId] = useState(null);
   const [teachers,        setTeachers]        = useState([]);
   // Velisi — mesajlaşma kişi listesinde çıkıyor. loadAll içinde
   // doldurulduğu için tanımı yukarıda olmak zorunda.
@@ -101,8 +100,11 @@ export default function StudentDashboard({ userId, userName }) {
     exam_type: "TYT", subject: "", topic: "",
     custom_subject: "", custom_topic: "",
     question_count: "", correct_count: "",
+    task_id: "",                     // hangi görevi yerine getiriyor (boş olabilir)
   });
-  const [testFile, setTestFile] = useState(null);   // teste eklenecek çözüm görseli (opsiyonel)
+  // Teste eklenecek çözüm görselleri. Tek dosyaydı; ödevdeki gibi birden
+  // fazla sayfa yüklenebilmeli.
+  const [testFiles, setTestFiles] = useState([]);
   const testFileInputRef = useRef(null);
 
   const loadAll = async () => {
@@ -196,7 +198,16 @@ export default function StudentDashboard({ userId, userName }) {
   // öğrenciye tamamen görünmez olurlar.
   const tarihsizBekleyen = pendingTasks.filter(t => !t.due_date);
 
-  // Görev satırı: işaretleme kutusu + ödev yükleme. Hem takvimde seçili günde
+  // Test formundaki görev listesi: koçun henüz kapatmadığı görevler.
+  // Tarihi yakın olan üstte olsun; tarihsizler en sona.
+  const bekleyenGorevler = tasks
+    .filter(t => !t.is_done && t.ogretmen_onayi !== "onaylandi")
+    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+
+  // Göreve bağlanmış testler — kanıt artık buradan geliyor
+  const gorevinTestleri = (taskId) => testSessions.filter(ts => ts.task_id === taskId);
+
+  // Görev satırı: durum + koç doğrulaması. Hem takvimde seçili günde
   // hem takvim altındaki listelerde aynı bileşen kullanılıyor.
   const gorevSatiri = (t) => (
     <TaskItem
@@ -205,9 +216,7 @@ export default function StudentDashboard({ userId, userName }) {
         t.due_date ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : null,
         t.description].filter(Boolean).join(" · ")}
       submission={submissions[t.id] ?? null}
-      uploading={uploadingTaskId === t.id}
-      onFileSelect={handleHomeworkUpload}
-      onFileRemove={handleHomeworkDosyaSil}
+      testler={gorevinTestleri(t.id)}
       ogretmenOnayi={t.ogretmen_onayi} onayNotu={t.onay_notu}
     />
   );
@@ -257,15 +266,19 @@ export default function StudentDashboard({ userId, userName }) {
     if (!ders || !testForm.question_count) return;
     setSavingTest(true);
     try {
-      // Çözüm görseli seçildiyse önce storage'a yükle
-      let fileUrl = null;
-      if (testFile) {
-        const path = `${userId}/test_${Date.now()}`;
-        const { error: uploadError } = await supabase.storage
-          .from("homework")
-          .upload(path, testFile, { upsert: true, contentType: testFile.type });
-        if (uploadError) throw uploadError;
-        fileUrl = supabase.storage.from("homework").getPublicUrl(path).data.publicUrl;
+      // Çözüm görselleri — ödevdeki yol üretimiyle aynı. Eskiden yol
+      // `{ogrenci}/test_{damga}` idi ve tek dosya alıyordu; her dosya
+      // kendi anahtarına yazılmalı, yoksa üst üste binerler.
+      const damga = Date.now();
+      const yuklenen = [];
+      for (let i = 0; i < testFiles.length; i++) {
+        const dosya = testFiles[i];
+        const yol = yeniDosyaYolu(userId, `test`, dosya.name, i, damga);
+        const { error: yuklemeHatasi } = await supabase.storage
+          .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
+        if (yuklemeHatasi) throw yuklemeHatasi;
+        const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
+        yuklenen.push({ url: publicUrl, ad: dosya.name });
       }
 
       const { error } = await supabase.from("test_sessions").insert({
@@ -274,13 +287,16 @@ export default function StudentDashboard({ userId, userName }) {
         topic:          konu || null,
         question_count: parseInt(testForm.question_count),
         correct_count:  parseInt(testForm.correct_count) || 0,
-        file_url:       fileUrl,
-        file_name:      testFile?.name ?? null,
+        task_id:        testForm.task_id || null,
+        dosyalar:       yuklenen,
+        // Eski kod yolları ve raporlar yalnızca file_url'i biliyor
+        file_url:       yuklenen[0]?.url ?? null,
+        file_name:      yuklenen[0]?.ad  ?? null,
       });
       if (error) throw error;
 
-      setTestForm({ exam_type: "TYT", subject: "", topic: "", custom_subject: "", custom_topic: "", question_count: "", correct_count: "" });
-      setTestFile(null);
+      setTestForm({ exam_type: "TYT", subject: "", topic: "", custom_subject: "", custom_topic: "", question_count: "", correct_count: "", task_id: "" });
+      setTestFiles([]);
       setShowTestForm(false);
       loadAll();
     } catch (err) {
@@ -322,110 +338,7 @@ export default function StudentDashboard({ userId, userName }) {
     loadAll();
   };
 
-  // Ödev yükleme. Birden fazla dosya seçilebiliyor ve seçilenler mevcut
-  // dosyaların ÜSTÜNE YAZILMIYOR, sonuna EKLENİYOR: öğrenci ödevini iki
-  // seferde (önce ilk sayfa, sonra ikinci) teslim edebilsin. Yanlış dosya
-  // eklenirse tek tek kaldırılabiliyor.
-  const handleHomeworkUpload = async (taskId, files) => {
-    const secilenler = Array.from(files ?? []);
-    if (secilenler.length === 0) return;
 
-    const mevcut = odevDosyalari(submissions[taskId]);
-    if (mevcut.length + secilenler.length > DOSYA_SINIRI) {
-      alert(`Bir ödeve en fazla ${DOSYA_SINIRI} dosya eklenebilir. ` +
-            `Şu an ${mevcut.length} dosya var.`);
-      return;
-    }
-    const buyuk = secilenler.find(f => f.size > BOYUT_SINIRI_MB * 1024 * 1024);
-    if (buyuk) {
-      alert(`"${buyuk.name}" çok büyük. Dosya başına sınır ${BOYUT_SINIRI_MB} MB.`);
-      return;
-    }
-
-    setUploadingTaskId(taskId);
-    try {
-      const damga = Date.now();
-      const yeniler = [];
-      for (let i = 0; i < secilenler.length; i++) {
-        const dosya = secilenler[i];
-        const yol = yeniDosyaYolu(userId, taskId, dosya.name, i, damga);
-        const { error: yuklemeHatasi } = await supabase.storage
-          .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
-        if (yuklemeHatasi) throw yuklemeHatasi;
-        const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
-        yeniler.push({ url: publicUrl, ad: dosya.name });
-      }
-
-      const tumu = [...mevcut, ...yeniler];
-
-      // Supabase hata FIRLATMAZ; error okunmazsa yukleme basarisiz olsa
-      // bile catch tetiklenmez ve ogrenci odevi gonderildi sanir.
-      const { error: kayitHatasi } = await supabase.from("homework_submissions").upsert({
-        task_id:      taskId,
-        student_id:   userId,
-        dosyalar:     tumu,
-        // Eski paketler ve eski kod yolları yalnızca file_url'i biliyor;
-        // ilk dosyayla dolduruluyor ki hiçbir yerde "dosya yok" görünmesin.
-        file_url:     tumu[0]?.url  ?? null,
-        file_name:    tumu[0]?.ad   ?? null,
-        status:       "beklemede",
-        teacher_note: null,
-        submitted_at: new Date().toISOString(),
-        reviewed_at:  null,
-      }, { onConflict: "task_id" });
-      if (kayitHatasi) throw kayitHatasi;
-
-      loadAll();
-    } catch (err) {
-      console.error("Ödev yükleme hatası:", err);
-      alert("Yükleme sırasında bir hata oluştu: " + (err?.message ?? "bilinmeyen hata"));
-    } finally {
-      setUploadingTaskId(null);
-    }
-  };
-
-  // Yanlış eklenen dosyayı kaldır. Öğretmen onayladıktan sonra
-  // kaldırılamıyor — onaylanmış bir teslimin içeriği değişmemeli.
-  const handleHomeworkDosyaSil = async (taskId, url) => {
-    const gonderim = submissions[taskId];
-    if (!gonderim || gonderim.status === "onaylandi") return;
-    const kalan = odevDosyalari(gonderim).filter(d => d.url !== url);
-    if (!window.confirm("Bu dosya ödevden kaldırılsın mı?")) return;
-
-    setUploadingTaskId(taskId);
-    try {
-      const { error: kayitHatasi } = await supabase.from("homework_submissions")
-        .update({
-          dosyalar:  kalan,
-          file_url:  kalan[0]?.url ?? null,
-          file_name: kalan[0]?.ad  ?? null,
-        })
-        .eq("id", gonderim.id);
-      if (kayitHatasi) throw kayitHatasi;
-
-      // Kayıt güncellendikten SONRA depodan siliniyor. Ters sırada,
-      // güncelleme başarısız olursa dosya silinmiş ama kayıtta duruyor
-      // olurdu: öğrenciye görünen ama açılmayan bir bağlantı.
-      //
-      // Depo silmesi başarısız olursa AKIŞ DURMUYOR: kayıt zaten
-      // güncellendi, öğrenci açısından dosya kalktı. Geriye yalnızca
-      // kimsenin ulaşamadığı bir dosya kalır. Kullanıcıya hata
-      // göstermek, aslında işe yaramış bir işlemi başarısız gibi
-      // gösterirdi — ama sessizce yutmuyoruz, konsola yazıyoruz.
-      const yol = storageYolu(url);
-      if (yol) {
-        const { error: depoHatasi } = await supabase.storage.from("homework").remove([yol]);
-        if (depoHatasi) console.error("[Odev dosyasi depodan silinemedi]", yol, depoHatasi);
-      }
-
-      loadAll();
-    } catch (err) {
-      console.error("Dosya kaldırma hatası:", err);
-      alert("Dosya kaldırılamadı: " + (err?.message ?? "bilinmeyen hata"));
-    } finally {
-      setUploadingTaskId(null);
-    }
-  };
 
   // Profil yeterince doluysa "tamamlandı" sayılır
   const profileComplete = !!(profile?.school_name && profile?.grade && profile?.field_preference);
@@ -712,6 +625,34 @@ export default function StudentDashboard({ userId, userName }) {
           </button>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+            {/* Görev bağı — zorunlu değil. Bir görevi yerine getirmek için
+                çözülüyorsa görev seçiliyor, koç bunu görüp doğruluyor.
+                Kendi isteğiyle çözülen test boş bırakılıyor. */}
+            <div>
+              <label style={{ fontSize: 11.5, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
+                Bir görev için mi çözdün?
+              </label>
+              <select value={testForm.task_id}
+                onChange={e => setTestForm(f => ({ ...f, task_id: e.target.value }))}
+                style={{ ...inputStyle, width: "100%", color: testForm.task_id ? "#222" : "#aaa" }}>
+                <option value="">Hayır, kendim çözdüm</option>
+                {bekleyenGorevler.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}{t.subject ? ` · ${t.subject}` : ""}
+                    {t.due_date ? ` · ${new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" })}` : ""}
+                  </option>
+                ))}
+              </select>
+              {testForm.task_id && (
+                <div style={{
+                  fontSize: 10.5, color: c.text, background: c.light,
+                  padding: "7px 10px", borderRadius: 8, marginTop: 6, lineHeight: 1.45,
+                }}>
+                  Bu test koçuna gönderilecek. Görevi <b>koçun doğrulamasıyla</b> kapanır.
+                </div>
+              )}
+            </div>
+
             {/* Sınav türü (müfredat seçimi için) */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {sinavTurleri.map(tip => (
@@ -760,18 +701,56 @@ export default function StudentDashboard({ userId, userName }) {
                 style={{ ...inputStyle, flex: 1 }} />
             </div>
 
-            {/* Çözüm görseli (opsiyonel) */}
-            <button onClick={() => testFileInputRef.current?.click()} style={{
-              width: "100%", padding: "9px 0", borderRadius: 10,
-              border: `1.5px dashed ${testFile ? c.mid : "#d8d4cd"}`,
-              background: testFile ? c.light : "transparent",
-              color: testFile ? c.text : "#999", fontSize: 12, fontWeight: 600, cursor: "pointer",
-            }}>
-              {testFile ? `📎 ${testFile.name} ✓` : "📎 Çözüm görseli ekle (opsiyonel)"}
-            </button>
-            <input ref={testFileInputRef} type="file" accept="image/*,application/pdf"
+            {/* Çözüm görselleri — birden fazla sayfa yüklenebiliyor */}
+            {testFiles.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {testFiles.map((f, i) => (
+                  <span key={`${f.name}-${i}`} style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    fontSize: 11, padding: "3px 5px 3px 10px", borderRadius: 99,
+                    background: c.light, color: c.text, maxWidth: 200,
+                  }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      📎 {f.name}
+                    </span>
+                    <button onClick={() => setTestFiles(l => l.filter((_, j) => j !== i))}
+                      title="Kaldır" style={{
+                        border: "none", background: "transparent", cursor: "pointer",
+                        color: c.text, fontSize: 12, lineHeight: 1, padding: "0 3px",
+                      }}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {testFiles.length < DOSYA_SINIRI && (
+              <button onClick={() => testFileInputRef.current?.click()} style={{
+                width: "100%", padding: "9px 0", borderRadius: 10,
+                border: `1.5px dashed ${testFiles.length ? c.mid : "#d8d4cd"}`,
+                background: "transparent",
+                color: testFiles.length ? c.text : "#999", fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>
+                {testFiles.length
+                  ? `📎 Görsel ekle (${testFiles.length}/${DOSYA_SINIRI})`
+                  : "📎 Çözüm görseli ekle (opsiyonel)"}
+              </button>
+            )}
+            <input ref={testFileInputRef} type="file" multiple accept="image/*,application/pdf"
               style={{ display: "none" }}
-              onChange={e => { setTestFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+              onChange={e => {
+                const secilenler = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                if (secilenler.length === 0) return;
+                if (testFiles.length + secilenler.length > DOSYA_SINIRI) {
+                  alert(`En fazla ${DOSYA_SINIRI} görsel eklenebilir.`);
+                  return;
+                }
+                const buyuk = secilenler.find(f => f.size > BOYUT_SINIRI_MB * 1024 * 1024);
+                if (buyuk) {
+                  alert(`"${buyuk.name}" çok büyük. Dosya başına sınır ${BOYUT_SINIRI_MB} MB.`);
+                  return;
+                }
+                setTestFiles(l => [...l, ...secilenler]);
+              }} />
 
             {testForm.question_count > 0 && testForm.correct_count !== "" && (
               <div style={{ fontSize: 12, color: c.text, background: c.light, padding: "8px 12px", borderRadius: 8 }}>
@@ -786,7 +765,7 @@ export default function StudentDashboard({ userId, userName }) {
             </div>
           </div>
         )}
-        {testSessions.slice(0, 4).map((t, i) => (
+        {testSessions.slice(0, 4).map((t) => (
           <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: "1px solid #f5f2ee" }}>
             <div>
               <span style={{ fontSize: 13, fontWeight: 500, color: "#222" }}>{t.subject}</span>

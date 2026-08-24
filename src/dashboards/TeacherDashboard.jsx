@@ -41,6 +41,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const [recentTests, setRecentTests] = useState([]);
   // Ogrenci basina gomulu program adimlari (haftalik program ciktisinda kullaniliyor)
   const [programMap,  setProgramMap]  = useState({});
+  // task_id -> o goreve baglanmis testler (kanit)
+  const [gorevTestMap, setGorevTestMap] = useState({});
   // Mesajlasilabilecek veliler: ogrencilerin family_links kayitlarindan
   const [veliler,     setVeliler]     = useState([]);
   // Diğer koçlar (yönetici dahil) — personel kendi arasında yazışabilsin
@@ -133,12 +135,26 @@ export default function TeacherDashboard({ userId, userName, role }) {
         ? supabase.from("family_links").select("parent_id, student_id")
             .in("student_id", studentIds)
         : Promise.resolve({ data: [] }),
+      // Goreve bagli testler — kanit artik buradan geliyor, dolayisiyla
+      // recentTests'in 7 gunluk penceresi yetmez: gorev ne zaman
+      // gonderilmis olursa olsun kocun gormesi gerekiyor.
+      studentIds.length > 0
+        ? supabase.from("test_sessions").select("*")
+            .in("student_id", studentIds).not("task_id", "is", null)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] }),
     ]);
     hatalariBildir(sonuclar,
       ["gorevler", "ogrenci profilleri", "odev gonderimleri", "testler",
-       "program atamalari", "veli baglantilari"]);
+       "program atamalari", "veli baglantilari", "goreve bagli testler"]);
     const [{ data: taskData }, { data: profileData }, { data: submissionData },
-      { data: testData }, { data: atamaData }, { data: veliBaglari }] = sonuclar;
+      { data: testData }, { data: atamaData }, { data: veliBaglari },
+      { data: gorevTestleri }] = sonuclar;
+
+    // task_id -> testler
+    const testMap = {};
+    (gorevTestleri ?? []).forEach(t => { (testMap[t.task_id] ??= []).push(t); });
+    setGorevTestMap(testMap);
 
     // Gomulu programlarin adimlarini ogrenciye gore grupla. Ogretmenin kendi
     // yazdigi programlar zaten goreve donustugu icin burada yer almaz.
@@ -585,6 +601,23 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                   maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                                 }}>{t.kaynak_program}</span>
                               )}
+                              {/* Öğrencinin gönderdiği kanıt: göreve bağlı test.
+                                  Puan ve görseller burada; koç doğrulamadan
+                                  önce görebilmeli. */}
+                              {(gorevTestMap[t.id] ?? []).map(ts => (
+                                <span key={ts.id} style={{
+                                  flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4,
+                                  fontSize: 9.5, fontWeight: 700, padding: "1px 6px",
+                                  borderRadius: 99, background: "#F8F3FC", color: "#7a5c92",
+                                }}>
+                                  🧪 {ts.correct_count ?? 0}/{ts.question_count ?? 0}
+                                  {odevDosyalari(ts).map((d, i) => (
+                                    <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
+                                      title={d.ad} style={{ color: "#7a5c92", textDecoration: "none" }}
+                                    >📎{odevDosyalari(ts).length > 1 ? i + 1 : ""}</a>
+                                  ))}
+                                </span>
+                              ))}
                               {/* Doğrulama rozeti — koç bir karar verdiyse görünür */}
                               {t.ogretmen_onayi && (
                                 <span title={t.onay_notu ?? undefined} style={{
