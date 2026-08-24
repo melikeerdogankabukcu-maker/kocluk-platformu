@@ -27,7 +27,7 @@ import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
 
 export default function StudentDashboard({ userId, userName }) {
   const c = COLORS.student;
-  const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();
+  const { sinavTurleri, examSubjectsOf, topicsOf, dersinTuru } = useTopics();
 
   const [tasks,        setTasks]        = useState([]);
   const [testSessions, setTestSessions] = useState([]);
@@ -203,6 +203,61 @@ export default function StudentDashboard({ userId, userName }) {
   const bekleyenGorevler = tasks
     .filter(t => !t.is_done && t.ogretmen_onayi !== "onaylandi")
     .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+
+  // Görev seçilince ders ve konu kendiliğinden dolsun.
+  //
+  // Görevdeki ders/konu hangi sınav türüne aitse form o türe geçiyor —
+  // görev TYT konusuysa AYT sekmesinde açık kalması hem yanlış hem de
+  // konu listesini boş bırakırdı.
+  //
+  // Ders müfredatta yoksa (koç serbest metinle yazmış olabilir) form
+  // "Diğer"e düşüp adları elle yazılan alanlara koyuyor. Sessizce boş
+  // bırakmak, öğrencinin kendi görevinin dersini yeniden seçmesi
+  // demekti — kolaylık olsun diye eklenen şey zahmete dönerdi.
+  const gorevSec = (taskId) => {
+    const gorev = bekleyenGorevler.find(t => t.id === taskId);
+    setTestForm(f => {
+      const temel = { ...f, task_id: taskId };
+      if (!gorev?.subject) return temel;
+
+      const tur = dersinTuru(gorev.subject, gorev.topic);
+      if (tur) {
+        const konular = topicsOf(tur, gorev.subject);
+        return {
+          ...temel,
+          exam_type: tur,
+          subject:   gorev.subject,
+          // Konu müfredatta yoksa boş bırakılıyor: olmayan bir seçeneği
+          // seçili göstermek açılır listeyi bozar
+          topic:     konular.includes(gorev.topic) ? gorev.topic : "",
+          custom_subject: "", custom_topic: "",
+        };
+      }
+      // dersinTuru harf büyüklüğüne duyarlı; görevlerde "MATEMATİK" ve
+      // "kimya" gibi varyantlar var (103 görevin 3'ü). Bunları "Diğer"e
+      // düşürmek, öğrenciye müfredatta zaten duran dersi elle yazdırmak
+      // olurdu. Türkçe küçültme ŞART: düz toLowerCase "İ" harfini
+      // birleşik noktalı i'ye çeviriyor ve "matematik" ile eşleşmiyor.
+      const kucult = (x) => (x ?? "").toLocaleLowerCase("tr").trim();
+      for (const t of sinavTurleri) {
+        const ders = examSubjectsOf(t).find(d => kucult(d) === kucult(gorev.subject));
+        if (!ders) continue;
+        const konu = topicsOf(t, ders).find(k => kucult(k) === kucult(gorev.topic));
+        return {
+          ...temel,
+          exam_type: t, subject: ders, topic: konu ?? "",
+          custom_subject: "", custom_topic: "",
+        };
+      }
+
+      return {
+        ...temel,
+        subject: "__diger",
+        custom_subject: gorev.subject,
+        custom_topic:   gorev.topic ?? "",
+      };
+    });
+  };
 
   // Göreve bağlanmış testler — kanıt artık buradan geliyor
   const gorevinTestleri = (taskId) => testSessions.filter(ts => ts.task_id === taskId);
@@ -633,7 +688,7 @@ export default function StudentDashboard({ userId, userName }) {
                 Bir görev için mi çözdün?
               </label>
               <select value={testForm.task_id}
-                onChange={e => setTestForm(f => ({ ...f, task_id: e.target.value }))}
+                onChange={e => gorevSec(e.target.value)}
                 style={{ ...inputStyle, width: "100%", color: testForm.task_id ? "#222" : "#aaa" }}>
                 <option value="">Hayır, kendim çözdüm</option>
                 {bekleyenGorevler.map(t => (
@@ -731,7 +786,7 @@ export default function StudentDashboard({ userId, userName }) {
               }}>
                 {testFiles.length
                   ? `📎 Görsel ekle (${testFiles.length}/${DOSYA_SINIRI})`
-                  : "📎 Çözüm görseli ekle (opsiyonel)"}
+                  : "📎 Çözüm görseli ekle"}
               </button>
             )}
             <input ref={testFileInputRef} type="file" multiple accept="image/*,application/pdf"
