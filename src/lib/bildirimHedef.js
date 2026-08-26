@@ -1,3 +1,5 @@
+import { bolumSekmesiniAc } from "./bolumBaglam";
+
 // Bildirime tıklanınca gidilecek bölüm. Uygulama tek sayfa olduğu için
 // yönlendirme yerine ilgili karta kaydırıp kısa süreli vurgu yapıyoruz.
 // Hedef hem bildirim türüne hem de bakan kişinin rolüne bağlı:
@@ -33,10 +35,18 @@ Object.values(HEDEFLER).forEach(h => { if (h.teacher) h.admin = h.teacher; });
 export const bildirimHedefi = (tur, rol) => HEDEFLER[tur]?.[rol] ?? null;
 
 // Hedefe kaydır ve kısa süre vurgula. Bölüm bulunamazsa sessizce geç.
+//
+// Hedef sekmeli bir bölümün KAPALI sekmesindeyse DOM'da hiç bulunmuyor.
+// Önce o sekme açılıyor, sonra React'in çizmesi için bir kare beklenip
+// kaydırma tekrar deneniyor — beklenmezse eleman hâlâ yoktur.
 export function bolumeGit(hedefId) {
   if (!hedefId) return false;
-  const el = document.getElementById(hedefId);
-  if (!el) return false;
+  let el = document.getElementById(hedefId);
+  if (!el) {
+    if (!bolumSekmesiniAc(hedefId)) return false;
+    requestAnimationFrame(() => bolumeGit(hedefId));
+    return true;
+  }
 
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 
