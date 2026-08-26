@@ -35,7 +35,6 @@ export default function StudentDashboard({ userId, userName }) {
   const [testSessions, setTestSessions] = useState([]);
   const [examResults,  setExamResults]  = useState([]);
   const [loading,      setLoading]      = useState(true);
-  const [submissions,     setSubmissions]     = useState({});  // { task_id: submission }
   const [teachers,        setTeachers]        = useState([]);
   // Velisi — mesajlaşma kişi listesinde çıkıyor. loadAll içinde
   // doldurulduğu için tanımı yukarıda olmak zorunda.
@@ -121,27 +120,22 @@ export default function StudentDashboard({ userId, userName }) {
   const testFileInputRef = useRef(null);
 
   const loadAll = async () => {
-    const [t, ts, er, prof, sub, tch, vel] = await Promise.all([
+    const [t, ts, er, prof, tch, vel] = await Promise.all([
       supabase.from("tasks").select("*").eq("student_id", userId).order("created_at", { ascending: false }),
       supabase.from("test_sessions").select("*").eq("student_id", userId).order("created_at", { ascending: false }),
       supabase.from("exam_results").select("*").eq("student_id", userId).order("exam_date", { ascending: false }),
       supabase.from("student_profiles").select("*").eq("id", userId).maybeSingle(),
-      supabase.from("homework_submissions").select("*").eq("student_id", userId),
       supabase.from("teacher_students").select("teacher_id")
         .eq("student_id", userId).eq("durum", "onaylandi"),
       // Velisi — mesajlaşma kişi listesi için
       supabase.from("family_links").select("parent_id").eq("student_id", userId),
     ]);
-    hatalariBildir([t, ts, er, prof, sub, tch, vel],
-      ["gorevler", "testler", "sinavlar", "profil", "odev gonderimleri",
+    hatalariBildir([t, ts, er, prof, tch, vel],
+      ["gorevler", "testler", "sinavlar", "profil",
        "bagli ogretmenler", "veli baglantisi"]);
     setTasks(t.data ?? []);
     setTestSessions(ts.data ?? []);
     setExamResults(er.data ?? []);
-    // Gönderimleri task_id → submission şeklinde map'e çevir
-    const subMap = {};
-    (sub.data ?? []).forEach(s => { subMap[s.task_id] = s; });
-    setSubmissions(subMap);
     // Bağlı öğretmenler; tablo yoksa (migration çalışmadıysa) hepsine düşülür
     if (tch.error) {
       const { veri } = await calistir(
@@ -283,7 +277,6 @@ export default function StudentDashboard({ userId, userName }) {
       sub={[t.subject, t.topic, t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
         t.due_date ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : null,
         t.description].filter(Boolean).join(" · ")}
-      submission={submissions[t.id] ?? null}
       testler={gorevinTestleri(t.id)}
       ogretmenOnayi={t.ogretmen_onayi} onayNotu={t.onay_notu}
     />
@@ -338,6 +331,13 @@ export default function StudentDashboard({ userId, userName }) {
     if (!t.task_id) return true;
     return tasks.find(x => x.id === t.task_id)?.ogretmen_onayi !== "onaylandi";
   };
+
+  // Koçun onayladığı testler bu listede DURMUYOR: iş bitmiş, üzerinde
+  // yapılabilecek bir şey yok ve liste zamanla kapanmış kayıtlarla
+  // dolar. Kaybolmuyorlar — bağlı oldukları görevin altında puanı ve
+  // görselleriyle görünmeye devam ediyorlar.
+  const acikTestler = testSessions.filter(testDuzenlenebilir);
+  const onayliTestSayisi = testSessions.length - acikTestler.length;
 
   const testiDuzenle = (t) => {
     const tur = dersinTuru(t.subject, t.topic);
@@ -940,7 +940,7 @@ export default function StudentDashboard({ userId, userName }) {
             </div>
           </div>
         )}
-        {(tumTestlerAcik ? testSessions : testSessions.slice(0, 4)).map((t) => (
+        {(tumTestlerAcik ? acikTestler : acikTestler.slice(0, 4)).map((t) => (
           <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: "1px solid #f5f2ee" }}>
             <div>
               <span style={{ fontSize: 13, fontWeight: 500, color: "#222" }}>{t.subject}</span>
@@ -981,13 +981,19 @@ export default function StudentDashboard({ userId, userName }) {
             </div>
           </div>
         ))}
-        {testSessions.length > 4 && (
+        {acikTestler.length > 4 && (
           <button onClick={() => setTumTestlerAcik(a => !a)} style={{
             marginTop: 8, width: "100%", background: "none", border: "none",
             color: c.mid, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
           }}>
-            {tumTestlerAcik ? "▴ daha az" : `▾ tümünü göster (${testSessions.length})`}
+            {tumTestlerAcik ? "▴ daha az" : `▾ tümünü göster (${acikTestler.length})`}
           </button>
+        )}
+        {onayliTestSayisi > 0 && (
+          <div style={{ marginTop: 8, fontSize: 10.5, color: "#aaa", textAlign: "center" }}>
+            Koçun onayladığı {onayliTestSayisi} test listeden kaldırıldı —
+            bağlı oldukları görevlerin altında duruyorlar.
+          </div>
         )}
       </Card>
 

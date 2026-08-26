@@ -1,24 +1,18 @@
-import { odevDosyalari } from "../lib/odevDosyalari";
 import { testOzetMetni } from "../lib/testHelpers";
 
 // Görev öğesi: durum + koç doğrulaması.
 //
-// ── ARTIK ÖĞRENCİ İŞARETLEMİYOR ─────────────────────────────────
+// ── ÖĞRENCİ İŞARETLEMİYOR ───────────────────────────────────────
 // Görevi yalnızca koç kapatıyor. İşaretleme kutusu duruyor ama SALT
 // OKUNUR: görevin durumunu göstermeye devam ediyor, tıklanmıyor.
 // Kutucuk tıklanabilir kalsaydı öğrenci tıklar, veritabanı yazmayı
-// reddeder ve nedenini anlamazdı — yetkiyi kaldırıp arayüzde bırakmak
-// sessiz bir arıza olurdu.
+// reddeder ve nedenini anlamazdı — sessiz bir arıza olurdu.
 //
-// ── ÖDEV YÜKLEME BURADAN KALKTI ─────────────────────────────────
-// Kanıt artık "Test Çözdüm" üzerinden veriliyor: öğrenci testi göreve
-// bağlayıp görsellerini oraya yüklüyor. Daha önce yüklenmiş ödev
-// dosyaları burada SALT OKUNUR olarak görünmeye devam ediyor; yoksa
-// öğrenci teslim ettiği işin kaybolduğunu sanırdı.
-export default function TaskItem({ done, label, sub, color, submission,
+// ── KANIT TESTTEN GELİYOR ───────────────────────────────────────
+// Ödev dosyası yükleme akışı kaldırıldı. Öğrenci testi göreve bağlayıp
+// görsellerini oraya yüklüyor; koç puanı ve görselleri görüp doğruluyor.
+export default function TaskItem({ done, label, sub, color,
   ogretmenOnayi = null, onayNotu = null, testler = [] }) {
-  const eskiDosyalar = odevDosyalari(submission);
-
   return (
     <div style={{
       display: "flex", alignItems: "flex-start", gap: 12,
@@ -52,14 +46,23 @@ export default function TaskItem({ done, label, sub, color, submission,
             }}>{ogretmenOnayi === "onaylandi" ? "Koç doğruladı ✓" : "İade edildi ↩"}</span>
           )}
 
-          {/* Bu göreve bağlanmış testler — kanıt buradan veriliyor */}
+          {/* Bu göreve bağlanmış testler — kanıt buradan veriliyor.
+              Test onaylandıktan sonra "Test Çözdüm" listesinden kalkıyor,
+              o yüzden görevin altında görünmesi önemli: öğrencinin
+              gönderdiği şeye ulaşabildiği tek yer burası. */}
           {testler.map(t => (
             <span key={t.id} style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
               fontSize: 11, padding: "2px 9px", borderRadius: 99,
               background: "#F8F3FC", color: "#7a5c92", fontWeight: 600,
             }}>
               🧪 {testOzetMetni(t)}
-              {(t.dosyalar?.length || t.file_url) ? " · görselli" : ""}
+              {(t.dosyalar ?? []).map((d, i, hepsi) => (
+                <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
+                  onClick={e => e.stopPropagation()} title={d.ad}
+                  style={{ color: "#7a5c92", textDecoration: "none" }}
+                >📎{hepsi.length > 1 ? i + 1 : ""}</a>
+              ))}
             </span>
           ))}
 
@@ -75,24 +78,8 @@ export default function TaskItem({ done, label, sub, color, submission,
               background: "#FFF7E6", color: "#854F0B", fontWeight: 600,
             }}>Koç incelemesi bekliyor</span>
           )}
-
-          {/* Eskiden yüklenmiş ödev dosyaları — salt okunur */}
-          {eskiDosyalar.map((d, i) => (
-            <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
-              onClick={e => e.stopPropagation()} title={d.ad}
-              style={{
-                fontSize: 11, padding: "2px 9px", borderRadius: 99,
-                background: "#f5f2ee", color: "#555", textDecoration: "none",
-                maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>📎 {eskiDosyalar.length > 1 ? `${i + 1}. ` : ""}{d.ad}</a>
-          ))}
         </div>
 
-        {submission?.teacher_note && (
-          <div style={{ fontSize: 11, color: "#888", marginTop: 4, fontStyle: "italic" }}>
-            Öğretmen: "{submission.teacher_note}"
-          </div>
-        )}
         {onayNotu && (
           <div style={{ fontSize: 11, color: "#A32D2D", marginTop: 4, fontStyle: "italic" }}>
             Koç: "{onayNotu}"

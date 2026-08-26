@@ -39,7 +39,6 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const [students,    setStudents]    = useState([]);
   const [taskMap,     setTaskMap]     = useState({});
   const [profileMap,  setProfileMap]  = useState({});
-  const [submissions, setSubmissions] = useState([]);
   const [recentTests, setRecentTests] = useState([]);
   // Ogrenci basina gomulu program adimlari (haftalik program ciktisinda kullaniliyor)
   const [programMap,  setProgramMap]  = useState({});
@@ -57,8 +56,6 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const [acikGorevListesi, setAcikGorevListesi] = useState(null);
   // Düzenlenen görevin taslağı: { id, title, subject, topic, due_date, estimated_minutes }
   const [gorevTaslak, setGorevTaslak] = useState(null);
-  const [returningId, setReturningId] = useState(null);
-  const [returnNote,  setReturnNote]  = useState("");
   const [loading,     setLoading]     = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,12 +113,6 @@ export default function TeacherDashboard({ userId, userName, role }) {
         ? supabase.from("student_profiles").select("*").in("id", studentIds)
         : Promise.resolve({ data: [] }),
       studentIds.length > 0
-        ? supabase.from("homework_submissions")
-            .select("*, tasks(title, subject)")
-            .in("student_id", studentIds)
-            .order("submitted_at", { ascending: false })
-        : Promise.resolve({ data: [] }),
-      studentIds.length > 0
         ? supabase.from("test_sessions")
             .select("*")
             .in("student_id", studentIds)
@@ -147,9 +138,9 @@ export default function TeacherDashboard({ userId, userName, role }) {
         : Promise.resolve({ data: [] }),
     ]);
     hatalariBildir(sonuclar,
-      ["gorevler", "ogrenci profilleri", "odev gonderimleri", "testler",
+      ["gorevler", "ogrenci profilleri", "testler",
        "program atamalari", "veli baglantilari", "goreve bagli testler"]);
-    const [{ data: taskData }, { data: profileData }, { data: submissionData },
+    const [{ data: taskData }, { data: profileData },
       { data: testData }, { data: atamaData }, { data: veliBaglari },
       { data: gorevTestleri }] = sonuclar;
 
@@ -177,7 +168,6 @@ export default function TeacherDashboard({ userId, userName, role }) {
     setStudents(studentData);
     setTaskMap(grouped);
     setProfileMap(profMap);
-    setSubmissions(submissionData ?? []);
     setRecentTests(testData ?? []);
     setProgramMap(progMap);
 
@@ -372,22 +362,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
     loadData();
   };
 
-  const handleReview = async (submissionId, status, note = null) => {
-    const { hata } = await calistir(
-      supabase.from("homework_submissions").update({
-        status,
-        teacher_note: note || null,
-        reviewed_at:  new Date().toISOString(),
-      }).eq("id", submissionId),
-      "Odev degerlendirme"
-    );
-    if (hata) return;
-    setReturningId(null);
-    setReturnNote("");
-    loadData();
-  };
 
-  const pendingSubmissions = submissions.filter(s => s.status === "beklemede");
 
   const totalTasks = Object.values(taskMap).flat().length;
   const doneTasks  = Object.values(taskMap).flat().filter(t => t.is_done).length;
@@ -787,101 +762,6 @@ export default function TeacherDashboard({ userId, userName, role }) {
                       )}
                     </div>
                   )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </Card>
-
-      {/* Ödev Kontrol */}
-      <Card id="bolum-odev">
-        <SectionTitle
-          title={`Ödev Kontrol${pendingSubmissions.length > 0 ? ` (${pendingSubmissions.length} bekliyor)` : ""}`}
-          color={c.mid}
-        />
-        {pendingSubmissions.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#aaa", padding: "8px 0", textAlign: "center" }}>
-            Bekleyen ödev yok ✓
-          </div>
-        ) : pendingSubmissions.map((sub, i) => {
-          const student     = students.find(s => s.id === sub.student_id);
-          const isReturning = returningId === sub.id;
-          return (
-            <div key={sub.id} style={{
-              padding: "12px 0",
-              borderBottom: i < pendingSubmissions.length - 1 ? "1px solid #f5f2ee" : "none",
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#222" }}>
-                    {student?.full_name ?? "—"}
-                  </div>
-                  <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
-                    {sub.tasks?.title ?? "—"}
-                    {sub.tasks?.subject ? ` · ${sub.tasks.subject}` : ""}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#bbb", marginTop: 1 }}>
-                    {new Date(sub.submitted_at).toLocaleDateString("tr-TR", {
-                      day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-                    })}
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-                  {/* Öğrenci birden fazla dosya yükleyebiliyor; hepsi tek
-                      tek açılabilmeli. Tek "Görüntüle" linki yalnızca
-                      ilkini gösterirdi ve öğretmen gerisini göremezdi. */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
-                    {odevDosyalari(sub).map((d, i, hepsi) => (
-                      <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
-                        title={d.ad}
-                        style={{
-                          fontSize: 11, padding: "3px 10px", borderRadius: 99,
-                          background: "#f5f2ee", color: "#555", textDecoration: "none",
-                          maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}>📎 {hepsi.length > 1 ? `${i + 1}. ` : ""}{d.ad}</a>
-                    ))}
-                  </div>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <button onClick={() => handleReview(sub.id, "onaylandi")} style={{
-                      fontSize: 11, padding: "3px 10px", borderRadius: 99,
-                      border: "none", background: "#E8F9F0", color: "#1A6B3C",
-                      cursor: "pointer", fontWeight: 600,
-                    }}>✓ Onayla</button>
-                    <button onClick={() => { setReturningId(isReturning ? null : sub.id); setReturnNote(""); }} style={{
-                      fontSize: 11, padding: "3px 10px", borderRadius: 99,
-                      border: "none",
-                      background: isReturning ? "#FFF0F0" : "#f5f2ee",
-                      color: isReturning ? "#A32D2D" : "#666",
-                      cursor: "pointer", fontWeight: 600,
-                    }}>↩ İade Et</button>
-                  </div>
-                </div>
-              </div>
-
-              {/* İade notu girişi */}
-              {isReturning && (
-                <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
-                  <input
-                    placeholder="İade notu (isteğe bağlı)"
-                    value={returnNote}
-                    onChange={e => setReturnNote(e.target.value)}
-                    style={{
-                      flex: 1, padding: "7px 10px", borderRadius: 8,
-                      border: "1.5px solid #f0ede8", fontSize: 12,
-                    }}
-                  />
-                  <button onClick={() => handleReview(sub.id, "iade_edildi", returnNote)} style={{
-                    padding: "7px 14px", borderRadius: 8, border: "none",
-                    background: "#A32D2D", color: "#fff", fontSize: 12,
-                    fontWeight: 600, cursor: "pointer",
-                  }}>Gönder</button>
-                  <button onClick={() => { setReturningId(null); setReturnNote(""); }} style={{
-                    padding: "7px 12px", borderRadius: 8,
-                    border: "1.5px solid #f0ede8", background: "#fff",
-                    color: "#888", fontSize: 12, cursor: "pointer",
-                  }}>İptal</button>
                 </div>
               )}
             </div>

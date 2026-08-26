@@ -8,7 +8,11 @@
 // Öğretmen tarafı değişmedi, orada bolum-gorevler kartı duruyor.
 const HEDEFLER = {
   gorev:    { student: "bolum-ders", teacher: "bolum-gorevler" },
-  odev:     { student: "bolum-ders", teacher: "bolum-odev" },
+  // "Ödev Kontrol" kartı kaldırıldı; kanıt artık göreve bağlı testlerden
+  // geliyor ve koç onu görev listesinde doğruluyor. Hedef güncellenmeseydi
+  // bildirime tıklayan koç hiçbir yere gitmezdi — bolumeGit olmayan bir
+  // bölümde sessizce false döner.
+  odev:     { student: "bolum-ders", teacher: "bolum-gorevler" },
   test:     { student: "bolum-test",     teacher: "bolum-test" },
   sinav:    { student: "bolum-sinav",    teacher: "bolum-sinav" },
   ders:     { student: "bolum-ders",     teacher: "bolum-ders",  parent: "bolum-ders" },
