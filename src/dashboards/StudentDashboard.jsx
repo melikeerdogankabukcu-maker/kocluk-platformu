@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
 import { branslariEkle, kocEtiketi } from "../lib/branslar";
-import { yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
+import { odevDosyalari, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
 import { COLORS } from "../lib/theme";
 import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
@@ -45,6 +45,9 @@ export default function StudentDashboard({ userId, userName }) {
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [savingProfile,   setSavingProfile]   = useState(false);
   const [tamamlananlarAcik, setTamamlananlarAcik] = useState(false);
+  // Test listesi varsayılan olarak kısa; düzenleme eklendiği için eski
+  // testlere de ulaşılabilmeli, yoksa yalnızca son 4'ü düzeltilebilirdi.
+  const [tumTestlerAcik, setTumTestlerAcik] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [profileForm,  setProfileForm]  = useState({
     birth_date: "", phone: "",
@@ -110,6 +113,11 @@ export default function StudentDashboard({ userId, userName }) {
   // Teste eklenecek çözüm görselleri. Tek dosyaydı; ödevdeki gibi birden
   // fazla sayfa yüklenebilmeli.
   const [testFiles, setTestFiles] = useState([]);
+  // Düzenlenen testin id'si (null = yeni kayıt) ve o testte ZATEN duran
+  // görseller. Yeni seçilenlerden ayrı tutuluyor: birinciler yüklenmiş,
+  // ikincilerin daha yüklenmesi gerekiyor.
+  const [duzenlenenTest, setDuzenlenenTest] = useState(null);
+  const [mevcutDosyalar, setMevcutDosyalar] = useState([]);
   const testFileInputRef = useRef(null);
 
   const loadAll = async () => {
@@ -319,6 +327,65 @@ export default function StudentDashboard({ userId, userName }) {
   // Çözülen testler takvimde kayıt günlerinde görünür
   const testsForCalendar = testSessions.map(t => ({ ...t, date: (t.created_at ?? "").split("T")[0] }));
 
+  // Bir testi düzenlemeye al. exam_type test kaydında TUTULMUYOR (yalnız
+  // ders/konu var), o yüzden müfredattan geri türetiliyor; bulunamazsa
+  // form "Diğer"e düşüp adları serbest alanlara koyuyor — testin dersi
+  // kaybolmasın.
+  // Koç görevi onayladıysa test kilitli: onaylanan kanıt sonradan
+  // değişmemeli. Kural sunucuda da var (RLS), buradaki yalnızca
+  // çalışmayacak bir düğmeyi göstermemek için.
+  const testDuzenlenebilir = (t) => {
+    if (!t.task_id) return true;
+    return tasks.find(x => x.id === t.task_id)?.ogretmen_onayi !== "onaylandi";
+  };
+
+  const testiDuzenle = (t) => {
+    const tur = dersinTuru(t.subject, t.topic);
+    const mufredatta = tur && examSubjectsOf(tur).includes(t.subject);
+    setTestForm({
+      exam_type:      tur ?? "TYT",
+      subject:        mufredatta ? t.subject : "__diger",
+      topic:          mufredatta && topicsOf(tur, t.subject).includes(t.topic) ? t.topic : "",
+      custom_subject: mufredatta ? "" : (t.subject ?? ""),
+      custom_topic:   mufredatta ? "" : (t.topic ?? ""),
+      question_count: t.question_count ?? "",
+      correct_count:  t.correct_count ?? "",
+      wrong_count:    t.yanlis_count === null || t.yanlis_count === undefined ? "" : t.yanlis_count,
+      task_id:        t.task_id ?? "",
+    });
+    setMevcutDosyalar(odevDosyalari(t));
+    setTestFiles([]);
+    setDuzenlenenTest(t.id);
+    setShowTestForm(true);
+  };
+
+  const testiSil = async (t) => {
+    if (!window.confirm(
+      `"${t.subject}${t.topic ? " · " + t.topic : ""}" testi silinsin mi?
+
+` +
+      `Bu işlem geri alınamaz; analiz ve haftalık özetten de düşer.`
+    )) return;
+    const { hata } = await calistir(
+      supabase.from("test_sessions").delete().eq("id", t.id),
+      "Test silme"
+    );
+    if (hata) return;
+    if (duzenlenenTest === t.id) testFormuKapat();
+    loadAll();
+  };
+
+  // Formu kapatırken düzenleme durumu da temizlenmeli; yoksa bir sonraki
+  // "Test Ekle" eski testin üstüne yazardı.
+  const testFormuKapat = () => {
+    setShowTestForm(false);
+    setDuzenlenenTest(null);
+    setMevcutDosyalar([]);
+    setTestFiles([]);
+    setTestForm({ exam_type: "TYT", subject: "", topic: "", custom_subject: "",
+      custom_topic: "", question_count: "", correct_count: "", wrong_count: "", task_id: "" });
+  };
+
   const handleTestSave = async () => {
     const serbest = testForm.subject === "__diger";
     const ders = (serbest ? testForm.custom_subject : testForm.subject).trim();
@@ -341,7 +408,9 @@ export default function StudentDashboard({ userId, userName }) {
         yuklenen.push({ url: publicUrl, ad: dosya.name });
       }
 
-      const { error } = await supabase.from("test_sessions").insert({
+      // Düzenlemede duran görseller korunuyor, yeniler sonuna ekleniyor
+      const tumDosyalar = [...mevcutDosyalar, ...yuklenen];
+      const satir = {
         student_id:     userId,
         subject:        ders,
         topic:          konu || null,
@@ -349,15 +418,20 @@ export default function StudentDashboard({ userId, userName }) {
         correct_count:  parseInt(testForm.correct_count) || 0,
         yanlis_count:   testForm.wrong_count === "" ? null : (parseInt(testForm.wrong_count) || 0),
         task_id:        testForm.task_id || null,
-        dosyalar:       yuklenen,
+        dosyalar:       tumDosyalar,
         // Eski kod yolları ve raporlar yalnızca file_url'i biliyor
-        file_url:       yuklenen[0]?.url ?? null,
-        file_name:      yuklenen[0]?.ad  ?? null,
-      });
+        file_url:       tumDosyalar[0]?.url ?? null,
+        file_name:      tumDosyalar[0]?.ad  ?? null,
+      };
+      const { error } = duzenlenenTest
+        ? await supabase.from("test_sessions").update(satir).eq("id", duzenlenenTest)
+        : await supabase.from("test_sessions").insert(satir);
       if (error) throw error;
 
       setTestForm({ exam_type: "TYT", subject: "", topic: "", custom_subject: "", custom_topic: "", question_count: "", correct_count: "", wrong_count: "", task_id: "" });
       setTestFiles([]);
+      setMevcutDosyalar([]);
+      setDuzenlenenTest(null);
       setShowTestForm(false);
       loadAll();
     } catch (err) {
@@ -683,7 +757,7 @@ export default function StudentDashboard({ userId, userName }) {
       <Card id="bolum-test">
         <SectionTitle title="Test Çözdüm" color={c.mid} />
         {!showTestForm ? (
-          <button onClick={() => setShowTestForm(true)} style={{ width: "100%", padding: "11px 0", borderRadius: 12, border: `1.5px dashed ${c.mid}`, background: "transparent", color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={() => { testFormuKapat(); setShowTestForm(true); }} style={{ width: "100%", padding: "11px 0", borderRadius: 12, border: `1.5px dashed ${c.mid}`, background: "transparent", color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
             + Test Ekle
           </button>
         ) : (
@@ -767,6 +841,28 @@ export default function StudentDashboard({ userId, userName }) {
                 style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
             </div>
 
+            {/* Testte zaten duran görseller (düzenlemede) */}
+            {mevcutDosyalar.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {mevcutDosyalar.map((d, i) => (
+                  <span key={d.url} style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    fontSize: 11, padding: "3px 5px 3px 10px", borderRadius: 99,
+                    background: "#f5f2ee", color: "#555", maxWidth: 200,
+                  }}>
+                    <a href={d.url} target="_blank" rel="noreferrer" title={d.ad}
+                      style={{ color: "#555", textDecoration: "none", overflow: "hidden",
+                        textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📎 {d.ad}</a>
+                    <button onClick={() => setMevcutDosyalar(l => l.filter((_, j) => j !== i))}
+                      title="Kaldır" style={{
+                        border: "none", background: "transparent", cursor: "pointer",
+                        color: "#a99", fontSize: 12, lineHeight: 1, padding: "0 3px",
+                      }}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             {/* Çözüm görselleri — birden fazla sayfa yüklenebiliyor */}
             {testFiles.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
@@ -788,7 +884,7 @@ export default function StudentDashboard({ userId, userName }) {
                 ))}
               </div>
             )}
-            {testFiles.length < DOSYA_SINIRI && (
+            {mevcutDosyalar.length + testFiles.length < DOSYA_SINIRI && (
               <button onClick={() => testFileInputRef.current?.click()} style={{
                 width: "100%", padding: "9px 0", borderRadius: 10,
                 border: `1.5px dashed ${testFiles.length ? c.mid : "#d8d4cd"}`,
@@ -806,7 +902,7 @@ export default function StudentDashboard({ userId, userName }) {
                 const secilenler = Array.from(e.target.files ?? []);
                 e.target.value = "";
                 if (secilenler.length === 0) return;
-                if (testFiles.length + secilenler.length > DOSYA_SINIRI) {
+                if (mevcutDosyalar.length + testFiles.length + secilenler.length > DOSYA_SINIRI) {
                   alert(`En fazla ${DOSYA_SINIRI} görsel eklenebilir.`);
                   return;
                 }
@@ -838,13 +934,13 @@ export default function StudentDashboard({ userId, userName }) {
             )}
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={handleTestSave} disabled={savingTest} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: "none", background: c.bg, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: savingTest ? 0.7 : 1 }}>
-                {savingTest ? "Kaydediliyor..." : "Kaydet"}
+                {savingTest ? "Kaydediliyor..." : duzenlenenTest ? "Değişikliği kaydet" : "Kaydet"}
               </button>
-              <button onClick={() => setShowTestForm(false)} style={{ padding: "11px 16px", borderRadius: 12, border: "1.5px solid #f0ede8", background: "#fff", color: "#888", fontSize: 13, cursor: "pointer" }}>İptal</button>
+              <button onClick={testFormuKapat} style={{ padding: "11px 16px", borderRadius: 12, border: "1.5px solid #f0ede8", background: "#fff", color: "#888", fontSize: 13, cursor: "pointer" }}>İptal</button>
             </div>
           </div>
         )}
-        {testSessions.slice(0, 4).map((t) => (
+        {(tumTestlerAcik ? testSessions : testSessions.slice(0, 4)).map((t) => (
           <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: "1px solid #f5f2ee" }}>
             <div>
               <span style={{ fontSize: 13, fontWeight: 500, color: "#222" }}>{t.subject}</span>
@@ -852,22 +948,47 @@ export default function StudentDashboard({ userId, userName }) {
               <div style={{ fontSize: 11, color: "#999", marginTop: 1 }}>{testOzetMetni(t)}</div>
               <div style={{ fontSize: 11, color: "#bbb", marginTop: 1 }}>{new Date(t.created_at).toLocaleDateString("tr-TR")}</div>
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {t.file_url && (
-                <a href={t.file_url} target="_blank" rel="noreferrer" style={{
-                  fontSize: 11, padding: "2px 8px", borderRadius: 99,
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+              {odevDosyalari(t).map((d, i, hepsi) => (
+                <a key={d.url} href={d.url} target="_blank" rel="noreferrer" title={d.ad} style={{
+                  fontSize: 11, padding: "2px 7px", borderRadius: 99,
                   background: "#f5f2ee", color: "#555", textDecoration: "none",
-                }}>📎</a>
-              )}
-              <span style={{ fontSize: 12, color: "#888" }}>{t.correct_count}/{t.question_count} doğru</span>
+                }}>📎{hepsi.length > 1 ? i + 1 : ""}</a>
+              ))}
               <span style={{
                 fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 99,
                 background: Math.round((t.correct_count / t.question_count) * 100) >= 70 ? c.light : "#FFF7E6",
                 color:      Math.round((t.correct_count / t.question_count) * 100) >= 70 ? c.text  : "#854F0B",
               }}>%{Math.round((t.correct_count / t.question_count) * 100)}</span>
+
+              {/* Koç onayladıysa düğmeler hiç çıkmıyor: tıklanıp
+                  reddedilen bir düğme, olmayandan daha kafa karıştırıcı */}
+              {testDuzenlenebilir(t) ? (
+                <>
+                  <button onClick={() => testiDuzenle(t)} title="Düzenle" style={{
+                    background: "none", border: "none", padding: "0 2px",
+                    color: c.mid, fontSize: 13, cursor: "pointer",
+                  }}>✎</button>
+                  <button onClick={() => testiSil(t)} title="Sil" style={{
+                    background: "none", border: "none", padding: "0 2px",
+                    color: "#C98A8A", fontSize: 13, cursor: "pointer",
+                  }}>✕</button>
+                </>
+              ) : (
+                <span title="Koç bu görevi onayladı, test artık değiştirilemez"
+                  style={{ fontSize: 11, color: "#bbb" }}>🔒</span>
+              )}
             </div>
           </div>
         ))}
+        {testSessions.length > 4 && (
+          <button onClick={() => setTumTestlerAcik(a => !a)} style={{
+            marginTop: 8, width: "100%", background: "none", border: "none",
+            color: c.mid, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+          }}>
+            {tumTestlerAcik ? "▴ daha az" : `▾ tümünü göster (${testSessions.length})`}
+          </button>
+        )}
       </Card>
 
       {/* Konu ilerlemesi — açılır pencere tetikleyici */}
