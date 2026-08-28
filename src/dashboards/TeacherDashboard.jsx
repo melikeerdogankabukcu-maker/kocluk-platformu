@@ -46,6 +46,9 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const [programMap,  setProgramMap]  = useState({});
   // task_id -> o goreve baglanmis testler (kanit)
   const [gorevTestMap, setGorevTestMap] = useState({});
+  // task_id -> eski akistan gelen odev gonderimi (yukleme kaldirildi,
+  // gosterim duruyor)
+  const [gorevGonderimMap, setGorevGonderimMap] = useState({});
   // Mesajlasilabilecek veliler: ogrencilerin family_links kayitlarindan
   const [veliler,     setVeliler]     = useState([]);
   // Diğer koçlar (yönetici dahil) — personel kendi arasında yazışabilsin
@@ -130,6 +133,15 @@ export default function TeacherDashboard({ userId, userName, role }) {
         ? supabase.from("family_links").select("parent_id, student_id")
             .in("student_id", studentIds)
         : Promise.resolve({ data: [] }),
+      // Odev gonderimleri. Yukleme arayuzu kaldirildi ama ESKI PAKETI
+      // onbellekte tasiyan ogrenciler yazmaya devam edebiliyor; okumayi
+      // da kaldirmak o dosyalari GORUNMEZ kilar. Ogrencinin emegi
+      // kaybolmasin diye gorev satirinda gosteriliyor.
+      studentIds.length > 0
+        ? supabase.from("homework_submissions").select("*")
+            .in("student_id", studentIds)
+            .order("submitted_at", { ascending: false })
+        : Promise.resolve({ data: [] }),
       // Goreve bagli testler — kanit artik buradan geliyor, dolayisiyla
       // recentTests'in 7 gunluk penceresi yetmez: gorev ne zaman
       // gonderilmis olursa olsun kocun gormesi gerekiyor.
@@ -141,10 +153,16 @@ export default function TeacherDashboard({ userId, userName, role }) {
     ]);
     hatalariBildir(sonuclar,
       ["gorevler", "ogrenci profilleri", "testler",
-       "program atamalari", "veli baglantilari", "goreve bagli testler"]);
+       "program atamalari", "veli baglantilari", "odev gonderimleri",
+       "goreve bagli testler"]);
     const [{ data: taskData }, { data: profileData },
       { data: testData }, { data: atamaData }, { data: veliBaglari },
-      { data: gorevTestleri }] = sonuclar;
+      { data: gonderimler }, { data: gorevTestleri }] = sonuclar;
+
+    // task_id -> odev gonderimi
+    const gonderimMap = {};
+    (gonderimler ?? []).forEach(g => { gonderimMap[g.task_id] = g; });
+    setGorevGonderimMap(gonderimMap);
 
     // task_id -> testler
     const testMap = {};
@@ -436,7 +454,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
 
         {/* Öğrenciler — panelin ana işi, geniş blokta */}
               {/* Öğrenci listesi */}
-              <Card>
+              <Card id="bolum-ogrenciler">
                 <SectionTitle title="Öğrenci durumu" action="+ Görev Ata" color={c.mid} />
                 {loading ? (
                   <div style={{ fontSize: 13, color: "#aaa", padding: "12px 0" }}>Yükleniyor...</div>
@@ -638,6 +656,18 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                             >📎{odevDosyalari(ts).length > 1 ? i + 1 : ""}</a>
                                           ))}
                                         </span>
+                                      ))}
+                                      {/* Eski ödev akışından gelen dosyalar. Yükleme
+                                          kaldırıldı ama önbellekte eski paket taşıyan
+                                          öğrenciler hâlâ gönderebiliyor; göstermezsek
+                                          yükledikleri şey kimseye ulaşmıyor. */}
+                                      {odevDosyalari(gorevGonderimMap[t.id]).map((d, i, hepsi) => (
+                                        <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
+                                          title={`Ödev dosyası: ${d.ad}`} style={{
+                                            flexShrink: 0, fontSize: 9.5, fontWeight: 700,
+                                            padding: "1px 6px", borderRadius: 99,
+                                            background: "#f5f2ee", color: "#555", textDecoration: "none",
+                                          }}>📎{hepsi.length > 1 ? i + 1 : ""} ödev</a>
                                       ))}
                                       {/* Doğrulama rozeti — koç bir karar verdiyse görünür */}
                                       {t.ogretmen_onayi && (

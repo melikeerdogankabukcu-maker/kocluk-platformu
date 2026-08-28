@@ -9,12 +9,13 @@ import { bolumSekmesiniAc } from "./bolumBaglam";
 // O yüzden gorev/odev bildirimleri bolum-ders'e (takvim kartı) gidiyor.
 // Öğretmen tarafı değişmedi, orada bolum-gorevler kartı duruyor.
 const HEDEFLER = {
-  gorev:    { student: "bolum-ders", teacher: "bolum-gorevler" },
-  // "Ödev Kontrol" kartı kaldırıldı; kanıt artık göreve bağlı testlerden
-  // geliyor ve koç onu görev listesinde doğruluyor. Hedef güncellenmeseydi
-  // bildirime tıklayan koç hiçbir yere gitmezdi — bolumeGit olmayan bir
-  // bölümde sessizce false döner.
-  odev:     { student: "bolum-ders", teacher: "bolum-gorevler" },
+  // Görev bildirimi de öğrenci listesine: koç oradan doğruluyor.
+  gorev:    { student: "bolum-ders", teacher: "bolum-ogrenciler" },
+  // Koçta ÖĞRENCİ LİSTESİNE gidiyor, görev atama formuna değil: öğrencinin
+  // gönderdiği dosyalar ve testler orada, öğrencinin satırı açılınca
+  // görünüyor. bolum-gorevler yeni görev YAZMA formu — bildirime tıklayan
+  // koç oraya düşünce "dosyaları göremiyorum" oluyor.
+  odev:     { student: "bolum-ders", teacher: "bolum-ogrenciler" },
   test:     { student: "bolum-test",     teacher: "bolum-test" },
   sinav:    { student: "bolum-sinav",    teacher: "bolum-sinav" },
   ders:     { student: "bolum-ders",     teacher: "bolum-ders",  parent: "bolum-ders" },
