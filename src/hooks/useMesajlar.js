@@ -45,6 +45,18 @@ export function useMesajlar(userId) {
         event: "INSERT", schema: "public", table: "messages",
         filter: `sender_id=eq.${userId}`,
       }, (p) => setMesajlar(m => (m.some(x => x.id === p.new.id) ? m : [...m, p.new])))
+      // Okundu bilgisi GÖNDERENE ulaşsın. Yalnızca INSERT dinleniyordu:
+      // alıcı mesajı okuyunca gönderen "iletildi" görmeye devam ediyor,
+      // ancak sayfayı yenileyince "okundu" oluyordu.
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "messages",
+        filter: `sender_id=eq.${userId}`,
+      }, (p) => setMesajlar(m => m.map(x => (x.id === p.new.id ? p.new : x))))
+      // Silinen mesaj karşı tarafın ekranından da kalksın
+      .on("postgres_changes", {
+        event: "DELETE", schema: "public", table: "messages",
+        filter: `receiver_id=eq.${userId}`,
+      }, (p) => setMesajlar(m => m.filter(x => x.id !== p.old.id)))
       .subscribe();
     kanalRef.current = kanal;
     return () => { supabase.removeChannel(kanal); kanalRef.current = null; };
@@ -63,14 +75,18 @@ export function useMesajlar(userId) {
   const toplamOkunmamis = mesajlar
     .filter(m => m.receiver_id === userId && !m.is_read).length;
 
-  const gonder = async (aliciId, metin) => {
-    const icerik = metin.trim();
-    if (!icerik || !aliciId) return { hata: true };
+  const gonder = async (aliciId, metin, dosyalar = []) => {
+    const icerik = (metin ?? "").trim();
+    // Metin BOŞ olabilir: yalnızca görsel gönderilebilmeli ("şu soruya
+    // bak" diye bir şey yazmadan fotoğraf atmak). İkisi birden boşsa
+    // gönderilmiyor — veritabanı kısıtı da aynısını söylüyor.
+    if ((!icerik && dosyalar.length === 0) || !aliciId) return { hata: true };
     // İyimser ekleme YOK: realtime aboneliği kendi gönderdiğimizi de
     // getiriyor, elle eklersek mesaj iki kez görünürdü.
     const { hata } = await calistir(
       supabase.from("messages").insert({
-        sender_id: userId, receiver_id: aliciId, content: icerik,
+        sender_id: userId, receiver_id: aliciId,
+        content: icerik, dosyalar,
       }),
       "Mesaj gonderme"
     );

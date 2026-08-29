@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { supabase } from "../supabase";
 import { useMesajlar } from "../hooks/useMesajlar";
+import { odevDosyalari, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 
@@ -16,7 +18,11 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
   const [secili, setSecili] = useState(null);
   const [metin, setMetin]   = useState("");
   const [gonderiliyor, setGonderiliyor] = useState(false);
+  // Gönderilmeyi bekleyen dosyalar (henüz yüklenmedi)
+  const [ekler, setEkler]   = useState([]);
+  const [arama, setArama]   = useState("");
   const sonRef = useRef(null);
+  const dosyaRef = useRef(null);
 
   const konusma = secili ? (sohbetler[secili] ?? []) : [];
 
@@ -38,12 +44,41 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
   const adBul = (id) => kisiler.find(k => k.id === id)?.full_name ?? "Bilinmeyen kişi";
 
   const gonderVeTemizle = async () => {
-    if (!metin.trim() || !secili) return;
+    if ((!metin.trim() && ekler.length === 0) || !secili) return;
     setGonderiliyor(true);
-    const { hata } = await gonder(secili, metin);
-    setGonderiliyor(false);
-    if (!hata) setMetin("");
+    try {
+      // Dosyalar önce depoya, sonra mesaj. Ters sırada mesaj gider ama
+      // ekleri boş kalırdı; karşı taraf "dosya gönderdi" görüp hiçbir şey
+      // bulamazdı.
+      const damga = Date.now();
+      const yuklenen = [];
+      for (let i = 0; i < ekler.length; i++) {
+        const d = ekler[i];
+        const yol = yeniDosyaYolu(userId, "mesaj", d.name, i, damga);
+        const { error } = await supabase.storage
+          .from("homework").upload(yol, d, { upsert: true, contentType: d.type });
+        if (error) throw error;
+        const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
+        yuklenen.push({ url: publicUrl, ad: d.name });
+      }
+      const { hata } = await gonder(secili, metin, yuklenen);
+      if (!hata) { setMetin(""); setEkler([]); }
+    } catch (err) {
+      console.error("Mesaj eki yukleme hatasi:", err);
+      alert("Dosya yüklenemedi: " + (err?.message ?? "bilinmeyen hata"));
+    } finally {
+      setGonderiliyor(false);
+    }
   };
+
+  // Arama yalnızca AÇIK sohbette: kişi listesi zaten kısa, asıl zorluk
+  // uzun bir yazışmada eski bir mesajı bulmak.
+  const aramaKucuk = arama.trim().toLocaleLowerCase("tr");
+  const gorunenKonusma = aramaKucuk
+    ? konusma.filter(m =>
+        (m.content ?? "").toLocaleLowerCase("tr").includes(aramaKucuk) ||
+        odevDosyalari(m).some(d => d.ad.toLocaleLowerCase("tr").includes(aramaKucuk)))
+    : konusma;
 
   const saat = (t) => {
     const d = new Date(t);
@@ -119,17 +154,38 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
           {/* Yazışma */}
           {secili && (
             <>
+              {/* Arama — yalnızca 6'dan fazla mesaj varsa. Üç mesajlık
+                  bir sohbette arama kutusu göstermek gürültü. */}
+              {konusma.length > 6 && (
+                <input value={arama} onChange={e => setArama(e.target.value)}
+                  placeholder="Bu yazışmada ara..." style={{
+                    padding: "7px 11px", borderRadius: 9, fontSize: 12,
+                    border: "1.5px solid #f0ede8", outline: "none", boxSizing: "border-box",
+                  }} />
+              )}
+              {aramaKucuk && (
+                <div style={{ fontSize: 10.5, color: "#888" }}>
+                  {gorunenKonusma.length} sonuç
+                  <button onClick={() => setArama("")} style={{
+                    marginLeft: 8, background: "none", border: "none",
+                    color: c.mid, fontSize: 10.5, cursor: "pointer", fontWeight: 600,
+                  }}>temizle</button>
+                </div>
+              )}
+
               <div style={{
                 display: "flex", flexDirection: "column", gap: 6,
                 maxHeight: 320, overflowY: "auto",
                 border: "1px solid #f0ede8", borderRadius: 10, padding: 9,
                 background: "#fcfcfb",
               }}>
-                {konusma.length === 0 ? (
+                {gorunenKonusma.length === 0 ? (
                   <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", padding: "14px 0" }}>
-                    {adBul(secili)} ile ilk mesajı siz yazın
+                    {aramaKucuk
+                      ? "Bu aramaya uyan mesaj yok"
+                      : `${adBul(secili)} ile ilk mesajı siz yazın`}
                   </div>
-                ) : konusma.map(m => {
+                ) : gorunenKonusma.map(m => {
                   const benim = m.sender_id === userId;
                   return (
                     <div key={m.id} style={{
@@ -144,7 +200,33 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
                         color: benim ? "#fff" : "#222",
                         border: benim ? "none" : "1px solid #f0ede8",
                         fontSize: 12.5, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word",
-                      }}>{m.content}</div>
+                      }}>
+                        {m.content}
+                        {/* Ekler. Görseller doğrudan gösteriliyor: bir
+                            çalışma kâğıdını görmek için tıklamak
+                            gerekmemeli. Diğer türler bağlantı olarak. */}
+                        {odevDosyalari(m).map(d => {
+                          const gorsel = /\.(png|jpe?g|gif|webp|heic)$/i.test(d.ad);
+                          return gorsel ? (
+                            <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
+                              style={{ display: "block", marginTop: m.content ? 6 : 0 }}>
+                              <img src={d.url} alt={d.ad} style={{
+                                maxWidth: "100%", maxHeight: 190, borderRadius: 8, display: "block",
+                              }} />
+                            </a>
+                          ) : (
+                            <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
+                              title={d.ad}
+                              style={{
+                                display: "block", marginTop: m.content ? 6 : 0,
+                                fontSize: 11.5, fontWeight: 600,
+                                color: benim ? "#fff" : c.text,
+                                textDecoration: "underline",
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              }}>📎 {d.ad}</a>
+                          );
+                        })}
+                      </div>
                       <div style={{
                         fontSize: 9.5, color: "#aaa", marginTop: 2,
                         textAlign: benim ? "right" : "left",
@@ -165,8 +247,54 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
                 <div ref={sonRef} />
               </div>
 
+              {/* Gönderilmeyi bekleyen ekler */}
+              {ekler.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {ekler.map((d, i) => (
+                    <span key={`${d.name}-${i}`} style={{
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                      fontSize: 11, padding: "3px 5px 3px 10px", borderRadius: 99,
+                      background: c.light, color: c.text, maxWidth: 200,
+                    }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        📎 {d.name}
+                      </span>
+                      <button onClick={() => setEkler(l => l.filter((_, j) => j !== i))}
+                        title="Kaldır" style={{
+                          border: "none", background: "transparent", cursor: "pointer",
+                          color: c.text, fontSize: 12, lineHeight: 1, padding: "0 3px",
+                        }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {/* Yazma alanı */}
               <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
+                <button onClick={() => dosyaRef.current?.click()}
+                  disabled={gonderiliyor || ekler.length >= DOSYA_SINIRI}
+                  title="Dosya ekle" style={{
+                    padding: "10px 12px", borderRadius: 10, flexShrink: 0,
+                    border: "1.5px solid #f0ede8", background: "#fff",
+                    color: c.mid, fontSize: 15, cursor: "pointer", lineHeight: 1,
+                  }}>📎</button>
+                <input ref={dosyaRef} type="file" multiple
+                  accept="image/*,application/pdf" style={{ display: "none" }}
+                  onChange={e => {
+                    const secilenler = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (secilenler.length === 0) return;
+                    if (ekler.length + secilenler.length > DOSYA_SINIRI) {
+                      alert(`Bir mesaja en fazla ${DOSYA_SINIRI} dosya eklenebilir.`);
+                      return;
+                    }
+                    const buyuk = secilenler.find(f => f.size > BOYUT_SINIRI_MB * 1024 * 1024);
+                    if (buyuk) {
+                      alert(`"${buyuk.name}" çok büyük. Dosya başına sınır ${BOYUT_SINIRI_MB} MB.`);
+                      return;
+                    }
+                    setEkler(l => [...l, ...secilenler]);
+                  }} />
                 <textarea
                   value={metin}
                   onChange={e => setMetin(e.target.value)}
@@ -181,12 +309,16 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
                     border: "1.5px solid #f0ede8", outline: "none", resize: "vertical",
                     boxSizing: "border-box", fontFamily: "inherit",
                   }} />
-                <button onClick={gonderVeTemizle} disabled={gonderiliyor || !metin.trim()} style={{
-                  padding: "10px 16px", borderRadius: 10, border: "none", flexShrink: 0,
-                  background: metin.trim() ? c.bg : "#ddd", color: "#fff",
-                  fontSize: 12.5, fontWeight: 700,
-                  cursor: metin.trim() ? "pointer" : "not-allowed",
-                }}>{gonderiliyor ? "..." : "Gönder"}</button>
+                {/* Yalnızca görsel de gönderilebilmeli: koşul metin
+                    değil "metin YA DA dosya" */}
+                <button onClick={gonderVeTemizle}
+                  disabled={gonderiliyor || (!metin.trim() && ekler.length === 0)}
+                  style={{
+                    padding: "10px 16px", borderRadius: 10, border: "none", flexShrink: 0,
+                    background: (metin.trim() || ekler.length) ? c.bg : "#ddd", color: "#fff",
+                    fontSize: 12.5, fontWeight: 700,
+                    cursor: (metin.trim() || ekler.length) ? "pointer" : "not-allowed",
+                  }}>{gonderiliyor ? "..." : "Gönder"}</button>
               </div>
             </>
           )}
