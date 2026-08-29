@@ -20,6 +20,8 @@ import SeviyeAvatar from "../components/SeviyeAvatar";
 import VeliRaporu from "../components/VeliRaporu";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import Mesajlar from "../components/Mesajlar";
+import Bolum from "../components/Bolum";
+import PanelDuzen from "../components/PanelDuzen";
 import HaftalikOzet from "../components/HaftalikOzet";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
 
@@ -206,171 +208,178 @@ export default function ParentDashboard({ userId, userName }) {
   const unpaidCount   = completedLessons.filter(l => l.payment_status === "odenmedi").length;
 
   return (
-    <div style={{ padding: "20px 16px", maxWidth: 700, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
-
-      {/* Header */}
-      <div style={{ background: c.bg, borderRadius: 18, padding: "22px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginBottom: 4 }}>Merhaba, {userName}</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", marginBottom: 12, lineHeight: 1.2 }}>
-            {child.full_name}<br />
-            {doneTasks === totalTasks && totalTasks > 0 ? "Tüm görevler tamam! 🎉" : `${totalTasks - doneTasks} görev bekliyor`}
-          </div>
-          <AlertChip type={pct >= 80 ? "success" : pct >= 40 ? "warn" : "danger"}
-            text={`Görevlerin %${pct}'i tamamlandı`} />
-        </div>
-        <div style={{
-          width: 64, height: 64, borderRadius: 16,
-          background: "rgba(255,255,255,0.18)",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30,
-        }}>👨‍👩‍👦</div>
-      </div>
-
-      {/* Genel değerlendirme: çaba (görev tamamlama) + sonuç (sınav trendi) birleşimi */}
-      {analiz?.genel_degerlendirme && (() => {
-        const gd = analiz.genel_degerlendirme;
-        const stil = genelDegerlendirmeStil(gd.durum);
-        return (
-          <Card>
-            <SectionTitle title="Genel Değerlendirme" color={c.mid} />
-            <div style={{
-              padding: "14px 16px", borderRadius: 12,
-              background: stil.bg, border: `1px solid ${stil.renk}22`,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 16 }}>{stil.emoji}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: stil.renk }}>{gd.baslik}</span>
-              </div>
-              <div style={{ fontSize: 12.5, color: "#444", lineHeight: 1.5 }}>{gd.aciklama}</div>
-              {gd.ek_notlar?.length > 0 && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${stil.renk}22`, display: "flex", flexDirection: "column", gap: 4 }}>
-                  {gd.ek_notlar.map((n, i) => (
-                    <div key={i} style={{ fontSize: 11.5, color: "#666", lineHeight: 1.4 }}>{n}</div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </Card>
-        );
-      })()}
-
-      {/* Stats */}
-      <div style={{ display: "flex", gap: 10 }}>
-        <StatCard label="Toplam görev"  value={totalTasks} sub="atandı"    color={c.mid} />
-        <StatCard label="Tamamlanan"    value={doneTasks}  sub="görev"     color={c.mid} />
-        <StatCard label="Tamamlanma"    value={`%${pct}`}  sub="oran"      color={c.mid} />
-      </div>
-
-      {/* Sınav Analizi (çocuğun net gelişimi + odak konular) */}
-      <SinavAnalizi studentId={child.id} color={c} baslik={`${child.full_name.split(" ")[0]} — Sınav Analizi`} />
-
-      {/* Dönem raporu (yazdırılabilir) */}
-      <VeliRaporu studentId={child.id} studentName={child.full_name} color={c} />
-
-      {/* Çocuğun seviyesi ve rozetleri */}
-      <SeviyeAvatar studentId={child.id} color={c} salt baslik={`${child.full_name.split(" ")[0]} — Seviye`} />
-      <Rozetler studentId={child.id} color={c} baslik={`${child.full_name.split(" ")[0]} — Rozetler`} />
-
-      {/* Ödeme Durumu */}
-      <Card id="bolum-odeme">
-        <SectionTitle title="Ödeme Durumu" color={c.mid} />
-        <div style={{ display: "flex", gap: 10, marginBottom: completedLessons.length ? 14 : 0 }}>
-          <StatCard label="Yapılan ders" value={completedLessons.length}     sub="toplam" color={c.mid} />
-          <StatCard label="Ödenen"       value={paidCount}                   sub="ders"   color={c.mid} />
-          <StatCard label="Bekleyen"     value={unpaidCount + reportedCount} sub="ders"   color={c.mid} />
-        </div>
-        {completedLessons.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#aaa", textAlign: "center", padding: "8px 0" }}>Henüz yapılmış (ücretlendirilen) ders yok</div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {completedLessons.map(l => {
-              const paid     = l.payment_status === "odendi";
-              const reported = l.payment_status === "bildirildi";
-              return (
-                <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, background: "#fafaf8" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#222" }}>
-                      {new Date(l.lesson_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}
-                      {l.teacher?.full_name ? ` · ${l.teacher.full_name}` : ""}
-                    </div>
-                    {l.title && <div style={{ fontSize: 11, color: "#888", marginTop: 1 }}>{l.title}</div>}
+    <PanelDuzen
+      ana={<>
+              {/* Header */}
+              <div style={{ background: c.bg, borderRadius: 18, padding: "22px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginBottom: 4 }}>Merhaba, {userName}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", marginBottom: 12, lineHeight: 1.2 }}>
+                    {child.full_name}<br />
+                    {doneTasks === totalTasks && totalTasks > 0 ? "Tüm görevler tamam! 🎉" : `${totalTasks - doneTasks} görev bekliyor`}
                   </div>
-                  {paid ? (
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: "#E8F9F0", color: "#1A6B3C", flexShrink: 0 }}>Ödendi ✓</span>
-                  ) : reported ? (
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99, background: "#FFF7E6", color: "#854F0B", flexShrink: 0 }}>Onay bekleniyor</span>
-                  ) : (
-                    <button onClick={() => reportPaid(l.id)} style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 99, border: "none", background: c.bg, color: "#fff", cursor: "pointer", flexShrink: 0 }}>Ödedim</button>
-                  )}
+                  <AlertChip type={pct >= 80 ? "success" : pct >= 40 ? "warn" : "danger"}
+                    text={`Görevlerin %${pct}'i tamamlandı`} />
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-
-      {/* Son görevler */}
-      <Card>
-        <SectionTitle title={`${child.full_name.split(" ")[0]}'in Görevleri`} color={c.mid} />
-        {tasks.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#aaa", padding: "12px 0", textAlign: "center" }}>Henüz görev atanmadı 📭</div>
-        ) : tasks.slice(0, 6).map((t, i) => (
-          <div key={t.id} style={{
-            display: "flex", alignItems: "center", gap: 12,
-            padding: "10px 0", borderBottom: i < Math.min(tasks.length, 6) - 1 ? "1px solid #f5f2ee" : "none",
-          }}>
-            <div style={{
-              width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-              background: t.is_done ? c.mid : "transparent",
-              border: t.is_done ? "none" : `2px solid ${c.mid}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              {t.is_done && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 500,
-                color: t.is_done ? "#bbb" : "#222",
-                textDecoration: t.is_done ? "line-through" : "none" }}>{t.title}</div>
-              <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>
-                {[t.subject, t.estimated_minutes ? `${t.estimated_minutes} dk` : null].filter(Boolean).join(" · ")}
+                <div style={{
+                  width: 64, height: 64, borderRadius: 16,
+                  background: "rgba(255,255,255,0.18)",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30,
+                }}>👨‍👩‍👦</div>
               </div>
-            </div>
-            {!t.is_done && (
-              <span style={{ fontSize: 11, background: "#FFF7E6", color: "#854F0B",
-                padding: "3px 9px", borderRadius: 99, fontWeight: 500 }}>Bekliyor</span>
-            )}
-          </div>
-        ))}
-      </Card>
+              {/* Genel değerlendirme: çaba (görev tamamlama) + sonuç (sınav trendi) birleşimi */}
+              {analiz?.genel_degerlendirme && (() => {
+                const gd = analiz.genel_degerlendirme;
+                const stil = genelDegerlendirmeStil(gd.durum);
+                return (
+                  <Card>
+                    <SectionTitle title="Genel Değerlendirme" color={c.mid} />
+                    <div style={{
+                      padding: "14px 16px", borderRadius: 12,
+                      background: stil.bg, border: `1px solid ${stil.renk}22`,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 16 }}>{stil.emoji}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: stil.renk }}>{gd.baslik}</span>
+                      </div>
+                      <div style={{ fontSize: 12.5, color: "#444", lineHeight: 1.5 }}>{gd.aciklama}</div>
+                      {gd.ek_notlar?.length > 0 && (
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${stil.renk}22`, display: "flex", flexDirection: "column", gap: 4 }}>
+                          {gd.ek_notlar.map((n, i) => (
+                            <div key={i} style={{ fontSize: 11.5, color: "#666", lineHeight: 1.4 }}>{n}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })()}
+              {/* Stats */}
+              <div style={{ display: "flex", gap: 10 }}>
+                <StatCard label="Toplam görev"  value={totalTasks} sub="atandı"    color={c.mid} />
+                <StatCard label="Tamamlanan"    value={doneTasks}  sub="görev"     color={c.mid} />
+                <StatCard label="Tamamlanma"    value={`%${pct}`}  sub="oran"      color={c.mid} />
+              </div>
 
-      {/* Konu ilerlemesi */}
-      <Card>
-        <SectionTitle title="Konu ilerlemesi" color={c.mid} />
-        {progressList.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#aaa", padding: "12px 0", textAlign: "center" }}>Henüz ilerleme kaydedilmedi 📊</div>
-        ) : progressList.map(p => (
-          <ProgressBar
-            key={`${p.subject}||${p.topic}`}
-            pct={p.percentage}
-            color={p.percentage >= 80 ? c.mid : p.percentage >= 50 ? "#EF9F27" : "#E24B4A"}
-            label={`${p.subject} — ${p.topic}`}
-            sub={`${p.done}/${p.total} görev · %${p.percentage}${p.percentage >= 80 ? " ✓" : ""}`}
-          />
-        ))}
-      </Card>
+        {/* Takvim — velinin en sık baktığı yer */}
+              <Card id="bolum-ders">
+                <SectionTitle title="Ders Takvimi" color={c.mid} />
+                <CalendarMonth lessons={lessons} tasks={tasks} programItems={programOgeleri}
+                  color={c} renderLesson={renderLesson} renderTask={renderTask} renderProgram={renderProgramOge} />
+              </Card>
 
-      {/* Ders Takvimi (salt okunur) */}
-      {/* Çocuğun hafta hafta gelişimi */}
-      <HaftalikOzet studentId={child.id} color={c} baslik="Haftalık Gelişim" />
+              {/* Son görevler */}
+              <Card>
+                <SectionTitle title={`${child.full_name.split(" ")[0]}'in Görevleri`} color={c.mid} />
+                {tasks.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "#aaa", padding: "12px 0", textAlign: "center" }}>Henüz görev atanmadı 📭</div>
+                ) : tasks.slice(0, 6).map((t, i) => (
+                  <div key={t.id} style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "10px 0", borderBottom: i < Math.min(tasks.length, 6) - 1 ? "1px solid #f5f2ee" : "none",
+                  }}>
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                      background: t.is_done ? c.mid : "transparent",
+                      border: t.is_done ? "none" : `2px solid ${c.mid}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {t.is_done && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500,
+                        color: t.is_done ? "#bbb" : "#222",
+                        textDecoration: t.is_done ? "line-through" : "none" }}>{t.title}</div>
+                      <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>
+                        {[t.subject, t.estimated_minutes ? `${t.estimated_minutes} dk` : null].filter(Boolean).join(" · ")}
+                      </div>
+                    </div>
+                    {!t.is_done && (
+                      <span style={{ fontSize: 11, background: "#FFF7E6", color: "#854F0B",
+                        padding: "3px 9px", borderRadius: 99, fontWeight: 500 }}>Bekliyor</span>
+                    )}
+                  </div>
+                ))}
+              </Card>
+      </>}
 
-      {/* Çocuk ve koçlarıyla mesajlaşma */}
-      <Mesajlar userId={userId} kisiler={mesajKisileri} color={c} baslik="Mesajlar" />
+      yan={<>
+        {/* Çocuğun gelişimi tek bölümde: hafta hafta seri, sınav analizi
+            ve konu ilerlemesi aynı soruyu farklı açılardan yanıtlıyor —
+            üçü ayrı kart olarak alt alta durmasın. */}
+        <Bolum baslik="Gelişim" color={c} sekmeler={[
+          { ad: "Haftalık", icerik: <HaftalikOzet studentId={child.id} color={c} baslik="Haftalık Gelişim" /> },
+          { ad: "Sınav Analizi", id: "bolum-sinav",
+            icerik: <div id="bolum-sinav"><SinavAnalizi studentId={child.id} color={c} baslik={`${child.full_name.split(" ")[0]} — Sınav Analizi`} /></div> },
+          { ad: "Konu İlerlemesi", icerik: (
+                  <Card>
+                    <SectionTitle title="Konu ilerlemesi" color={c.mid} />
+                    {progressList.length === 0 ? (
+                      <div style={{ fontSize: 13, color: "#aaa", padding: "12px 0", textAlign: "center" }}>Henüz ilerleme kaydedilmedi 📊</div>
+                    ) : progressList.map(p => (
+                      <ProgressBar
+                        key={`${p.subject}||${p.topic}`}
+                        pct={p.percentage}
+                        color={p.percentage >= 80 ? c.mid : p.percentage >= 50 ? "#EF9F27" : "#E24B4A"}
+                        label={`${p.subject} — ${p.topic}`}
+                        sub={`${p.done}/${p.total} görev · %${p.percentage}${p.percentage >= 80 ? " ✓" : ""}`}
+                      />
+                    ))}
+                  </Card>
+          ) },
+        ]} />
 
-      <Card id="bolum-ders">
-        <SectionTitle title="Ders Takvimi" color={c.mid} />
-        <CalendarMonth lessons={lessons} tasks={tasks} programItems={programOgeleri}
-          color={c} renderLesson={renderLesson} renderTask={renderTask} renderProgram={renderProgramOge} />
-      </Card>
-    </div>
+        <Bolum baslik="Başarılar" color={c} sekmeler={[
+          { ad: "Seviye", icerik: <SeviyeAvatar studentId={child.id} color={c} salt baslik={`${child.full_name.split(" ")[0]} — Seviye`} /> },
+          { ad: "Rozetler", id: "bolum-rozet",
+            icerik: <div id="bolum-rozet"><Rozetler studentId={child.id} color={c} baslik={`${child.full_name.split(" ")[0]} — Rozetler`} /></div> },
+          { ad: "Dönem Raporu", icerik: <VeliRaporu studentId={child.id} studentName={child.full_name} color={c} /> },
+        ]} />
+
+              {/* Ödeme Durumu */}
+              <Card id="bolum-odeme">
+                <SectionTitle title="Ödeme Durumu" color={c.mid} />
+                <div style={{ display: "flex", gap: 10, marginBottom: completedLessons.length ? 14 : 0 }}>
+                  <StatCard label="Yapılan ders" value={completedLessons.length}     sub="toplam" color={c.mid} />
+                  <StatCard label="Ödenen"       value={paidCount}                   sub="ders"   color={c.mid} />
+                  <StatCard label="Bekleyen"     value={unpaidCount + reportedCount} sub="ders"   color={c.mid} />
+                </div>
+                {completedLessons.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "#aaa", textAlign: "center", padding: "8px 0" }}>Henüz yapılmış (ücretlendirilen) ders yok</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {completedLessons.map(l => {
+                      const paid     = l.payment_status === "odendi";
+                      const reported = l.payment_status === "bildirildi";
+                      return (
+                        <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, background: "#fafaf8" }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#222" }}>
+                              {new Date(l.lesson_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}
+                              {l.teacher?.full_name ? ` · ${l.teacher.full_name}` : ""}
+                            </div>
+                            {l.title && <div style={{ fontSize: 11, color: "#888", marginTop: 1 }}>{l.title}</div>}
+                          </div>
+                          {paid ? (
+                            <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: "#E8F9F0", color: "#1A6B3C", flexShrink: 0 }}>Ödendi ✓</span>
+                          ) : reported ? (
+                            <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99, background: "#FFF7E6", color: "#854F0B", flexShrink: 0 }}>Onay bekleniyor</span>
+                          ) : (
+                            <button onClick={() => reportPaid(l.id)} style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 99, border: "none", background: c.bg, color: "#fff", cursor: "pointer", flexShrink: 0 }}>Ödedim</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+
+        {/* bolum-mesaj kimliği EKSİKTİ: mesaj bildirimine tıklayan veli
+            hiçbir yere gitmiyordu ve hata da görünmüyordu. */}
+        <div id="bolum-mesaj">
+          <Mesajlar userId={userId} kisiler={mesajKisileri} color={c} baslik="Mesajlar" />
+        </div>
+      </>}
+    />
   );
 }
