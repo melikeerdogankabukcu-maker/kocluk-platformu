@@ -41,3 +41,21 @@ export async function sifreSifirla(kisiId) {
   }
   return govde.gecici_sifre;
 }
+
+// Asistan uç noktası POST istiyor ve gövde gönderiyor. Token ekleme mantığı
+// ikiye ayrılmasın diye aynı dosyada: yeni bir uç nokta yazan kişi başlığı
+// koymayı unutmasın.
+export async function analizGonder(yol, govde) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("Oturum yok");
+
+  return fetch(`${API_URL}${yol}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(govde),
+  });
+}

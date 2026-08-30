@@ -21,6 +21,7 @@ import Mesajlar from "../components/Mesajlar";
 import Modal from "../components/Modal";
 import SinavAnalizi from "../components/SinavAnalizi";
 import HaftalikOzet from "../components/HaftalikOzet";
+import Asistan from "../components/Asistan";
 import Bolum from "../components/Bolum";
 import PanelDuzen from "../components/PanelDuzen";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
@@ -1132,6 +1133,10 @@ export default function StudentDashboard({ userId, userName }) {
           { ad: "Rozetlerim", id: "bolum-rozet",
             icerik: <div id="bolum-rozet"><Rozetler studentId={userId} color={c} /></div> },
         ]} />
+
+        {/* Çalışma asistanı — mesajların hemen üstünde: ikisi de
+            "birine sor" işi, biri insana biri yapay zekâya. */}
+        <Asistan color={c} baslik="Çalışma Asistanım" />
 
         {/* bolum-mesaj kimliği EKSİKTİ: mesaj bildirimine tıklayan
             öğrenci hiçbir yere gitmiyordu ve hata da görünmüyordu. */}

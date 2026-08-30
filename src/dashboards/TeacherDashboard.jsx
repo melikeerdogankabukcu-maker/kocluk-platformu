@@ -15,6 +15,7 @@ import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import VeliBaglantilari from "../components/VeliBaglantilari";
 import OgretmenProfili from "../components/OgretmenProfili";
 import HaftalikOzet from "../components/HaftalikOzet";
+import Asistan from "../components/Asistan";
 import GrupYonetimi from "../components/GrupYonetimi";
 import VeliRaporu from "../components/VeliRaporu";
 import HaftalikProgram from "../components/HaftalikProgram";
@@ -1022,6 +1023,11 @@ export default function TeacherDashboard({ userId, userName, role }) {
           { ad: "Programlar", icerik: <ProgramDuzenleyici userId={userId} students={students} color={c} /> },
           { ad: "Müfredat", icerik: <KonuYonetimi userId={userId} color={c} /> },
         ]} />
+
+        {/* Koç yardımcısı — öğrenci seçicili */}
+        {students.length > 0 && (
+          <Asistan students={students} color={c} baslik="Koç Yardımcısı" />
+        )}
 
         <div id="bolum-mesaj">
           <Mesajlar userId={userId} color={c} kisiler={[
