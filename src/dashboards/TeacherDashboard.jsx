@@ -33,6 +33,7 @@ import LessonPlanner from "../components/LessonPlanner";
 import SinavAnalizi from "../components/SinavAnalizi";
 import Bolum from "../components/Bolum";
 import Modal from "../components/Modal";
+import OgrenciAvatari from "../components/OgrenciAvatari";
 import PanelDuzen from "../components/PanelDuzen";
 
 export default function TeacherDashboard({ userId, userName, role }) {
@@ -400,7 +401,6 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const totalTasks = Object.values(taskMap).flat().length;
   const doneTasks  = Object.values(taskMap).flat().filter(t => t.is_done).length;
 
-  const initials = (name = "") => name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   // Son testler kartı bir sekme içeriği olarak veriliyor; boşsa Bolum
   // o sekmeyi hiç göstermiyor.
@@ -494,11 +494,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
                         display: "flex", alignItems: "center", gap: 12,
                         padding: "10px 0", cursor: "pointer",
                       }}>
-                        <div style={{
-                          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                          background: c.light, display: "flex", alignItems: "center",
-                          justifyContent: "center", fontSize: 12, fontWeight: 700, color: c.text,
-                        }}>{initials(s.full_name)}</div>
+                        <OgrenciAvatari ad={s.full_name} fotoUrl={profileMap[s.id]?.photo_url}
+                          boyut={36} kose={10} zemin={c.light} yazi={c.text} yaziBoyut={12} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
                             <span style={{ fontSize: 13, fontWeight: 600, color: "#222" }}>{s.full_name}</span>
@@ -526,10 +523,24 @@ export default function TeacherDashboard({ userId, userName, role }) {
                             const prof = profileMap[s.id];
                             const fLabel = { sayisal: "Sayısal", esit_agirlik: "Eşit Ağırlık", sozel: "Sözel" };
                             const rLabel = { anne: "Anne", baba: "Baba", vasi: "Vasi/Diğer" };
-                            if (!prof || (!prof.school_name && !prof.grade && !prof.parent_name)) return null;
+                            // Hedef de bir "kayıt bilgisi": öğrenci yalnızca
+                            // hedefini yazmışsa da kutu çıkmalı, yoksa koç
+                            // hedefi hiçbir yerde göremezdi.
+                            const hedefVar = prof && (prof.hedef_siralama || prof.hedef_puan || prof.hedef_aciklama);
+                            if (!prof || (!prof.school_name && !prof.grade && !prof.parent_name && !hedefVar)) return null;
                             return (
                               <div style={{ padding: "8px 12px", borderRadius: 10, background: "#fafaf8", marginBottom: 8 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", marginBottom: 5 }}>KAYIT BİLGİLERİ</div>
+                                {hedefVar && (
+                                  <div style={{ fontSize: 12, color: c.text, fontWeight: 600, marginBottom: 4 }}>
+                                    🎯 {[
+                                      prof.hedef_sinav,
+                                      prof.hedef_siralama ? `${Number(prof.hedef_siralama).toLocaleString("tr-TR")}. sıralama` : null,
+                                      prof.hedef_puan ? `${prof.hedef_puan} puan` : null,
+                                      prof.hedef_aciklama,
+                                    ].filter(Boolean).join(" · ")}
+                                  </div>
+                                )}
                                 {(prof.school_name || prof.grade || prof.field_preference) && (
                                   <div style={{ fontSize: 12, color: "#555", marginBottom: prof.parent_name ? 4 : 0 }}>
                                     🏫 {[

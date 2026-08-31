@@ -17,6 +17,7 @@ import CalendarMonth from "../components/CalendarMonth";
 import SinavAnalizi from "../components/SinavAnalizi";
 import Rozetler from "../components/Rozetler";
 import SeviyeAvatar from "../components/SeviyeAvatar";
+import OgrenciAvatari from "../components/OgrenciAvatari";
 import VeliRaporu from "../components/VeliRaporu";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import Mesajlar from "../components/Mesajlar";
@@ -34,6 +35,9 @@ export default function ParentDashboard({ userId, userName }) {
   // tanımı effect'ten ÖNCE olmak zorunda — sonra tanımlansaydı setOgretmenler
   // "declared before use" ile çalışma anında patlardı.
   const [ogretmenler, setOgretmenler] = useState([]);
+  // Çocuğun profili — fotoğraf ve sınav hedefi buradan geliyor.
+  // "Veli çocuk profili okur" politikası zaten vardı, ek yetki yok.
+  const [cocukProfil, setCocukProfil] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -51,12 +55,14 @@ export default function ParentDashboard({ userId, userName }) {
         // Cocugun onayli ogretmenleri — mesajlasma kisi listesi
         supabase.from("teacher_students").select("teacher_id")
           .eq("student_id", studentId).eq("durum", "onaylandi"),
+        supabase.from("student_profiles").select("*").eq("id", studentId).maybeSingle(),
       ]);
-      hatalariBildir(sonuclar, ["cocuk bilgisi", "gorevler", "cocugun ogretmenleri"]);
-      const [{ data: studentData }, { data: taskData }, { data: bagData }] = sonuclar;
+      hatalariBildir(sonuclar, ["cocuk bilgisi", "gorevler", "cocugun ogretmenleri", "cocuk profili"]);
+      const [{ data: studentData }, { data: taskData }, { data: bagData }, { data: profData }] = sonuclar;
 
       setChild(studentData);
       setTasks(taskData ?? []);
+      setCocukProfil(profData ?? null);
 
       const ogrIdleri = (bagData ?? []).map(b => b.teacher_id);
       if (ogrIdleri.length > 0) {
@@ -221,12 +227,45 @@ export default function ParentDashboard({ userId, userName }) {
                   <AlertChip type={pct >= 80 ? "success" : pct >= 40 ? "warn" : "danger"}
                     text={`Görevlerin %${pct}'i tamamlandı`} />
                 </div>
-                <div style={{
-                  width: 64, height: 64, borderRadius: 16,
-                  background: "rgba(255,255,255,0.18)",
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30,
-                }}>👨‍👩‍👦</div>
+                {/* Çocuğun fotoğrafı varsa genel aile simgesi yerine o:
+                    veli panelinin kimi anlattığı ilk bakışta belli olsun. */}
+                {cocukProfil?.photo_url ? (
+                  <OgrenciAvatari ad={child.full_name} fotoUrl={cocukProfil.photo_url}
+                    boyut={64} kose={16} zemin="rgba(255,255,255,0.18)" yazi="#fff" />
+                ) : (
+                  <div style={{
+                    width: 64, height: 64, borderRadius: 16, flexShrink: 0,
+                    background: "rgba(255,255,255,0.18)",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30,
+                  }}>👨‍👩‍👦</div>
+                )}
               </div>
+
+              {/* Çocuğun hedefi — velinin en çok merak ettiği şeylerden
+                  biri ve başka hiçbir yerde görünmüyordu. Öğrenci
+                  yazmadıysa satır hiç çıkmıyor. */}
+              {(cocukProfil?.hedef_siralama || cocukProfil?.hedef_puan || cocukProfil?.hedef_aciklama) && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "12px 16px", borderRadius: 14,
+                  background: c.light, border: `1px solid ${c.mid}22`,
+                }}>
+                  <span style={{ fontSize: 18, flexShrink: 0 }}>🎯</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: c.text, marginBottom: 2 }}>
+                      {child.full_name.split(" ")[0]}'İN HEDEFİ
+                      {cocukProfil.hedef_sinav ? ` · ${cocukProfil.hedef_sinav}` : ""}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#444", lineHeight: 1.5 }}>
+                      {[
+                        cocukProfil.hedef_siralama ? `${Number(cocukProfil.hedef_siralama).toLocaleString("tr-TR")}. sıralama` : null,
+                        cocukProfil.hedef_puan ? `${cocukProfil.hedef_puan} puan` : null,
+                        cocukProfil.hedef_aciklama,
+                      ].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Genel değerlendirme: çaba (görev tamamlama) + sonuç (sınav trendi) birleşimi */}
               {analiz?.genel_degerlendirme && (() => {
                 const gd = analiz.genel_degerlendirme;

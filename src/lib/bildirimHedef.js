@@ -7,14 +7,13 @@ import { bolumSekmesiniAc } from "./bolumBaglam";
 //
 // Öğrencide artık ayrı "Görevlerim" kartı YOK; görevler Takvimim'in içinde.
 // O yüzden gorev/odev bildirimleri bolum-ders'e (takvim kartı) gidiyor.
-// Öğretmen tarafı değişmedi, orada bolum-gorevler kartı duruyor.
+//
+// Koçta hedef ÖĞRENCİ LİSTESİ. Görev atama formu bir sayfa kartı değil,
+// açılır pencere — kaydırılacak bir kimliği yok zaten. Kanıt (öğrencinin
+// gönderdiği dosyalar ve testler) da öğrencinin satırı açılınca orada
+// görünüyor; bildirime tıklayan koç doğru yere düşüyor.
 const HEDEFLER = {
-  // Görev bildirimi de öğrenci listesine: koç oradan doğruluyor.
   gorev:    { student: "bolum-ders", teacher: "bolum-ogrenciler" },
-  // Koçta ÖĞRENCİ LİSTESİNE gidiyor, görev atama formuna değil: öğrencinin
-  // gönderdiği dosyalar ve testler orada, öğrencinin satırı açılınca
-  // görünüyor. bolum-gorevler yeni görev YAZMA formu — bildirime tıklayan
-  // koç oraya düşünce "dosyaları göremiyorum" oluyor.
   odev:     { student: "bolum-ders", teacher: "bolum-ogrenciler" },
   test:     { student: "bolum-test",     teacher: "bolum-test" },
   sinav:    { student: "bolum-sinav",    teacher: "bolum-sinav" },

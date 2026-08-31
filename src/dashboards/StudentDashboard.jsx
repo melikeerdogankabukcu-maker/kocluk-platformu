@@ -27,6 +27,9 @@ import PanelDuzen from "../components/PanelDuzen";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import Rozetler from "../components/Rozetler";
 import SeviyeAvatar from "../components/SeviyeAvatar";
+import OgrenciAvatari from "../components/OgrenciAvatari";
+import HaftaninSozu from "../components/HaftaninSozu";
+import { HaftalikSoruGrafigi, CalismaSerisi, DogrulukTrendi, DersDagilimi } from "../components/CalismaGrafikleri";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
 
@@ -58,7 +61,13 @@ export default function StudentDashboard({ userId, userName }) {
     parent2_name: "", parent2_relationship: "", parent2_occupation: "",
     parent2_phone: "", parent2_email: "",
     school_name: "", grade: "", field_preference: "",
+    hedef_sinav: "", hedef_siralama: "", hedef_puan: "", hedef_aciklama: "",
   });
+  // Profil fotoğrafı formun parçası DEĞİL: seçilir seçilmez yükleniyor ve
+  // kaydediliyor. Forma bağlasaydık, öğrenci fotoğrafı seçip "İptal"e
+  // basınca dosya depoya yüklenmiş ama profile hiç bağlanmamış olurdu.
+  const fotoInputRef = useRef(null);
+  const [fotoYukleniyor, setFotoYukleniyor] = useState(false);
 
   // Çalışma programları — ayrı kart yok, adımlar takvime işleniyor.
   // Birden fazla program aynı anda aktif olabilir: yeni atama artık öncekini
@@ -186,6 +195,12 @@ export default function StudentDashboard({ userId, userName }) {
         school_name:          profData.school_name          ?? "",
         grade:                profData.grade                ?? "",
         field_preference:     profData.field_preference     ?? "",
+        hedef_sinav:          profData.hedef_sinav          ?? "",
+        // Sayılar input'a metin olarak giriyor; null "" olmalı, yoksa
+        // alanda "null" yazar.
+        hedef_siralama:       profData.hedef_siralama ?? "",
+        hedef_puan:           profData.hedef_puan     ?? "",
+        hedef_aciklama:       profData.hedef_aciklama ?? "",
       });
     }
     setLoading(false);
@@ -201,8 +216,26 @@ export default function StudentDashboard({ userId, userName }) {
   const accuracyWk       = totalQuestionsWk > 0 ? Math.round((totalCorrectWk / totalQuestionsWk) * 100) : null;
 
   const pendingTasks = tasks.filter(t => !t.is_done);
-  const doneTasks    = tasks.filter(t =>  t.is_done);
   const pendingCount = pendingTasks.length;
+
+  // ── TAMAMLANANLAR BİR HAFTA SONRA LİSTEDEN ÇIKIYOR ──────────────
+  // Bitmiş görevler birikince liste zamanla yalnızca kapanmış işlerden
+  // oluşan bir arşive dönüyordu ve öğrencinin bakması gereken yeri
+  // gölgeliyordu. Son bir haftanınkiler duruyor — dün bitirdiğini
+  // görmek hem kontrol hem motivasyon.
+  //
+  // Kaybolmuyorlar: takvimde kendi günlerinde durmaya devam ediyorlar,
+  // koç panelinde de hepsi görünüyor. Buradan çıkan yalnızca liste.
+  //
+  // tamamlanma_tarihi NULL olanlar (tetikleyici eklenmeden önce kapanan
+  // eski kayıtlar) ESKİ sayılıyor: tarihi bilinmeyen bir görevi "bu
+  // hafta yapıldı" varsaymak, listeyi tam da temizlemek istediğimiz
+  // şeyle doldururdu.
+  const birHaftaOnce = Date.now() - 7 * 86400000;
+  const doneTasks = tasks.filter(t =>
+    t.is_done && t.tamamlanma_tarihi && new Date(t.tamamlanma_tarihi).getTime() >= birHaftaOnce
+  );
+  const eskiTamamlanan = tasks.filter(t => t.is_done).length - doneTasks.length;
   // Tarihi olmayan bekleyen görevler takvimde hiçbir güne düşmez; ayrı bir
   // görev kartı da kalmadığı için takvimin altında gösterilmezlerse
   // öğrenciye tamamen görünmez olurlar.
@@ -298,18 +331,25 @@ export default function StudentDashboard({ userId, userName }) {
         </div>
       )}
 
-      {doneTasks.length > 0 && (
+      {(doneTasks.length > 0 || eskiTamamlanan > 0) && (
         <div style={{ marginTop: 14 }}>
           <button onClick={() => setTamamlananlarAcik(v => !v)} style={{
             width: "100%", padding: "10px 0", borderRadius: 12,
             border: "1px solid #f0ede8", background: "#fafaf8",
             color: c.text, fontSize: 12, fontWeight: 600, cursor: "pointer",
           }}>
-            {tamamlananlarAcik ? "▾" : "▸"} Tamamlanan görevler ({doneTasks.length})
+            {tamamlananlarAcik ? "▾" : "▸"} Bu hafta tamamlananlar ({doneTasks.length})
           </button>
           {tamamlananlarAcik && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
               {doneTasks.map(gorevSatiri)}
+              {/* Listeden düşenler sessizce yok olmasın: sayı görünüyor,
+                  görevlerin kendisi takvimde kendi günlerinde duruyor. */}
+              {eskiTamamlanan > 0 && (
+                <div style={{ fontSize: 11, color: "#aaa", textAlign: "center", padding: "4px 0" }}>
+                  Daha eski {eskiTamamlanan} tamamlanan görev takvimde duruyor.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -464,6 +504,12 @@ export default function StudentDashboard({ userId, userName }) {
       school_name:          profileForm.school_name          || null,
       grade:               profileForm.grade               || null,
       field_preference:    profileForm.field_preference    || null,
+      hedef_sinav:         profileForm.hedef_sinav         || null,
+      // Boş alan null olmalı: "" sayısal sütuna gidince PostgREST hata
+      // veriyor ve tüm profil kaydı düşüyordu.
+      hedef_siralama:      profileForm.hedef_siralama ? parseInt(profileForm.hedef_siralama, 10) : null,
+      hedef_puan:          profileForm.hedef_puan     ? parseFloat(profileForm.hedef_puan)       : null,
+      hedef_aciklama:      profileForm.hedef_aciklama || null,
       updated_at:          new Date().toISOString(),
     });
     setSavingProfile(false);
@@ -473,6 +519,64 @@ export default function StudentDashboard({ userId, userName }) {
       return;
     }
     setShowProfileForm(false);
+    loadAll();
+  };
+
+  // ── PROFİL FOTOĞRAFI ────────────────────────────────────────────
+  // Dosya mevcut 'homework' bucket'ına, `{userId}/profil/` altına
+  // gidiyor. Yeni bucket açılmadı: oradaki INSERT politikası "yolun ilk
+  // parçası auth.uid() olacak" diyor ve profil fotoğrafı bu kurala
+  // olduğu gibi uyuyor — öğrenci başkasının klasörüne yazamıyor.
+  //
+  // Dosya adı ANAHTARA GİRMİYOR, zaman damgası kullanılıyor: Türkçe
+  // karakter ve boşluk içeren adlar depo anahtarını bozuyor. Damga aynı
+  // zamanda tarayıcı önbelleğini de kırıyor; sabit bir ad kullansaydık
+  // yeni fotoğraf yüklendiğinde eski görsel ekranda kalırdı.
+  const fotoSec = async (e) => {
+    const dosya = e.target.files?.[0];
+    e.target.value = "";                     // aynı dosya tekrar seçilebilsin
+    if (!dosya) return;
+    if (!dosya.type.startsWith("image/")) {
+      alert("Yalnızca görsel dosyası yükleyebilirsiniz.");
+      return;
+    }
+    if (dosya.size > 5 * 1024 * 1024) {
+      alert("Fotoğraf en fazla 5 MB olabilir.");
+      return;
+    }
+    setFotoYukleniyor(true);
+    try {
+      const uzanti = (dosya.name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const yol = `${userId}/profil/${Date.now()}.${uzanti}`;
+      const { error: yuklemeHatasi } = await supabase.storage
+        .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
+      if (yuklemeHatasi) throw yuklemeHatasi;
+      const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
+      const { error } = await supabase.from("student_profiles")
+        .upsert({ id: userId, photo_url: publicUrl, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      await loadAll();
+    } catch (err) {
+      console.error("Profil fotografi yuklenemedi:", err);
+      alert("Fotoğraf yüklenemedi: " + err.message);
+    } finally {
+      setFotoYukleniyor(false);
+    }
+  };
+
+  // Fotoğrafı kaldır — depodaki dosyaya dokunmuyor, yalnızca bağı kesiyor.
+  // Silmek için ayrıca DELETE politikası gerekirdi ve yanlışlıkla
+  // kaldıranın geri dönüşü olmazdı.
+  const fotoKaldir = async () => {
+    if (!window.confirm("Profil fotoğrafın kaldırılsın mı?")) return;
+    setFotoYukleniyor(true);
+    const { hata } = await calistir(
+      supabase.from("student_profiles")
+        .update({ photo_url: null, updated_at: new Date().toISOString() }).eq("id", userId),
+      "Profil fotografi kaldirma"
+    );
+    setFotoYukleniyor(false);
+    if (hata) return;
     loadAll();
   };
 
@@ -492,6 +596,9 @@ export default function StudentDashboard({ userId, userName }) {
             {/* Profil Modalı — hero'daki avatar butonuna basınca açılır */}
             {showProfileModal && (
               <Modal title="Profilim" onClose={() => { setShowProfileModal(false); setShowProfileForm(false); }}>
+              {/* Gizli dosya seçici — "Fotoğraf ekle" düğmesi bunu tetikliyor */}
+              <input ref={fotoInputRef} type="file" accept="image/*" onChange={fotoSec}
+                style={{ display: "none" }} />
               {!showProfileForm ? (
                 /* Görüntüleme modu */
                 !profile ? (
@@ -509,15 +616,8 @@ export default function StudentDashboard({ userId, userName }) {
                       cursor: "pointer", padding: "14px 16px", borderRadius: 14,
                       background: c.light, border: `1px solid ${c.mid}22`,
                     }}>
-                      {/* Avatar dairesi */}
-                      <div style={{
-                        width: 54, height: 54, borderRadius: 16, flexShrink: 0,
-                        background: c.bg, display: "flex", alignItems: "center",
-                        justifyContent: "center", fontSize: 20, fontWeight: 800, color: "#fff",
-                        letterSpacing: 1,
-                      }}>
-                        {initials(userName)}
-                      </div>
+                      <OgrenciAvatari ad={userName} fotoUrl={profile.photo_url}
+                        boyut={54} kose={16} zemin={c.bg} yazi="#fff" yaziBoyut={20} />
                       {/* İsim + eğitim bilgileri */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 15, fontWeight: 700, color: "#222", marginBottom: 3 }}>{userName}</div>
@@ -536,6 +636,74 @@ export default function StudentDashboard({ userId, userName }) {
                       {/* Düzenle ipucu */}
                       <span style={{ fontSize: 11, color: c.mid, fontWeight: 600, flexShrink: 0 }}>✏️ düzenle</span>
                     </div>
+
+                    {/* Fotoğraf düğmeleri avatar kartının DIŞINDA: kartın
+                        kendisi düzenleme formunu açıyor, içine düğme koymak
+                        iki farklı tıklama anlamını üst üste bindirirdi. */}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => fotoInputRef.current?.click()} disabled={fotoYukleniyor} style={{
+                        flex: 1, padding: "9px 0", borderRadius: 10, cursor: fotoYukleniyor ? "default" : "pointer",
+                        border: `1.5px dashed ${c.mid}`, background: "transparent",
+                        color: c.mid, fontSize: 12, fontWeight: 600, opacity: fotoYukleniyor ? 0.6 : 1,
+                      }}>
+                        {fotoYukleniyor ? "Yükleniyor..." : profile.photo_url ? "📷 Fotoğrafı değiştir" : "📷 Fotoğraf ekle"}
+                      </button>
+                      {profile.photo_url && (
+                        <button onClick={fotoKaldir} disabled={fotoYukleniyor} style={{
+                          padding: "9px 14px", borderRadius: 10, cursor: "pointer",
+                          border: "1.5px solid #f0ede8", background: "#fff",
+                          color: "#888", fontSize: 12,
+                        }}>Kaldır</button>
+                      )}
+                    </div>
+
+                    {/* Hedef — girilmişse gösteriliyor.
+                        exam_results'ta puan ve sıralama tutulmadığı için
+                        "hedefe ne kadar kaldı" hesaplanmıyor; yanında o
+                        güne kadarki EN İYİ NET duruyor, karşılaştırmayı
+                        öğrenci kendi yapıyor. Olmayan veriden ilerleme
+                        yüzdesi uydurmak yanlış bir güven verirdi. */}
+                    {(profile.hedef_siralama || profile.hedef_puan || profile.hedef_aciklama) && (() => {
+                      const enIyiNet = examResults.reduce(
+                        (m, s) => (s.total_net != null && s.total_net > m ? s.total_net : m), null);
+                      return (
+                        <div style={{
+                          background: c.light, borderRadius: 10, padding: "12px 14px",
+                          border: `1px solid ${c.mid}22`,
+                        }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: c.text, marginBottom: 6 }}>
+                            🎯 HEDEFİM{profile.hedef_sinav ? ` · ${profile.hedef_sinav}` : ""}
+                          </div>
+                          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                            {profile.hedef_siralama && (
+                              <div>
+                                <div style={{ fontSize: 10, color: "#888" }}>Sıralama</div>
+                                <div style={{ fontSize: 15, fontWeight: 800, color: c.text }}>
+                                  {Number(profile.hedef_siralama).toLocaleString("tr-TR")}
+                                </div>
+                              </div>
+                            )}
+                            {profile.hedef_puan && (
+                              <div>
+                                <div style={{ fontSize: 10, color: "#888" }}>Puan</div>
+                                <div style={{ fontSize: 15, fontWeight: 800, color: c.text }}>{profile.hedef_puan}</div>
+                              </div>
+                            )}
+                            {enIyiNet != null && (
+                              <div>
+                                <div style={{ fontSize: 10, color: "#888" }}>En iyi netin</div>
+                                <div style={{ fontSize: 15, fontWeight: 800, color: c.mid }}>{enIyiNet}</div>
+                              </div>
+                            )}
+                          </div>
+                          {profile.hedef_aciklama && (
+                            <div style={{ fontSize: 12, color: "#555", marginTop: 8, lineHeight: 1.5 }}>
+                              {profile.hedef_aciklama}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {/* Kişisel */}
                     {(profile.birth_date || profile.phone) && (
                       <div style={{ display: "flex", gap: 8 }}>
@@ -624,6 +792,32 @@ export default function StudentDashboard({ userId, userName }) {
                       <option value="sozel">Sözel</option>
                     </select>
                   </div>
+
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#888" }}>🎯 SINAV HEDEFİM</div>
+                  <select value={profileForm.hedef_sinav}
+                    onChange={e => setProfileForm(f => ({ ...f, hedef_sinav: e.target.value }))}
+                    style={{ ...inputStyle, width: "100%", color: profileForm.hedef_sinav ? "#222" : "#aaa" }}>
+                    <option value="">Hedef sınav seç...</option>
+                    {sinavTurleri.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>Hedef sıralama</div>
+                      <input type="number" min="1" placeholder="ör. 5000" value={profileForm.hedef_siralama}
+                        onChange={e => setProfileForm(f => ({ ...f, hedef_siralama: e.target.value }))}
+                        style={{ ...inputStyle, width: "100%" }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>Hedef puan</div>
+                      <input type="number" min="0" max="600" step="0.001" placeholder="ör. 480" value={profileForm.hedef_puan}
+                        onChange={e => setProfileForm(f => ({ ...f, hedef_puan: e.target.value }))}
+                        style={{ ...inputStyle, width: "100%" }} />
+                    </div>
+                  </div>
+                  <input placeholder="Hedef üniversite / bölüm (ör. ODTÜ Bilgisayar Müh.)"
+                    value={profileForm.hedef_aciklama}
+                    onChange={e => setProfileForm(f => ({ ...f, hedef_aciklama: e.target.value }))}
+                    style={{ ...inputStyle, width: "100%" }} />
 
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#888" }}>1. VELİ BİLGİLERİ</div>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -722,16 +916,33 @@ export default function StudentDashboard({ userId, userName }) {
                   </div>
                 </div>
                 <button onClick={() => { setShowProfileForm(false); setShowProfileModal(true); }} title="Profilim" style={{
-                  width: 64, height: 64, borderRadius: 16, background: "rgba(255,255,255,0.18)",
-                  border: "none", cursor: "pointer",
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
+                  width: 64, borderRadius: 16, background: "transparent",
+                  border: "none", cursor: "pointer", padding: 0, flexShrink: 0,
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
                 }}>
-                  <span style={{ fontSize: profile ? 22 : 26, fontWeight: 800, color: "#fff", letterSpacing: 1, lineHeight: 1 }}>
-                    {profile ? initials(userName) : "👤"}
-                  </span>
+                  {/* Fotoğraf varsa daire onu gösteriyor; yoksa eskisi gibi
+                      baş harfler (ya da profil hiç yoksa 👤). */}
+                  {profile?.photo_url ? (
+                    <OgrenciAvatari ad={userName} fotoUrl={profile.photo_url}
+                      boyut={54} kose={16} zemin="rgba(255,255,255,0.18)" yazi="#fff" />
+                  ) : (
+                    <div style={{
+                      width: 54, height: 54, borderRadius: 16, background: "rgba(255,255,255,0.18)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <span style={{ fontSize: profile ? 20 : 24, fontWeight: 800, color: "#fff", letterSpacing: 1, lineHeight: 1 }}>
+                        {profile ? initials(userName) : "👤"}
+                      </span>
+                    </div>
+                  )}
                   <span style={{ fontSize: 8, color: "rgba(255,255,255,0.85)", fontWeight: 700, letterSpacing: 0.5 }}>PROFİL</span>
                 </button>
               </div>
+              {/* Haftanın sözü — hero'nun hemen altında, istatistiklerin
+                  üstünde. Panele her girişte görülen ama sıranın önüne
+                  geçmeyen bir yer. */}
+              <HaftaninSozu color={c} />
+
               {/* İstatistikler */}
               <div style={{ display: "flex", gap: 10 }}>
                 <StatCard label="Bu hafta soru" value={totalQuestionsWk || "—"} sub="çözüldü"    color={c.mid} />
@@ -1126,6 +1337,16 @@ export default function StudentDashboard({ userId, userName }) {
                       )}
                     </Card>
           ) : null },
+        ]} />
+
+        {/* Çalışma grafikleri — dördü ayrı ayrı kart olsaydı yan blok
+            dört kart uzardı; aynı soruyu farklı açılardan yanıtladıkları
+            için tek bölümde sekme sekme duruyorlar. */}
+        <Bolum baslik="Çalışma Grafiklerim" color={c} id="bolum-grafik" sekmeler={[
+          { ad: "Haftalık soru", icerik: <HaftalikSoruGrafigi tests={testSessions} color={c} /> },
+          { ad: "Serim",         icerik: <CalismaSerisi tests={testSessions} tasks={tasks} color={c} /> },
+          { ad: "Doğruluk",      icerik: <DogrulukTrendi tests={testSessions} color={c} /> },
+          { ad: "Ders dağılımı", icerik: <DersDagilimi tests={testSessions} color={c} /> },
         ]} />
 
         <Bolum baslik="Başarılarım" color={c} sekmeler={[
