@@ -250,11 +250,18 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
             </div>
           )
         )}
-        {/* Tamamlanan ders → yapıldı + ödeme rozeti */}
+        {/* Tamamlanan ders → yapıldı + (öğrenciye gösterilmeyen) ödeme rozeti.
+            ÖDEME ÖĞRENCİYE GÖSTERİLMİYOR: ücret velinin ve koçun arasındaki
+            bir konu. "Ödenmedi" rozetini dersinin altında gören öğrenci,
+            kendi çalışmasıyla ilgisi olmayan bir borç bilgisiyle karşılaşmış
+            oluyordu. Veli kendi panelindeki Ödeme Durumu kartından takip
+            ediyor, koç da burayı görmeye devam ediyor. */}
         {l.completed && (() => {
           const pb = paymentBadge(l.payment_status);
+          const odemeGorunur = role !== "student";
+          const odendi = l.payment_status === "odendi";
           return (
-            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
               {l.katilim && KATILIM[l.katilim] && (
                 <span style={{
                   fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
@@ -262,7 +269,21 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
                 }}>{KATILIM[l.katilim].label}</span>
               )}
               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: c.light, color: c.text }}>Yapıldı ✓</span>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: pb.bg, color: pb.color }}>{pb.label}</span>
+              {odemeGorunur && (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: pb.bg, color: pb.color }}>{pb.label}</span>
+              )}
+              {/* Koç ödemeyi kendisi kaydedebiliyor: veli "ödedim" demeyi
+                  unutsa da (ya da elden / havaleyle ödense de) ödeme
+                  bilgisini oluşturacak bir yol olmalı. */}
+              {role === "teacher" && (
+                <button onClick={() => confirmPaid(l.id, !odendi)} style={{
+                  fontSize: 10, padding: "3px 10px", borderRadius: 99, cursor: "pointer",
+                  border: `1px solid ${odendi ? "#f0ede8" : "#CDEBDA"}`,
+                  background: odendi ? "#fff" : "#E8F9F0",
+                  color:      odendi ? "#999"  : "#1A6B3C",
+                  fontWeight: 600,
+                }}>{odendi ? "Ödemeyi geri al" : "₺ Ödendi işaretle"}</button>
+              )}
             </div>
           );
         })()}
