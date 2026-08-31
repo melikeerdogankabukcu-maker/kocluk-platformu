@@ -573,10 +573,32 @@ export default function TeacherDashboard({ userId, userName, role }) {
                           {/* Atanan görevler — hangi görev, hangi tarihe, hangi programdan */}
                           {sTasks.length > 0 && (() => {
                             const hepsi = acikGorevListesi === s.id;
+
+                            // ── ESKİ KAPANMIŞ GÖREVLER LİSTEDEN DÜŞÜYOR ─────
+                            // Öğrenci panelindeki kuralın aynısı. Burada
+                            // güvenli olmasının nedeni, is_done'ı YALNIZCA
+                            // koçun yazabilmesi (TaskItem'daki kutu salt
+                            // okunur): koçun bakmasını bekleyen her görev
+                            // is_done=false, yani filtreye takılmıyor.
+                            // Koç incelemesi bekleyen testli görevler de
+                            // öyle — hiçbiri kaybolmuyor.
+                            //
+                            // tamamlanma_tarihi NULL olanlar eski sayılıyor:
+                            // bunlar tetikleyici eklenmeden önce kapanmış
+                            // kayıtlar, tam da temizlemek istediğimiz yığın.
+                            const birHaftaOnce = Date.now() - 7 * 86400000;
+                            const guncel = sTasks.filter(t => !t.is_done ||
+                              (t.tamamlanma_tarihi && new Date(t.tamamlanma_tarihi).getTime() >= birHaftaOnce));
+                            const gizlenen = sTasks.length - guncel.length;
+
                             // En yeni tarih üstte; tarihsizler sona.
-                            const sirali = [...sTasks].sort((a, b) =>
+                            const sirala = (liste) => [...liste].sort((a, b) =>
                               (b.due_date ?? "").localeCompare(a.due_date ?? ""));
-                            const gosterilen = hepsi ? sirali : sirali.slice(0, 6);
+                            // "Tümünü göster" gerçekten TÜMÜ: gizlenen eski
+                            // görevler de o zaman geliyor. Koç bazen geçmişe
+                            // bakmak zorunda; erişimi kapatmadan sadeleştirme.
+                            const sirali = sirala(guncel);
+                            const gosterilen = hepsi ? sirala(sTasks) : sirali.slice(0, 6);
                             return (
                               <div style={{ padding: "8px 12px", borderRadius: 10, background: "#fafaf8", marginBottom: 8 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", marginBottom: 6 }}>
@@ -737,12 +759,19 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                     )
                                   ))}
                                 </div>
-                                {sirali.length > 6 && (
+                                {/* Gizlenen görevler sessizce yok olmasın:
+                                    sayıları yazıyor ve düğme onlara açılıyor. */}
+                                {!hepsi && gizlenen > 0 && (
+                                  <div style={{ fontSize: 10.5, color: "#bbb", marginTop: 6 }}>
+                                    Bir haftadan eski {gizlenen} tamamlanan görev gizlendi.
+                                  </div>
+                                )}
+                                {(sirali.length > 6 || gizlenen > 0) && (
                                   <button onClick={() => setAcikGorevListesi(hepsi ? null : s.id)} style={{
                                     marginTop: 6, background: "none", border: "none", padding: 0,
                                     color: c.mid, fontSize: 11, fontWeight: 600, cursor: "pointer",
                                   }}>
-                                    {hepsi ? "▴ daha az" : `▾ tümünü göster (${sirali.length})`}
+                                    {hepsi ? "▴ daha az" : `▾ tümünü göster (${sTasks.length})`}
                                   </button>
                                 )}
                               </div>
