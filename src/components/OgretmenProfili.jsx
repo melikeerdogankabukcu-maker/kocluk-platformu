@@ -80,21 +80,21 @@ export default function OgretmenProfili({ userId, color: c }) {
       <SectionTitle
         title={`Profilim${ozet?.brans ? ` · ${ozet.brans}` : ""}`}
         color={c.mid}
-      />
+        acik={acik} onToggle={() => setAcik(v => !v)} />
 
-      {!acik ? (
-        <button onClick={() => setAcik(true)} style={{
-          width: "100%", padding: "11px 0", borderRadius: 12,
-          border: `1.5px dashed ${ozet?.brans ? c.mid : "#EF9F27"}`,
-          background: "transparent",
-          color: ozet?.brans ? c.mid : "#854F0B",
-          fontSize: 13, fontWeight: 600, cursor: "pointer",
+      {/* Branş uyarısı kapalıyken de görünüyor: eskiden kartı açan düğmenin
+          üstünde duruyordu, düğme kalkınca eksik branşı hatırlatan hiçbir
+          şey kalmazdı. Branş girilince satır kendiliğinden kayboluyor. */}
+      {!acik && !loading && !ozet?.brans && (
+        <div style={{
+          marginTop: 8, padding: "8px 11px", borderRadius: 9,
+          background: "#FFF7E6", color: "#854F0B", fontSize: 11.5, lineHeight: 1.45,
         }}>
-          {ozet?.brans
-            ? "🎓 Profilimi düzenle"
-            : "🎓 Branşınızı ekleyin — öğrencileriniz görebilsin"}
-        </button>
-      ) : loading ? (
+          🎓 Branşınızı ekleyin — öğrencileriniz görebilsin.
+        </div>
+      )}
+
+      {!acik ? null : loading ? (
         <div style={{ fontSize: 12.5, color: "#aaa", padding: "12px 0", textAlign: "center" }}>
           Yükleniyor...
         </div>
@@ -147,10 +147,6 @@ export default function OgretmenProfili({ userId, color: c }) {
               background: c.bg, color: "#fff", fontSize: 12.5, fontWeight: 700,
               cursor: islemde ? "default" : "pointer", opacity: islemde ? 0.7 : 1,
             }}>{islemde ? "Kaydediliyor..." : "Kaydet"}</button>
-            <button onClick={() => setAcik(false)} style={{
-              padding: "10px 18px", borderRadius: 10, border: "1.5px solid #f0ede8",
-              background: "#fff", color: "#888", fontSize: 12.5, cursor: "pointer",
-            }}>Kapat</button>
           </div>
 
           {kayitli && (

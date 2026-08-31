@@ -59,7 +59,14 @@ export default function BildirimZili({ userId, rol }) {
 
       {acik && (
         <div style={{
-          position: "absolute", right: 0, top: 42, width: 320, maxWidth: "90vw",
+          // ── PANEL PENCEREYE SABİT ────────────────────────────────
+          // Önceden zile göre konumlanıyordu (absolute + right:0). Telefonda
+          // üst bar taşınca zil ekranın sağına kayıyor, panel de onunla
+          // birlikte görünür alanın dışına çıkıyor ve okunamıyordu. Artık
+          // panel zilin nerede olduğundan bağımsız, hep pencerenin içinde.
+          // Üst bar sticky/top:0 olduğu için 52px hep barın hemen altı.
+          position: "fixed", right: 8, top: 52,
+          width: "min(320px, calc(100vw - 16px))",
           background: "#fff", borderRadius: 14, border: "1px solid #f0ede8",
           boxShadow: "0 8px 28px rgba(0,0,0,0.14)", zIndex: 200, overflow: "hidden",
         }}>
@@ -76,7 +83,9 @@ export default function BildirimZili({ userId, rol }) {
             )}
           </div>
 
-          <div style={{ maxHeight: 380, overflowY: "auto" }}>
+          {/* Yükseklik de pencereye bağlı: sabit 380px, yatay tutulan
+              telefonda listeyi ekranın altından taşırıyordu. */}
+          <div style={{ maxHeight: "min(380px, calc(100vh - 120px))", overflowY: "auto" }}>
             {bildirimler.length === 0 ? (
               <div style={{ padding: "26px 14px", textAlign: "center", color: "#bbb", fontSize: 12.5 }}>
                 Henüz bildirim yok

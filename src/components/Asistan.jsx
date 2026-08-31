@@ -92,15 +92,10 @@ export default function Asistan({ students = null, color: c, baslik = "Asistan" 
 
   return (
     <Card id="bolum-asistan">
-      <SectionTitle title={baslik} color={c.mid} />
+      <SectionTitle title={`✨ ${baslik}`} color={c.mid}
+        acik={acik} onToggle={() => setAcik(v => !v)} />
 
-      {!acik ? (
-        <button onClick={() => setAcik(true)} style={{
-          width: "100%", padding: "11px 0", borderRadius: KOSE.l,
-          border: `1.5px dashed ${c.mid}`, background: "transparent",
-          color: c.mid, fontSize: YAZI.govde, fontWeight: 600, cursor: "pointer",
-        }}>✨ {students ? "Yardımcıya sor" : "Asistana sor"}</button>
-      ) : durum === null ? (
+      {!acik ? null : durum === null ? (
         <div style={{ fontSize: YAZI.ikincil, color: RENK.metinCokSoluk, padding: "12px 0", textAlign: "center" }}>
           Yükleniyor...
         </div>
@@ -118,10 +113,6 @@ export default function Asistan({ students = null, color: c, baslik = "Asistan" 
                  Anthropic API anahtarı tanımlanması gerekiyor. Anahtar
                  eklendiğinde bu kart kendiliğinden çalışmaya başlar.</>}
           </div>
-          <button onClick={() => setAcik(false)} style={{
-            padding: "9px 0", borderRadius: KOSE.m, border: `1.5px solid ${RENK.cizgi}`,
-            background: "#fff", color: RENK.metinSoluk, fontSize: YAZI.ikincil, cursor: "pointer",
-          }}>Kapat</button>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: BOSLUK.s }}>
@@ -204,11 +195,6 @@ export default function Asistan({ students = null, color: c, baslik = "Asistan" 
             {students ? " öğrencinin verisini kendiniz doğrulayın." : " koçunuza danışın."}
             {" "}Bu yazışma kaydedilmiyor.
           </div>
-
-          <button onClick={() => setAcik(false)} style={{
-            padding: "9px 0", borderRadius: KOSE.m, border: `1.5px solid ${RENK.cizgi}`,
-            background: "#fff", color: RENK.metinSoluk, fontSize: YAZI.ikincil, cursor: "pointer",
-          }}>Kapat</button>
         </div>
       )}
     </Card>

@@ -67,15 +67,10 @@ export default function HaftalikOzet({ studentId, students = null, color: c,
 
   return (
     <Card id="bolum-haftalik">
-      <SectionTitle title={baslik} color={c.mid} />
+      <SectionTitle title={baslik} color={c.mid}
+        acik={acik} onToggle={() => setAcik(v => !v)} />
 
-      {!acik ? (
-        <button onClick={() => setAcik(true)} style={{
-          width: "100%", padding: "11px 0", borderRadius: 12,
-          border: `1.5px dashed ${c.mid}`, background: "transparent",
-          color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
-        }}>📊 Hafta hafta gelişim</button>
-      ) : loading ? (
+      {!acik ? null : loading ? (
         <div style={{ fontSize: 12.5, color: "#aaa", padding: "12px 0", textAlign: "center" }}>
           Yükleniyor...
         </div>
@@ -99,10 +94,6 @@ export default function HaftalikOzet({ studentId, students = null, color: c,
               background: c.bg, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer",
             }}>{yenileniyor ? "Hesaplanıyor..." : "Özeti oluştur"}</button>
           )}
-          <button onClick={() => setAcik(false)} style={{
-            padding: "9px 0", borderRadius: 10, border: "1.5px solid #f0ede8",
-            background: "#fff", color: "#888", fontSize: 12.5, cursor: "pointer",
-          }}>Kapat</button>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -204,10 +195,6 @@ export default function HaftalikOzet({ studentId, students = null, color: c,
               background: "#fff", color: c.mid, fontSize: 12, fontWeight: 600, cursor: "pointer",
             }}>{yenileniyor ? "Hesaplanıyor..." : "↻ Son 12 haftayı yenile"}</button>
           )}
-          <button onClick={() => setAcik(false)} style={{
-            padding: "9px 0", borderRadius: 10, border: "1.5px solid #f0ede8",
-            background: "#fff", color: "#888", fontSize: 12.5, cursor: "pointer",
-          }}>Kapat</button>
         </div>
       )}
     </Card>

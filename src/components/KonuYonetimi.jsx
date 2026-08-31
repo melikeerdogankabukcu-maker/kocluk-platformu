@@ -132,15 +132,10 @@ export default function KonuYonetimi({ userId, color: c }) {
 
   return (
     <Card>
-      <SectionTitle title="Konu Yönetimi" color={c.mid} />
+      <SectionTitle title="Konu Yönetimi" color={c.mid}
+        acik={acik} onToggle={() => setAcik(v => !v)} />
 
-      {!acik ? (
-        <button onClick={() => setAcik(true)} style={{
-          width: "100%", padding: "11px 0", borderRadius: 12,
-          border: `1.5px dashed ${c.mid}`, background: "transparent",
-          color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
-        }}>Müfredat konularını düzenle</button>
-      ) : (
+      {!acik ? null : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
 
           {!veritabanindan && (
@@ -331,10 +326,6 @@ export default function KonuYonetimi({ userId, color: c }) {
             </>
           )}
 
-          <button onClick={() => { setAcik(false); setDuzenlenen(null); }} style={{
-            padding: "9px 0", borderRadius: 10, border: "1.5px solid #f0ede8",
-            background: "#fff", color: "#888", fontSize: 12.5, cursor: "pointer",
-          }}>Kapat</button>
         </div>
       )}
     </Card>

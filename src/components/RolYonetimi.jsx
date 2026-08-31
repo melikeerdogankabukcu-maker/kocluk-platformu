@@ -299,22 +299,17 @@ export default function RolYonetimi({ userId, color: c }) {
 
   return (
     <Card id="bolum-rol">
+      {/* Onay bekleyen hesap sayısı BAŞLIKTA. Önceden yalnızca kapalı
+          karttaki düğmenin üstünde yazıyordu; kart katlanınca yöneticinin
+          bekleyen kaydı görebileceği tek işaret ortadan kalkardı. */}
       <SectionTitle
-        title={`Kullanıcı Yönetimi${bekleyen.length > 0 ? ` (${bekleyen.length})` : ""}`}
+        title={`Kullanıcı Yönetimi${
+          onayBekleyen > 0 ? ` · ${onayBekleyen} hesap onay bekliyor`
+          : bekleyen.length > 0 ? ` · ${bekleyen.length} bekleyen talep` : ""}`}
         color={c.mid}
-      />
+        acik={acik} onToggle={() => setAcik(v => !v)} />
 
-      {!acik ? (
-        <button onClick={() => setAcik(true)} style={{
-          width: "100%", padding: "11px 0", borderRadius: 12,
-          border: `1.5px dashed ${c.mid}`, background: "transparent",
-          color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
-        }}>
-          👤 Kullanıcılar{onayBekleyen > 0
-            ? ` · ${onayBekleyen} hesap onay bekliyor`
-            : bekleyen.length > 0 ? ` · ${bekleyen.length} bekleyen talep` : ""}
-        </button>
-      ) : loading ? (
+      {!acik ? null : loading ? (
         <div style={{ fontSize: 12.5, color: "#aaa", padding: "12px 0", textAlign: "center" }}>
           Yükleniyor...
         </div>
@@ -350,10 +345,6 @@ export default function RolYonetimi({ userId, color: c }) {
             değiştiremezsiniz. Her değişiklik denetim kaydına yazılır.
           </div>
 
-          <button onClick={() => setAcik(false)} style={{
-            padding: "9px 0", borderRadius: 10, border: "1.5px solid #f0ede8",
-            background: "#fff", color: "#888", fontSize: 12.5, cursor: "pointer",
-          }}>Kapat</button>
         </div>
       )}
     </Card>

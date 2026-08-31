@@ -92,15 +92,10 @@ export default function DenetimKaydi({ color: c }) {
 
   return (
     <Card id="bolum-denetim">
-      <SectionTitle title="Denetim Kaydı" color={c.mid} />
+      <SectionTitle title="Denetim Kaydı" color={c.mid}
+        acik={acik} onToggle={() => setAcik(v => !v)} />
 
-      {!acik ? (
-        <button onClick={() => setAcik(true)} style={{
-          width: "100%", padding: "11px 0", borderRadius: 12,
-          border: `1.5px dashed ${c.mid}`, background: "transparent",
-          color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
-        }}>🔎 Kim ne yaptı — son işlemler</button>
-      ) : (
+      {!acik ? null : (
         <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
 
           {/* Tablo süzgeci */}
@@ -170,10 +165,6 @@ export default function DenetimKaydi({ color: c }) {
             yapılan işlemlerdir.
           </div>
 
-          <button onClick={() => setAcik(false)} style={{
-            padding: "9px 0", borderRadius: 10, border: "1.5px solid #f0ede8",
-            background: "#fff", color: "#888", fontSize: 12.5, cursor: "pointer",
-          }}>Kapat</button>
         </div>
       )}
     </Card>

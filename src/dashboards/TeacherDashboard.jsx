@@ -5,7 +5,6 @@ import { API_URL } from "../lib/config";
 import { COLORS } from "../lib/theme";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { useTopics } from "../lib/TopicsContext";
-import { bolumeGit } from "../lib/bildirimHedef";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
 import { odevDosyalari } from "../lib/odevDosyalari";
 import { testOzetMetni } from "../lib/testHelpers";
@@ -33,6 +32,7 @@ import AlertChip from "../components/AlertChip";
 import LessonPlanner from "../components/LessonPlanner";
 import SinavAnalizi from "../components/SinavAnalizi";
 import Bolum from "../components/Bolum";
+import Modal from "../components/Modal";
 import PanelDuzen from "../components/PanelDuzen";
 
 export default function TeacherDashboard({ userId, userName, role }) {
@@ -330,9 +330,21 @@ export default function TeacherDashboard({ userId, userName, role }) {
       due_dates: [],            // tarihi öğretmen yeniden seçsin
     });
     setTarihGirdi("");
+    // Form artık modalda; kaydırmaya gerek yok, pencere zaten öne geliyor.
     setShowForm(true);
-    // Form listenin altında; kullanıcı nereye gittiğini görsün.
-    setTimeout(() => bolumeGit("bolum-gorevler"), 50);
+  };
+
+  // "+ Görev Ata" — boş formla modalı açar.
+  //
+  // Form önce sayfada duran bir karttı ve bu düğmenin onAction'ı hiç
+  // bağlanmamıştı: tıklayınca hiçbir şey olmuyordu. Görev atama günde
+  // birkaç kez yapılan bir iş; sürekli açık duran uzun bir form olarak
+  // panelin ortasında yer kaplamasına gerek yok.
+  const gorevAtamayaBasla = () => {
+    setForm({ student_id: "", title: "", subject: "", custom_subject: "", topic: "",
+      exam_type: sinavTurleri[0] ?? "TYT", estimated_minutes: "", due_dates: [] });
+    setTarihGirdi("");
+    setShowForm(true);
   };
 
   const gorevSil = async (t) => {
@@ -456,7 +468,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
         {/* Öğrenciler — panelin ana işi, geniş blokta */}
               {/* Öğrenci listesi */}
               <Card id="bolum-ogrenciler">
-                <SectionTitle title="Öğrenci durumu" action="+ Görev Ata" color={c.mid} />
+                <SectionTitle title="Öğrenci durumu" action="+ Görev Ata"
+                  onAction={gorevAtamayaBasla} color={c.mid} />
                 {loading ? (
                   <div style={{ fontSize: 13, color: "#aaa", padding: "12px 0" }}>Yükleniyor...</div>
                 ) : students.length === 0 ? (
@@ -844,17 +857,13 @@ export default function TeacherDashboard({ userId, userName, role }) {
                 })}
               </Card>
 
-        {/* Görev atama formu: "+ Görev Ata" buraya kaydırıyor */}
-              {/* Görev Atama Formu */}
-              <Card id="bolum-gorevler">
-                <SectionTitle title="Görev Ata" color={c.mid} />
-                {!showForm ? (
-                  <button onClick={() => setShowForm(true)} style={{
-                    width: "100%", padding: "11px 0", borderRadius: 12,
-                    border: `1.5px dashed ${c.mid}`, background: "transparent",
-                    color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}>+ Yeni Görev Ata</button>
-                ) : (
+        {/* Görev atama formu — artık sayfada durmuyor, açılır pencerede.
+            Öğrenci listesinin başlığındaki "+ Görev Ata" ve bir görevin
+            "Kopyala" düğmesi buraya açıyor. Modal position:fixed olduğu
+            için ağaçtaki yeri görünümü etkilemiyor; okunurluk için görev
+            işlerinin yanında bırakıldı. */}
+              {showForm && (
+                <Modal title="Görev Ata" onClose={() => setShowForm(false)}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {/* Hedef: tek öğrenci ya da grup */}
                     <select value={form.student_id} onChange={e => setForm(f => ({ ...f, student_id: e.target.value }))}
@@ -987,8 +996,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
                       }}>İptal</button>
                     </div>
                   </div>
-                )}
-              </Card>
+                </Modal>
+              )}
 
         {/* Takvim ve ders planlama */}
               {/* Takvim + Ders Planlama */}
