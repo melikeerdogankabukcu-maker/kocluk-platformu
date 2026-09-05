@@ -35,6 +35,7 @@ import SinavAnalizi from "../components/SinavAnalizi";
 import Bolum from "../components/Bolum";
 import Modal from "../components/Modal";
 import OgrenciAvatari from "../components/OgrenciAvatari";
+import SoruBankasi from "../components/SoruBankasi";
 import PanelDuzen from "../components/PanelDuzen";
 
 export default function TeacherDashboard({ userId, userName, role }) {
@@ -1095,6 +1096,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
         <Bolum baslik="İçerik" color={c} sekmeler={[
           { ad: "Programlar", icerik: <ProgramDuzenleyici userId={userId} students={students} color={c} /> },
           { ad: "Müfredat", icerik: <KonuYonetimi userId={userId} color={c} /> },
+          { ad: "Soru Bankası", id: "bolum-soru-bankasi",
+            icerik: <SoruBankasi userId={userId} color={c} /> },
         ]} />
 
         {/* Koç yardımcısı — öğrenci seçicili */}
