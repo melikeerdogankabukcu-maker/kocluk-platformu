@@ -22,6 +22,24 @@ export function fmtTime(t) {
   return t.slice(0, 5);
 }
 
+// Bir dersin varsayılan uzunluğu. Tek yerde duruyor ki hem yeni ders
+// formu hem düzenleme formu aynı öneriyi versin.
+export const VARSAYILAN_DERS_DK = 60;
+
+// "HH:MM" + dakika → "HH:MM".
+//
+// GECE YARISINI AŞMIYOR. end_time bir TIME sütunu, tarihi yok: 23:30'a
+// bir saat eklersek 00:30 çıkar ve veritabanında bitiş başlangıçtan
+// ÖNCE görünür. Böyle bir durumda 23:59'a sabitleniyor; saçma ama
+// tutarlı bir değer, sessizce ters bir aralık yazmaktan iyi.
+export function saatEkle(saat, dakika) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(saat ?? "");
+  if (!m) return "";
+  const toplam = Number(m[1]) * 60 + Number(m[2]) + dakika;
+  if (toplam >= 24 * 60) return "23:59";
+  return `${String(Math.floor(toplam / 60)).padStart(2, "0")}:${String(toplam % 60).padStart(2, "0")}`;
+}
+
 // Bir ayın ızgarasını Pazartesi başlangıçlı haftalar dizisi olarak üretir.
 // Dönüş: [[{date, dateStr, inMonth}, ...7], ...] — boş kutular için date=null
 export function buildMonthGrid(year, month) {

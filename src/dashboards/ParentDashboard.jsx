@@ -98,7 +98,13 @@ export default function ParentDashboard({ userId, userName }) {
             color: t.is_done ? "#9aa" : "#222",
             textDecoration: t.is_done ? "line-through" : "none",
           }}>📌 {t.title}</div>
-          {t.subject && <div style={{ fontSize: 11, color: "#8896b5", marginTop: 1 }}>{t.subject}</div>}
+          {/* Saat varsa ders adının yanında — takvimde gün zaten belli,
+              eksik olan tek şey gün içindeki saatti. */}
+          {(t.subject || t.due_time) && (
+            <div style={{ fontSize: 11, color: "#8896b5", marginTop: 1 }}>
+              {[t.due_time ? `🕘 ${fmtTime(t.due_time)}` : null, t.subject].filter(Boolean).join(" · ")}
+            </div>
+          )}
         </div>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, flexShrink: 0,

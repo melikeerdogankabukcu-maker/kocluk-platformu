@@ -7,6 +7,7 @@ import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { useTopics } from "../lib/TopicsContext";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
 import { odevDosyalari } from "../lib/odevDosyalari";
+import { fmtTime } from "../lib/lessonHelpers";
 import { testOzetMetni } from "../lib/testHelpers";
 import SinavGirisFormu from "../components/SinavGirisFormu";
 import KonuYonetimi from "../components/KonuYonetimi";
@@ -71,7 +72,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
   // kendi ilerlemesini tutsun diye.
   const [form, setForm] = useState({
     student_id: "", title: "", subject: "", custom_subject: "", topic: "",
-    exam_type: "TYT", estimated_minutes: "", due_dates: [],
+    exam_type: "TYT", estimated_minutes: "", due_dates: [], due_time: "",
   });
   const [tarihGirdi, setTarihGirdi] = useState("");
 
@@ -253,7 +254,11 @@ export default function TeacherDashboard({ userId, userName, role }) {
     // due_date null — eski davranış korunur.
     const tarihler = form.due_dates.length > 0 ? form.due_dates : [null];
     const satirlar = hedefler.flatMap(sid =>
-      tarihler.map(t => ({ ...ortak, student_id: sid, due_date: t }))
+      // Saat TÜM tarihlere aynı uygulanıyor: "her gün 19:00" en sık
+      // istenen şey. Tarihsiz göreve saat yazılmıyor — veritabanındaki
+      // kısıt da bunu reddederdi.
+      tarihler.map(t => ({ ...ortak, student_id: sid, due_date: t,
+                           due_time: t ? (form.due_time || null) : null }))
     );
     // Gruptaki bir ogrencinin bagi onayli degilse WITH CHECK tum insert'i
     // reddeder; hata okunmazsa ogretmen hicbir gorev atanmadigini fark etmez.
@@ -264,7 +269,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
     setSaving(false);
     if (hata) return;
     setForm({ student_id: "", title: "", subject: "", custom_subject: "", topic: "",
-      exam_type: "TYT", estimated_minutes: "", due_dates: [] });
+      exam_type: "TYT", estimated_minutes: "", due_dates: [], due_time: "" });
     setTarihGirdi("");
     setShowForm(false);
     loadData();
@@ -288,7 +293,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
 
   const gorevDuzenle = (t) => setGorevTaslak({
     id: t.id, title: t.title ?? "", subject: t.subject ?? "", topic: t.topic ?? "",
-    due_date: t.due_date ?? "", estimated_minutes: t.estimated_minutes ?? "",
+    due_date: t.due_date ?? "", due_time: (t.due_time ?? "").slice(0, 5),
+    estimated_minutes: t.estimated_minutes ?? "",
   });
 
   const gorevKaydet = async () => {
@@ -300,6 +306,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
         subject: gorevTaslak.subject || null,
         topic: gorevTaslak.topic || null,
         due_date: gorevTaslak.due_date || null,
+        // Tarih silinirse saat de gitmeli; kısıt tarihsiz saati reddediyor.
+        due_time: gorevTaslak.due_date ? (gorevTaslak.due_time || null) : null,
         estimated_minutes: gorevTaslak.estimated_minutes
           ? parseInt(gorevTaslak.estimated_minutes) : null,
       }).eq("id", gorevTaslak.id),
@@ -329,6 +337,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
       exam_type: tur ?? "TYT",
       estimated_minutes: t.estimated_minutes ?? "",
       due_dates: [],            // tarihi öğretmen yeniden seçsin
+      due_time: (t.due_time ?? "").slice(0, 5),   // saat kopyalanıyor
     });
     setTarihGirdi("");
     // Form artık modalda; kaydırmaya gerek yok, pencere zaten öne geliyor.
@@ -343,7 +352,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
   // panelin ortasında yer kaplamasına gerek yok.
   const gorevAtamayaBasla = () => {
     setForm({ student_id: "", title: "", subject: "", custom_subject: "", topic: "",
-      exam_type: sinavTurleri[0] ?? "TYT", estimated_minutes: "", due_dates: [] });
+      exam_type: sinavTurleri[0] ?? "TYT", estimated_minutes: "", due_dates: [], due_time: "" });
     setTarihGirdi("");
     setShowForm(true);
   };
@@ -643,6 +652,9 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                           <input type="date" value={gorevTaslak.due_date}
                                             onChange={e => setGorevTaslak(g => ({ ...g, due_date: e.target.value }))}
                                             style={{ ...duzenleInput, flex: 1 }} />
+                                          <input type="time" value={gorevTaslak.due_time} title="Saat"
+                                            onChange={e => setGorevTaslak(g => ({ ...g, due_time: e.target.value }))}
+                                            style={{ ...duzenleInput, width: 88 }} />
                                           <input type="number" placeholder="dk" value={gorevTaslak.estimated_minutes}
                                             onChange={e => setGorevTaslak(g => ({ ...g, estimated_minutes: e.target.value }))}
                                             style={{ ...duzenleInput, width: 62 }} />
@@ -667,6 +679,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                       <span style={{ flexShrink: 0, color: "#888", minWidth: 52 }}>
                                         {t.due_date
                                           ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" })
+                                            + (t.due_time ? ` ${fmtTime(t.due_time)}` : "")
                                           : "tarihsiz"}
                                       </span>
                                       <span style={{
@@ -986,9 +999,20 @@ export default function TeacherDashboard({ userId, userName, role }) {
                       <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>
                         Tarih {form.due_dates.length > 0 && `(${form.due_dates.length} seçili)`}
                       </div>
-                      <input type="date" value={tarihGirdi}
-                        onChange={e => { tarihEkle(e.target.value); setTarihGirdi(""); }}
-                        style={{ width: "100%", padding: "9px 12px", borderRadius: 10, border: "1.5px solid #f0ede8", fontSize: 13, boxSizing: "border-box" }} />
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input type="date" value={tarihGirdi}
+                          onChange={e => { tarihEkle(e.target.value); setTarihGirdi(""); }}
+                          style={{ flex: 1, minWidth: 0, padding: "9px 12px", borderRadius: 10, border: "1.5px solid #f0ede8", fontSize: 13, boxSizing: "border-box" }} />
+                        {/* Saat SEÇİLEN TÜM TARİHLERE uygulanıyor. Tarih başına
+                            ayrı saat, "her gün 19:00" gibi asıl kullanımda
+                            işi kolaylaştırmak yerine zorlaştırırdı. */}
+                        <input type="time" value={form.due_time} title="Saat (isteğe bağlı)"
+                          onChange={e => setForm(f => ({ ...f, due_time: e.target.value }))}
+                          style={{ width: 118, flexShrink: 0, padding: "9px 12px", borderRadius: 10, border: "1.5px solid #f0ede8", fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "#bbb", marginTop: 4 }}>
+                        Saat isteğe bağlı; girilirse seçilen tarihlerin hepsine uygulanır.
+                      </div>
 
                       {form.due_dates.length > 0 && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>

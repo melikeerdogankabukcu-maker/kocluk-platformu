@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLessons } from "../hooks/useLessons";
-import { fmtTime, lessonStatusStyle, lessonTypeLabel, toDateStr } from "../lib/lessonHelpers";
+import { fmtTime, lessonStatusStyle, lessonTypeLabel, toDateStr,
+  saatEkle, VARSAYILAN_DERS_DK } from "../lib/lessonHelpers";
 import { testOzetMetni } from "../lib/testHelpers";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
@@ -39,20 +40,51 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
 
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
+
+  // ── VARSAYILAN 1 SAAT ───────────────────────────────────────────
+  // Başlangıç saati girilince bitiş kendiliğinden bir saat sonrası
+  // olarak DOLUYOR. Dersler neredeyse hep bir saat; her seferinde iki
+  // alan doldurmak gereksiz, boş bırakılınca da ders süresiz kalıyordu
+  // (takvimde yalnızca başlangıç görünüyor, katılım ve ücret için
+  // "ne kadar sürdü" hiçbir yerde yazmıyordu).
+  //
+  // ÖNERİ, DAYATMA DEĞİL: öğretmen bitişi elle değiştirdiği anda bu
+  // bayrak düşüyor ve başlangıç sonradan oynasa bile yazdığı saate
+  // dokunulmuyor. Aksi hâlde "1.5 saat" diye ayarladığı ders, saati
+  // kaydırınca sessizce 1 saate dönerdi.
+  const [otoBitis,    setOtoBitis]    = useState(true);
+  const [otoBitisDuz, setOtoBitisDuz] = useState(true);   // düzenleme formu için ayrı
   // Düzenlenen ders: { id, lesson_date, start_time, end_time, location, meeting_link }
   const [duzenlenen,   setDuzenlenen]   = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
-  const duzenlemeyeBasla = (l) => setDuzenlenen({
-    id:           l.id,
-    lesson_date:  l.lesson_date  ?? "",
-    // time alanları "14:30:00" gelebiliyor; input[type=time] "14:30" bekliyor,
-    // saniyeli değer verilirse alan BOŞ açılır ve öğretmen saati silinmiş sanır
-    start_time:   (l.start_time ?? "").slice(0, 5),
-    end_time:     (l.end_time   ?? "").slice(0, 5),
-    location:     l.location     ?? "",
-    meeting_link: l.meeting_link ?? "",
-  });
+  const duzenlemeyeBasla = (l) => {
+    // Bitişi zaten yazılmış bir dersi düzenlerken otomatik öneri
+    // KAPALI başlıyor: kayıtlı süre kullanıcının kararı, saati
+    // kaydırınca onu 1 saate çekmek olmaz.
+    setOtoBitisDuz(!l.end_time);
+    setDuzenlenen({
+      id:           l.id,
+      lesson_date:  l.lesson_date  ?? "",
+      // time alanları "14:30:00" gelebiliyor; input[type=time] "14:30" bekliyor,
+      // saniyeli değer verilirse alan BOŞ açılır ve öğretmen saati silinmiş sanır
+      start_time:   (l.start_time ?? "").slice(0, 5),
+      end_time:     (l.end_time   ?? "").slice(0, 5),
+      location:     l.location     ?? "",
+      meeting_link: l.meeting_link ?? "",
+    });
+  };
+
+  // Başlangıç değişince bitişi öner (yalnızca otomatik bayrak açıkken)
+  const baslangicDegisti = (deger, duzenlemede = false) => {
+    const oto = duzenlemede ? otoBitisDuz : otoBitis;
+    const yeniBitis = oto && deger ? saatEkle(deger, VARSAYILAN_DERS_DK) : null;
+    if (duzenlemede) {
+      setDuzenlenen(d => ({ ...d, start_time: deger, end_time: yeniBitis ?? d.end_time }));
+    } else {
+      setForm(f => ({ ...f, start_time: deger, end_time: yeniBitis ?? f.end_time }));
+    }
+  };
 
   const kaydetDuzenleme = async () => {
     if (!duzenlenen?.lesson_date || !duzenlenen.start_time) return;
@@ -104,6 +136,7 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
     if (error) { alert("Ders oluşturulamadı: " + error.message); return; }
     setForm({ counterpart_id: "", lesson_type: "yuzyuze", location: "", meeting_link: "",
       lesson_date: "", start_time: "", end_time: "", title: "", note: "" });
+    setOtoBitis(true);           // sonraki ders yine 1 saat önerisiyle açılsın
     setShowForm(false);
   };
 
@@ -126,7 +159,13 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
             color: t.is_done ? "#9aa" : "#222",
             textDecoration: t.is_done ? "line-through" : "none",
           }}>📌 {t.title}</div>
-          {t.subject && <div style={{ fontSize: 11, color: "#8896b5", marginTop: 1 }}>{t.subject}</div>}
+          {/* Saat varsa ders adının yanında — takvimde gün zaten belli,
+              eksik olan tek şey gün içindeki saatti. */}
+          {(t.subject || t.due_time) && (
+            <div style={{ fontSize: 11, color: "#8896b5", marginTop: 1 }}>
+              {[t.due_time ? `🕘 ${fmtTime(t.due_time)}` : null, t.subject].filter(Boolean).join(" · ")}
+            </div>
+          )}
         </div>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, flexShrink: 0,
@@ -299,10 +338,10 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
                 onChange={e => setDuzenlenen(d => ({ ...d, lesson_date: e.target.value }))}
                 style={{ ...inputStyle, fontSize: 12, padding: "7px 9px", flex: "1 1 130px" }} />
               <input type="time" value={duzenlenen.start_time}
-                onChange={e => setDuzenlenen(d => ({ ...d, start_time: e.target.value }))}
+                onChange={e => baslangicDegisti(e.target.value, true)}
                 style={{ ...inputStyle, fontSize: 12, padding: "7px 9px", flex: "1 1 90px" }} />
               <input type="time" value={duzenlenen.end_time}
-                onChange={e => setDuzenlenen(d => ({ ...d, end_time: e.target.value }))}
+                onChange={e => { setOtoBitisDuz(false); setDuzenlenen(d => ({ ...d, end_time: e.target.value })); }}
                 style={{ ...inputStyle, fontSize: 12, padding: "7px 9px", flex: "1 1 90px" }} />
             </div>
             {l.lesson_type === "online" ? (
@@ -407,13 +446,15 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>Başlangıç</div>
                 <input type="time" value={form.start_time}
-                  onChange={e => setForm(f => ({ ...f, start_time: e.target.value }))}
+                  onChange={e => baslangicDegisti(e.target.value)}
                   style={{ ...inputStyle, width: "100%" }} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>Bitiş (opsiyonel)</div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>
+                  Bitiş {otoBitis && <span style={{ color: c.mid, fontWeight: 600 }}>· 1 saat önerildi</span>}
+                </div>
                 <input type="time" value={form.end_time}
-                  onChange={e => setForm(f => ({ ...f, end_time: e.target.value }))}
+                  onChange={e => { setOtoBitis(false); setForm(f => ({ ...f, end_time: e.target.value })); }}
                   style={{ ...inputStyle, width: "100%" }} />
               </div>
             </div>

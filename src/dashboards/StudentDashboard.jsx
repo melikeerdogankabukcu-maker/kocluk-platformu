@@ -8,6 +8,7 @@ import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { computeTopicProgress } from "../lib/progressHelpers";
 import { testOzeti, testOzetMetni } from "../lib/testHelpers";
+import { fmtTime } from "../lib/lessonHelpers";
 import { useAnaliz } from "../hooks/useAnaliz";
 import Card from "../components/Card";
 import SectionTitle from "../components/SectionTitle";
@@ -245,7 +246,12 @@ export default function StudentDashboard({ userId, userName }) {
   // Tarihi yakın olan üstte olsun; tarihsizler en sona.
   const bekleyenGorevler = tasks
     .filter(t => !t.is_done && t.ogretmen_onayi !== "onaylandi")
-    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+    // Aynı güne düşen görevlerde saati erken olan üstte; saatsizler o
+    // günün sonuna. Sıralama metin karşılaştırması olduğu için "09:00"
+    // < "14:00" doğru çalışıyor.
+    .sort((a, b) =>
+      `${a.due_date ?? "9999-99-99"}T${a.due_time ?? "99:99"}`
+        .localeCompare(`${b.due_date ?? "9999-99-99"}T${b.due_time ?? "99:99"}`));
 
   // Görev seçilince ders ve konu kendiliğinden dolsun.
   //
@@ -311,7 +317,11 @@ export default function StudentDashboard({ userId, userName }) {
     <TaskItem
       key={t.id} id={t.id} color={c.bg} done={t.is_done} label={t.title}
       sub={[t.subject, t.topic, t.estimated_minutes ? `${t.estimated_minutes} dk` : null,
-        t.due_date ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : null,
+        // Saat varsa tarihin yanında: "12 Eylül · 19:00"
+        t.due_date
+          ? new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })
+            + (t.due_time ? ` · ${fmtTime(t.due_time)}` : "")
+          : null,
         t.description].filter(Boolean).join(" · ")}
       testler={gorevinTestleri(t.id)}
       ogretmenOnayi={t.ogretmen_onayi} onayNotu={t.onay_notu}
@@ -986,6 +996,7 @@ export default function StudentDashboard({ userId, userName }) {
                           <option key={t.id} value={t.id}>
                             {t.title}{t.subject ? ` · ${t.subject}` : ""}
                             {t.due_date ? ` · ${new Date(t.due_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" })}` : ""}
+                            {t.due_time ? ` ${fmtTime(t.due_time)}` : ""}
                           </option>
                         ))}
                       </select>
