@@ -34,16 +34,25 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
   const [hata,    setHata]    = useState(null);
   const dosyaRef = useRef(null);
 
+  // Yeni çıkarılan metni kutuya YAZMAK YERİNE EKLİYOR.
+  //
+  // İçindekiler çoğu kitapta iki üç sayfa ve tek fotoğrafa sığmıyor.
+  // Üzerine yazsaydık ikinci sayfayı okutan kullanıcı birincisini
+  // kaybederdi — üstelik bunu ancak kaydettikten sonra fark ederdi.
+  const metneEkle = (yeni) =>
+    setMetin(onceki => (onceki.trim() ? `${onceki.replace(/\s+$/, "")}\n${yeni}` : yeni));
+
   const dosyaSec = async (e) => {
-    const dosya = e.target.files?.[0];
+    const dosyalar = [...(e.target.files ?? [])];
     e.target.value = "";
-    if (!dosya) return;
+    if (dosyalar.length === 0) return;
     setHata(null);
     setBolumler(null);
 
     try {
       if (kaynak === "pdf") {
         setIslemde({ mesaj: "PDF okunuyor..." });
+        const dosya = dosyalar[0];
         const { metin: cikan, sayfaSayisi: okunan, toplamSayfa } = await pdfMetni(dosya);
         if (!cikan.trim()) {
           // Taranmış PDF'te metin katmanı yok. Sessizce boş kutu
@@ -51,7 +60,7 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
           setHata("Bu PDF'te metin katmanı yok (taranmış olabilir). " +
                   "İçindekiler sayfasının fotoğrafını çekip 📷 Fotoğraf ile deneyin.");
         } else {
-          setMetin(cikan);
+          metneEkle(cikan);
           if (toplamSayfa > okunan) {
             setHata(`PDF ${toplamSayfa} sayfa; ilk ${okunan} sayfa okundu. ` +
                     `İçindekiler daha ilerideyse yalnızca o sayfaları içeren bir PDF verin.`);
@@ -59,15 +68,16 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
         }
       } else {
         setIslemde({ mesaj: "Görsel okunuyor..." });
-        const { metin: cikan, guven } = await fotografMetni(dosya, {
-          ilerleme: ({ asama, yuzde }) => setIslemde({
+        const { metin: cikan, guven } = await fotografMetni(dosyalar, {
+          ilerleme: ({ asama, yuzde, sira, toplam }) => setIslemde({
             mesaj: asama === "loading language traineddata"
               ? "Türkçe dil verisi indiriliyor (ilk kullanımda bir kez)..."
+              : toplam > 1 ? `Görsel okunuyor (${sira ?? "?"}/${toplam})...`
               : "Görsel okunuyor...",
             yuzde,
           }),
         });
-        setMetin(cikan);
+        metneEkle(cikan);
         if (!cikan.trim()) {
           setHata("Görselden metin çıkarılamadı. Daha net ve düz çekilmiş bir fotoğraf deneyin.");
         } else if (guven != null && guven < 70) {
@@ -122,6 +132,7 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
       {kaynak !== "yapistir" && (
         <div>
           <input ref={dosyaRef} type="file" style={{ display: "none" }} onChange={dosyaSec}
+            multiple={kaynak === "foto"}
             accept={kaynak === "pdf" ? "application/pdf" : "image/*"} />
           <button onClick={() => dosyaRef.current?.click()} disabled={!!islemde} style={{
             width: "100%", padding: "11px 0", borderRadius: KOSE.m,
@@ -129,7 +140,10 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
             color: c.mid, fontSize: YAZI.govde, fontWeight: 600,
             cursor: islemde ? "default" : "pointer", opacity: islemde ? 0.6 : 1,
           }}>
-            {islemde ? islemde.mesaj : kaynak === "pdf" ? "PDF seç" : "İçindekiler fotoğrafını seç"}
+            {islemde ? islemde.mesaj
+              : kaynak === "pdf" ? "PDF seç"
+              : metin.trim() ? "+ Fotoğraf ekle (birden fazla seçebilirsiniz)"
+              : "İçindekiler fotoğrafını seç (birden fazla seçebilirsiniz)"}
           </button>
           {islemde?.yuzde != null && (
             <div style={{ height: 5, borderRadius: KOSE.tam, background: RENK.cizgi, marginTop: 6, overflow: "hidden" }}>
@@ -138,8 +152,10 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
           )}
           {kaynak === "foto" && !islemde && (
             <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, marginTop: 5, lineHeight: 1.5 }}>
-              Okuma tarayıcınızda yapılır, görsel hiçbir yere gönderilmez.
-              İlk kullanımda Türkçe dil verisi indirilir.
+              İçindekiler birkaç sayfaysa hepsini seçin ya da tek tek ekleyin —
+              okunan metin aşağıdaki kutuya <b>eklenir</b>, üzerine yazılmaz.
+              Okuma tarayıcınızda yapılır, görsel hiçbir yere gönderilmez;
+              ilk kullanımda Türkçe dil verisi indirilir.
             </div>
           )}
         </div>

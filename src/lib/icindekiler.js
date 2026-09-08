@@ -17,7 +17,12 @@
 //   "1. Temel Kavramlar .......... 7"
 //   "Sayı Basamakları                23"
 //   "3  Bölme ve Bölünebilme    41-58"
-const SATIR = /^(.*?)[\s.·•\-–—_]*?(\d{1,4})(?:\s*[-–—]\s*(\d{1,4}))?\s*$/;
+//
+// DOLGU KARAKTERLERİ GENİŞ TUTULUYOR: OCR uzun nokta dizilerini sık sık
+// virgül, tırnak, iki nokta ya da yıldıza çeviriyor. Dar bir sınıf
+// yazsaydık bu satırlar hiç ayrıştırılamaz, koç da nedenini anlamazdı.
+const DOLGU_KARAKTER = "\\s.,;:'\"`´·•*~°^_\\-–—";
+const SATIR = new RegExp(`^(.*?)[${DOLGU_KARAKTER}]*?(\\d{1,4})(?:\\s*[-–—]\\s*(\\d{1,4}))?\\s*$`);
 
 // Baştaki numaralandırma: "1.", "1)", "01 -", "BÖLÜM 3", "ÜNİTE 2"
 //
@@ -48,7 +53,7 @@ function satirlar(metin) {
 export function basligiTemizle(ham) {
   return (ham ?? "")
     .replace(BAS_NUMARA, "")
-    .replace(/[\s.·•_\-–—]+$/, "")
+    .replace(new RegExp(`[${DOLGU_KARAKTER}]+$`), "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }

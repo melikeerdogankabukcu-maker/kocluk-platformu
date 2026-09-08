@@ -33,6 +33,7 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
   const [secili,   setSecili]   = useState(null);    // açık kitabın id'si
   const [yeniForm, setYeniForm] = useState(null);    // null = form kapalı
   const [aktaran,  setAktaran]  = useState(null);    // içindekiler aktarılan kitabın id'si
+  const [duzenlenen, setDuzenlenen] = useState(null); // { id, ad, yayinevi, sinav_turu, ders }
   const [islemde,  setIslemde]  = useState(false);
 
   const yukle = useCallback(async () => {
@@ -81,6 +82,26 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
     setIslemde(false);
     if (hata) return;
     setYeniForm(null);
+    yukle();
+  };
+
+  // Kaynak bilgilerini güncelle. Bölümlere DOKUNMUYOR: kitabın adını
+  // düzeltmek içindekileri yeniden aktarmayı gerektirmemeli.
+  const kitapGuncelle = async () => {
+    if (!duzenlenen?.ad?.trim()) return;
+    setIslemde(true);
+    const { hata } = await calistir(
+      supabase.from("soru_bankalari").update({
+        ad:         duzenlenen.ad.trim(),
+        yayinevi:   duzenlenen.yayinevi?.trim() || null,
+        sinav_turu: duzenlenen.sinav_turu || null,
+        ders:       duzenlenen.ders || null,
+      }).eq("id", duzenlenen.id),
+      "Kaynak guncelleme"
+    );
+    setIslemde(false);
+    if (hata) return;
+    setDuzenlenen(null);
     yukle();
   };
 
@@ -243,7 +264,63 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
                         Bu kaynağı {b.sahip?.full_name ?? "başka biri"} ekledi; yalnızca ekleyen düzenleyebilir.
                       </div>
                     )}
-                    {benim && (
+                    {/* Düzenleme formu — yalnızca ekleyende */}
+                    {benim && duzenlenen?.id === b.id && (
+                      <div style={{
+                        display: "flex", flexDirection: "column", gap: BOSLUK.s,
+                        padding: BOSLUK.m, borderRadius: KOSE.m,
+                        background: "#fff", border: `1.5px solid ${c.mid}`,
+                      }}>
+                        <input autoFocus value={duzenlenen.ad} placeholder="Kaynak adı"
+                          onChange={e => setDuzenlenen(d => ({ ...d, ad: e.target.value }))}
+                          style={girdiStil} />
+                        <input value={duzenlenen.yayinevi} placeholder="Yayınevi"
+                          onChange={e => setDuzenlenen(d => ({ ...d, yayinevi: e.target.value }))}
+                          style={girdiStil} />
+                        <div style={{ display: "flex", gap: BOSLUK.s }}>
+                          <select value={duzenlenen.sinav_turu}
+                            onChange={e => setDuzenlenen(d => ({ ...d, sinav_turu: e.target.value, ders: "" }))}
+                            style={{ ...girdiStil, flex: 1 }}>
+                            <option value="">Sınav türü...</option>
+                            {sinavTurleri.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          <select value={duzenlenen.ders}
+                            onChange={e => setDuzenlenen(d => ({ ...d, ders: e.target.value }))}
+                            style={{ ...girdiStil, flex: 1 }}>
+                            <option value="">Ders...</option>
+                            {(duzenlenen.sinav_turu ? examSubjectsOf(duzenlenen.sinav_turu) : []).map(d => (
+                              <option key={d} value={d}>{d}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {/* Ders değişikliği kayıtlı bölümlerin konu bağını
+                            OTOMATİK yenilemiyor: sessizce yeniden eşleştirseydik
+                            koçun elle düzelttiği bağlar da silinirdi. */}
+                        {bolumler.length > 0 && duzenlenen.ders !== (b.ders ?? "") && (
+                          <div style={{
+                            fontSize: YAZI.mikro, color: RENK.uyari.metin, background: RENK.uyari.zemin,
+                            padding: `${BOSLUK.s}px ${BOSLUK.m}px`, borderRadius: KOSE.s, lineHeight: 1.5,
+                          }}>
+                            Ders değişiyor. Kayıtlı {bolumler.length} bölümün konu bağı olduğu gibi
+                            kalır; yeni derse göre eşleştirmek için içindekileri yeniden aktarın.
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: BOSLUK.s }}>
+                          <button onClick={kitapGuncelle} disabled={islemde || !duzenlenen.ad.trim()} style={{
+                            flex: 1, padding: "9px 0", borderRadius: KOSE.m, border: "none",
+                            background: duzenlenen.ad.trim() ? c.bg : "#ddd", color: "#fff",
+                            fontSize: YAZI.ikincil, fontWeight: 700, cursor: "pointer",
+                          }}>{islemde ? "Kaydediliyor..." : "Kaydet"}</button>
+                          <button onClick={() => setDuzenlenen(null)} style={{
+                            padding: "9px 14px", borderRadius: KOSE.m,
+                            border: `1.5px solid ${RENK.cizgi}`, background: "#fff",
+                            color: RENK.metinSoluk, fontSize: YAZI.ikincil, cursor: "pointer",
+                          }}>Vazgeç</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {benim && duzenlenen?.id !== b.id && (
                     <div style={{ display: "flex", gap: BOSLUK.s }}>
                       <button onClick={() => setAktaran(b.id)} style={{
                         flex: 1, padding: "8px 0", borderRadius: KOSE.m,
@@ -258,6 +335,15 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
                         color: RENK.metinSoluk, fontSize: YAZI.ikincil, cursor: "pointer",
                       }}>Sil</button>
                     </div>
+                    )}
+                    {benim && duzenlenen?.id !== b.id && (
+                      <button onClick={() => setDuzenlenen({
+                        id: b.id, ad: b.ad ?? "", yayinevi: b.yayinevi ?? "",
+                        sinav_turu: b.sinav_turu ?? "", ders: b.ders ?? "",
+                      })} style={{
+                        alignSelf: "flex-start", background: "none", border: "none", padding: 0,
+                        color: c.mid, fontSize: YAZI.kucuk, fontWeight: 600, cursor: "pointer",
+                      }}>✏️ Kaynak bilgilerini düzenle</button>
                     )}
                   </div>
                 )}
