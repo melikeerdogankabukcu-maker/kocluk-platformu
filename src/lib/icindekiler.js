@@ -50,12 +50,46 @@ function satirlar(metin) {
 }
 
 // Başlığı temizler: baştaki numaralandırma, sondaki dolgu, fazla boşluk.
+// ── NOKTA DOLGUSU HARF OLARAK OKUNDUĞUNDA ───────────────────────
+// OCR uzun nokta dizilerini çoğu zaman NOKTA OLARAK GÖRMÜYOR; harfe
+// çeviriyor. "Temel Kavramlar .......... 7" satırı "Temel Kavramlar
+// eeeeeeeeee 7" ya da "Temel Kavramlar aaannnnn 7" olarak çıkabiliyor.
+// Karakter sınıfıyla temizlik burada işe yaramıyor, çünkü gelen şey
+// noktalama değil harf.
+//
+// Ayırt edici özellik karakterin NE OLDUĞU değil, TEKRAR ETMESİ:
+// hiçbir Türkçe başlık aynı harfi üst üste üç kez içermez. Sondan
+// başlayarak, aynı karakterin (ya da iki karakterlik bir desenin) üç ve
+// daha fazla tekrarı atılıyor.
+//
+// Başlığın SONUNDAN çalışıyor: dolgu hep başlıkla sayfa numarası
+// arasında. Ortadaki bir tekrara dokunmuyoruz — "Ali'nin nn kuralı"
+// gibi bir başlık bozulmasın.
+const TEKRAR_SONU = /(?:(.)\1{2,}|(..)(?:\2){2,})[\s.,;:'"`´·•*~°^_\-–—]*$/u;
+
+export function dolguSil(baslik) {
+  let s = baslik ?? "";
+  // Birden fazla tur: "Kavramlar ...eeee..." gibi karışık dolgular
+  // tek geçişte tamamen temizlenmiyor.
+  for (let tur = 0; tur < 4; tur++) {
+    const yeni = s
+      .replace(new RegExp(`[${DOLGU_KARAKTER}]+$`), "")
+      .replace(TEKRAR_SONU, "");
+    if (yeni === s) break;
+    s = yeni;
+  }
+  return s.trim();
+}
+
 export function basligiTemizle(ham) {
-  return (ham ?? "")
-    .replace(BAS_NUMARA, "")
-    .replace(new RegExp(`[${DOLGU_KARAKTER}]+$`), "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  const s = dolguSil(
+    (ham ?? "")
+      .replace(BAS_NUMARA, "")
+      .replace(/\s{2,}/g, " ")
+  );
+  // Dolgu temizlendikten sonra tek harflik bir kalıntı kalabiliyor
+  // ("Kavramlar e"). Sondaki yalnız harf, başlığın parçası olamaz.
+  return s.replace(/\s+\S$/u, m => (/\d/.test(m) ? m : "")).trim();
 }
 
 // Metin → [{ sira, baslik, sayfaBas, sayfaSon }]

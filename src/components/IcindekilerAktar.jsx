@@ -69,21 +69,32 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
       } else {
         setIslemde({ mesaj: "Görsel okunuyor..." });
         const { metin: cikan, guven } = await fotografMetni(dosyalar, {
+          // Hangi okuma kipinin doğru olduğunu ölçüyle seçiyoruz:
+          // ayrıştırıcı kaç satır çıkarabiliyorsa o kip iyidir.
+          degerlendir: (m) => icindekileriAyristir(m).bolumler.length,
           ilerleme: ({ asama, yuzde, sira, toplam }) => setIslemde({
             mesaj: asama === "loading language traineddata"
               ? "Türkçe dil verisi indiriliyor (ilk kullanımda bir kez)..."
+              : asama === "ikinci deneme" ? "Farklı bir okuma kipi deneniyor..."
               : toplam > 1 ? `Görsel okunuyor (${sira ?? "?"}/${toplam})...`
               : "Görsel okunuyor...",
             yuzde,
           }),
         });
         metneEkle(cikan);
+        // Sonucu HEMEN söyle. Önceden kullanıcı "Bölümleri çıkar"a
+        // basana kadar okumanın işe yarayıp yaramadığını bilmiyordu.
+        const cikanSatir = icindekileriAyristir(cikan).bolumler.length;
         if (!cikan.trim()) {
           setHata("Görselden metin çıkarılamadı. Daha net ve düz çekilmiş bir fotoğraf deneyin.");
+        } else if (cikanSatir === 0) {
+          setHata("Metin okundu ama sayfa numarası olan hiçbir satır bulunamadı. " +
+                  "Fotoğrafta içindekiler listesinin tamamı görünüyor mu, sayfa numaraları kesilmiş mi bakın.");
         } else if (guven != null && guven < 70) {
           // Düşük güveni saklamıyoruz: koç satırları okumadan kaydederse
           // yanlış başlıklar kitaba yerleşir.
-          setHata(`Okuma güveni düşük (%${Math.round(guven)}). Aşağıdaki metni satır satır kontrol edin.`);
+          setHata(`${cikanSatir} satır okundu ama okuma güveni düşük (%${Math.round(guven)}). ` +
+                  `Aşağıdaki metni satır satır kontrol edin.`);
         }
       }
     } catch (err) {

@@ -82,6 +82,67 @@ export async function pdfMetni(dosya, { enFazlaSayfa = 12 } = {}) {
 //    (Bradley–Roth yöntemi; integral görüntüyle tek geçişte.)
 const HEDEF_GENISLIK = 1800;
 
+// ── EĞİKLİK (SKEW) ──────────────────────────────────────────────
+// Elde tutulan telefonla çekilen sayfa hep birkaç derece eğik oluyor.
+// Tesseract satırları yatay varsayıyor; 2–3 derecelik bir eğiklikte bile
+// sayfanın sağ ucundaki numara, solundaki başlığın satırından taşıyor ve
+// ikisi farklı satır sayılıyor. İçindekiler sayfasında bu ölümcül:
+// başlık numarasız, numara başlıksız kalıyor, satır tamamen kayboluyor.
+//
+// Açı, YATAY İZDÜŞÜM PROFİLİNDEN bulunuyor: görüntü doğru açıyla
+// düzeltildiğinde metin satırları üst üste biner, satır aralarındaki
+// boşluklar boşalır ve satır başına düşen koyu piksel sayısının
+// değişkenliği EN YÜKSEK olur. Eğikken her satır birkaç satıra yayılır
+// ve profil düzleşir. Denenen açılar arasında değişkenliği en büyük
+// olan doğru açıdır.
+const ACI_TARAMA = 6;        // ±6 derece
+const ACI_ADIM   = 0.4;
+
+function egiklikBul(ikili, g, y) {
+  // Tarama küçültülmüş kopyada: tam çözünürlükte her açı için tüm
+  // pikselleri gezmek saniyeler alırdı, oysa açı için kabaca bir
+  // görüntü yeterli.
+  const olcek = Math.min(1, 900 / g);
+  const kg = Math.max(1, Math.round(g * olcek));
+  const ky = Math.max(1, Math.round(y * olcek));
+  const kucuk = new Uint8Array(kg * ky);
+  for (let j = 0; j < ky; j++) {
+    const kaynakJ = Math.min(y - 1, Math.round(j / olcek));
+    for (let i = 0; i < kg; i++) {
+      const kaynakI = Math.min(g - 1, Math.round(i / olcek));
+      kucuk[j * kg + i] = ikili[kaynakJ * g + kaynakI];
+    }
+  }
+
+  let enIyiAci = 0, enIyiPuan = -1;
+  const profil = new Float64Array(ky);
+
+  for (let aci = -ACI_TARAMA; aci <= ACI_TARAMA; aci += ACI_ADIM) {
+    profil.fill(0);
+    const tan = Math.tan((aci * Math.PI) / 180);
+    for (let i = 0; i < kg; i++) {
+      // Döndürmek yerine kaydırma (shear): küçük açılarda ikisi aynı
+      // sonucu veriyor ve kaydırma tek toplama işlemi.
+      const kaydir = Math.round((i - kg / 2) * tan);
+      for (let j = 0; j < ky; j++) {
+        const hedef = j + kaydir;
+        if (hedef < 0 || hedef >= ky) continue;
+        profil[hedef] += kucuk[j * kg + i];
+      }
+    }
+    // Komşu satırlar arasındaki farkın karesi: keskin satır/boşluk
+    // geçişi yüksek puan verir.
+    let puan = 0;
+    for (let j = 1; j < ky; j++) {
+      const d = profil[j] - profil[j - 1];
+      puan += d * d;
+    }
+    if (puan > enIyiPuan) { enIyiPuan = puan; enIyiAci = aci; }
+  }
+
+  return enIyiAci;
+}
+
 async function gorseliHazirla(dosya) {
   // Tarayıcı API'leri: bu yol yalnızca istemcide çalışıyor.
   const bitmap = await createImageBitmap(dosya);
@@ -124,6 +185,7 @@ async function gorseliHazirla(dosya) {
   const yari = Math.max(8, Math.round(g / 32));
   const T = 0.15;                       // ortalamanın %15 altı → siyah
 
+  const ikili = new Uint8Array(g * y);      // 1 = koyu (metin)
   for (let j = 0; j < y; j++) {
     const j1 = Math.max(j - yari, 0), j2 = Math.min(j + yari, y - 1);
     for (let i = 0; i < g; i++) {
@@ -135,6 +197,7 @@ async function gorseliHazirla(dosya) {
         - integral[(j2 + 1) * (g + 1) + i1]
         + integral[j1 * (g + 1) + i1];
       const siyah = gri[j * g + i] * alan < toplam * (1 - T);
+      ikili[j * g + i] = siyah ? 1 : 0;
       const k = (j * g + i) * 4;
       const v = siyah ? 0 : 255;
       p[k] = p[k + 1] = p[k + 2] = v;
@@ -143,7 +206,31 @@ async function gorseliHazirla(dosya) {
   }
 
   ctx.putImageData(gorsel, 0, 0);
-  return new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
+
+  // Eğiklik düzeltme. Küçük açılarda dokunmuyoruz: yeniden örnekleme
+  // harfleri hafifçe bulandırıyor ve 0.5 derece altı zaten OCR'ı
+  // etkilemiyor — kazancı olmayan bir bozulma olurdu.
+  const aci = egiklikBul(ikili, g, y);
+  if (Math.abs(aci) < 0.5) {
+    return new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
+  }
+
+  const dondurulmus = document.createElement("canvas");
+  dondurulmus.width = g; dondurulmus.height = y;
+  const dctx = dondurulmus.getContext("2d");
+  // Zemin BEYAZ: döndürünce köşelerde açıkta kalan alan saydam kalırsa
+  // OCR onu siyah görüp sayfanın kenarına sahte karakterler uyduruyor.
+  dctx.fillStyle = "#fff";
+  dctx.fillRect(0, 0, g, y);
+  dctx.translate(g / 2, y / 2);
+  // İŞARET: egiklikBul zaten DÜZELTME açısını döndürüyor (sayfa +2°
+  // eğikse -2° veriyor), olduğu gibi uygulanıyor. Bir kez daha
+  // negatiflemek eğikliği düzeltmek yerine ikiye katlardı — sınamada
+  // yakalandı, arayüzden "hâlâ kötü"den başka bir belirti vermezdi.
+  dctx.rotate((aci * Math.PI) / 180);
+  dctx.drawImage(tuval, -g / 2, -y / 2);
+
+  return new Promise(cozumle => dondurulmus.toBlob(cozumle, "image/png"));
 }
 
 // Fotoğraftan OCR ile metin çıkarır.
@@ -155,7 +242,22 @@ async function gorseliHazirla(dosya) {
 // BİRDEN FAZLA GÖRSEL TEK WORKER'DA: içindekiler çoğu kitapta iki üç
 // sayfa. Her görsel için ayrı worker açmak, dil verisinin yeniden
 // yüklenmesi ve her seferinde birkaç saniye demekti.
-export async function fotografMetni(dosyalar, { ilerleme } = {}) {
+// ── SAYFA BÖLÜTLEME KİPİ TEK BAŞINA YETMİYOR ────────────────────
+// İçindekiler sayfasında başlık solda, sayfa numarası çok sağda ve
+// aralarında geniş bir boşluk var. Tesseract bunu kimi kitapta İKİ
+// SÜTUN sanıyor; o zaman numaralar başlıklarından kopuyor ve satır
+// tamamen kayboluyor. Hangi kipin doğru olduğu kitaptan kitaba
+// değişiyor ve önceden bilinemiyor.
+//
+// Çözüm tahmin etmek değil ÖLÇMEK: birinci kip az satır verdiyse
+// ikincisi deneniyor ve AYRIŞTIRILABİLİR SATIR SAYISI yüksek olan
+// seçiliyor. Ölçüt çağıran taraftan geliyor (degerlendir), böylece bu
+// dosya ayrıştırıcıyı tanımak zorunda kalmıyor.
+const KIP_BIRINCIL = "6";    // tek düzgün metin bloğu
+const KIP_YEDEK    = "4";    // değişken boyutlu tek sütun
+const YETERLI_SATIR = 4;
+
+export async function fotografMetni(dosyalar, { ilerleme, degerlendir } = {}) {
   const liste = Array.isArray(dosyalar) ? dosyalar : [dosyalar];
   const { createWorker } = await import("tesseract.js");
 
@@ -168,20 +270,20 @@ export async function fotografMetni(dosyalar, { ilerleme } = {}) {
   });
 
   try {
-    await worker.setParameters({
-      // 6 = tek düzgün metin bloğu. Varsayılan (3, otomatik) içindekiler
-      // sayfasını başlık/sütun diye bölmeye çalışıp satırları
-      // karıştırabiliyor; ayrıştırıcımız satır bazlı olduğu için bu
-      // doğrudan kayıp demek.
-      tessedit_pageseg_mode: "6",
-      // Başlık ile sayfa numarası arasındaki boşluk korunsun. Silinirse
-      // "Temel Kavramlar7" gibi birleşik bir satır çıkıyor ve numara
-      // ayrıştırılamıyor.
-      preserve_interword_spaces: "1",
-    });
+    // Başlık ile sayfa numarası arasındaki boşluk korunsun. Silinirse
+    // "Temel Kavramlar7" gibi birleşik bir satır çıkıyor ve numara
+    // ayrıştırılamıyor.
+    await worker.setParameters({ preserve_interword_spaces: "1" });
 
     const parcalar = [];
     let guvenToplam = 0, guvenSayi = 0;
+
+    const oku = async (girdi, kip) => {
+      await worker.setParameters({ tessedit_pageseg_mode: kip });
+      const { data } = await worker.recognize(girdi);
+      const metin = data?.text ?? "";
+      return { metin, guven: data?.confidence ?? null, puan: degerlendir ? degerlendir(metin) : null };
+    };
 
     for (let i = 0; i < liste.length; i++) {
       ilerleme?.({ asama: "hazirlik", yuzde: null, sira: i + 1, toplam: liste.length });
@@ -193,9 +295,18 @@ export async function fotografMetni(dosyalar, { ilerleme } = {}) {
         // dosyayla devam: vasat sonuç, hiç sonuç yoktan iyi.
         girdi = liste[i];
       }
-      const { data } = await worker.recognize(girdi);
-      if (data?.text) parcalar.push(data.text);
-      if (typeof data?.confidence === "number") { guvenToplam += data.confidence; guvenSayi += 1; }
+
+      let sonuc = await oku(girdi, KIP_BIRINCIL);
+      // İkinci kip yalnızca gerektiğinde: her görseli iki kez okumak
+      // süreyi ikiye katlardı ve çoğu kitapta birincisi yeterli.
+      if (degerlendir && sonuc.puan < YETERLI_SATIR) {
+        ilerleme?.({ asama: "ikinci deneme", yuzde: null, sira: i + 1, toplam: liste.length });
+        const yedek = await oku(girdi, KIP_YEDEK);
+        if (yedek.puan > sonuc.puan) sonuc = yedek;
+      }
+
+      if (sonuc.metin) parcalar.push(sonuc.metin);
+      if (typeof sonuc.guven === "number") { guvenToplam += sonuc.guven; guvenSayi += 1; }
     }
 
     return {
