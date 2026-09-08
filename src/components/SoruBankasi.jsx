@@ -8,17 +8,22 @@ import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import IcindekilerAktar from "./IcindekilerAktar";
 
-// Koçun soru bankası kitaplığı.
+// Soru bankası kitaplığı — hem koçta hem öğrencide.
 //
-// Kitap bir kez ekleniyor ve koçun bütün öğrencileri için kullanılıyor:
-// aynı kitabı beş öğrenci çözüyorsa içindekiler beş kez ayrıştırılmasın.
-// Öğrenci ve veli kitabı GÖRÜYOR ama değiştiremiyor (RLS); kitaplık
-// koçun ders malzemesi.
+// Koçun eklediği kitap bütün öğrencileri için ortak: aynı kitabı beş
+// öğrenci çözüyorsa içindekiler beş kez ayrıştırılmasın. Öğrenci de
+// KENDİ elindeki kaynağı ekleyebiliyor; koç onu görüyor, çünkü
+// öğrencinin elinde olmayan bir kitaptan ödev veremez.
+//
+// ── EKLEYEN YÖNETİR ─────────────────────────────────────────────
+// Herkes yalnızca kendi eklediği kaynağı düzenleyip silebiliyor (RLS).
+// Karşı tarafın kitabı listede salt okunur duruyor: kimin ne eklediği
+// belli olsun ve kimse ötekinin kaynağını sessizce değiştirmesin.
 //
 // Bölümlerin müfredat konusuna bağlanması ödev önerisinin temeli:
 // "öğrenci şu konuda zayıf" bilgisi zaten var, eksik olan o konunun
 // hangi kitabın hangi sayfalarında olduğuydu.
-export default function SoruBankasi({ userId, color: c }) {
+export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
   const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();
 
   const [acik,     setAcik]     = useState(false);
@@ -33,7 +38,9 @@ export default function SoruBankasi({ userId, color: c }) {
   const yukle = useCallback(async () => {
     setYukleniyor(true);
     const { veri } = await calistir(
-      supabase.from("soru_bankalari").select("*").order("created_at", { ascending: false }),
+      supabase.from("soru_bankalari")
+        .select("*, sahip:users!soru_bankalari_sahip_id_fkey(full_name)")
+        .order("created_at", { ascending: false }),
       "Soru bankalari"
     );
     const liste = veri ?? [];
@@ -168,9 +175,9 @@ export default function SoruBankasi({ userId, color: c }) {
           {/* Kitap listesi */}
           {bankalar.length === 0 && !yeniForm && (
             <div style={{ fontSize: YAZI.ikincil, color: RENK.metinCokSoluk, padding: "10px 0", textAlign: "center", lineHeight: 1.55 }}>
-              Henüz kitap yok. Kullandığınız soru bankalarını ekleyip
-              içindekilerini aktarın; ödev önerileri bu kitapların
-              sayfalarından çıkacak.
+              {rol === "student"
+                ? "Henüz kaynak yok. Elindeki soru bankalarını ekleyip içindekilerini aktarırsan koçun onlardan ödev verebilir."
+                : "Henüz kitap yok. Kullandığınız soru bankalarını ekleyip içindekilerini aktarın; ödev önerileri bu kitapların sayfalarından çıkacak."}
             </div>
           )}
 
@@ -178,6 +185,7 @@ export default function SoruBankasi({ userId, color: c }) {
             const bolumler = bolumMap[b.id] ?? [];
             const bagli = bolumler.filter(x => x.konu).length;
             const isOpen = secili === b.id;
+            const benim  = b.sahip_id === userId;
             return (
               <div key={b.id} style={{
                 borderRadius: KOSE.m, border: `1px solid ${RENK.cizgi}`,
@@ -191,7 +199,12 @@ export default function SoruBankasi({ userId, color: c }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: YAZI.ikincil, fontWeight: 600, color: RENK.metin }}>{b.ad}</div>
                     <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, marginTop: 1 }}>
-                      {[b.yayinevi, b.sinav_turu, b.ders].filter(Boolean).join(" · ") || "bilgi girilmedi"}
+                      {[
+                        b.yayinevi, b.sinav_turu, b.ders,
+                        // Kimin eklediği görünüyor: karşı tarafın kaynağı
+                        // salt okunur ve bunun nedeni belli olsun.
+                        benim ? null : (b.sahip?.full_name ?? "başkası") + " ekledi",
+                      ].filter(Boolean).join(" · ") || "bilgi girilmedi"}
                     </div>
                   </div>
                   <span style={{ fontSize: YAZI.mikro, color: RENK.metinSoluk, flexShrink: 0 }}>
@@ -225,6 +238,12 @@ export default function SoruBankasi({ userId, color: c }) {
                       </div>
                     )}
 
+                    {!benim && (
+                      <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, lineHeight: 1.5 }}>
+                        Bu kaynağı {b.sahip?.full_name ?? "başka biri"} ekledi; yalnızca ekleyen düzenleyebilir.
+                      </div>
+                    )}
+                    {benim && (
                     <div style={{ display: "flex", gap: BOSLUK.s }}>
                       <button onClick={() => setAktaran(b.id)} style={{
                         flex: 1, padding: "8px 0", borderRadius: KOSE.m,
@@ -239,6 +258,7 @@ export default function SoruBankasi({ userId, color: c }) {
                         color: RENK.metinSoluk, fontSize: YAZI.ikincil, cursor: "pointer",
                       }}>Sil</button>
                     </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -30,6 +30,8 @@ import Rozetler from "../components/Rozetler";
 import SeviyeAvatar from "../components/SeviyeAvatar";
 import OgrenciAvatari from "../components/OgrenciAvatari";
 import HaftaninSozu from "../components/HaftaninSozu";
+import SinavHedefi from "../components/SinavHedefi";
+import SoruBankasi from "../components/SoruBankasi";
 import { HaftalikSoruGrafigi, CalismaSerisi, DogrulukTrendi, DersDagilimi } from "../components/CalismaGrafikleri";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
@@ -595,6 +597,11 @@ export default function StudentDashboard({ userId, userName }) {
   // Profil yeterince doluysa "tamamlandı" sayılır
   const profileComplete = !!(profile?.school_name && profile?.grade && profile?.field_preference);
 
+  // Hedefin yanında gösterilen bugünkü ölçü. Hem ana ekrandaki hem
+  // profildeki hedef kartı aynı sayıyı kullanıyor.
+  const enIyiNet = examResults.reduce(
+    (m, s) => (s.total_net != null && (m == null || s.total_net > m) ? s.total_net : m), null);
+
   const fieldLabel = { sayisal: "Sayısal", esit_agirlik: "Eşit Ağırlık", sozel: "Sözel" };
   const relLabel   = { anne: "Anne", baba: "Baba", vasi: "Vasi/Diğer" };
   const initials   = (name = "") => name.trim().split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -667,53 +674,12 @@ export default function StudentDashboard({ userId, userName }) {
                       )}
                     </div>
 
-                    {/* Hedef — girilmişse gösteriliyor.
-                        exam_results'ta puan ve sıralama tutulmadığı için
-                        "hedefe ne kadar kaldı" hesaplanmıyor; yanında o
-                        güne kadarki EN İYİ NET duruyor, karşılaştırmayı
-                        öğrenci kendi yapıyor. Olmayan veriden ilerleme
-                        yüzdesi uydurmak yanlış bir güven verirdi. */}
-                    {(profile.hedef_siralama || profile.hedef_puan || profile.hedef_aciklama) && (() => {
-                      const enIyiNet = examResults.reduce(
-                        (m, s) => (s.total_net != null && s.total_net > m ? s.total_net : m), null);
-                      return (
-                        <div style={{
-                          background: c.light, borderRadius: 10, padding: "12px 14px",
-                          border: `1px solid ${c.mid}22`,
-                        }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: c.text, marginBottom: 6 }}>
-                            🎯 HEDEFİM{profile.hedef_sinav ? ` · ${profile.hedef_sinav}` : ""}
-                          </div>
-                          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                            {profile.hedef_siralama && (
-                              <div>
-                                <div style={{ fontSize: 10, color: "#888" }}>Sıralama</div>
-                                <div style={{ fontSize: 15, fontWeight: 800, color: c.text }}>
-                                  {Number(profile.hedef_siralama).toLocaleString("tr-TR")}
-                                </div>
-                              </div>
-                            )}
-                            {profile.hedef_puan && (
-                              <div>
-                                <div style={{ fontSize: 10, color: "#888" }}>Puan</div>
-                                <div style={{ fontSize: 15, fontWeight: 800, color: c.text }}>{profile.hedef_puan}</div>
-                              </div>
-                            )}
-                            {enIyiNet != null && (
-                              <div>
-                                <div style={{ fontSize: 10, color: "#888" }}>En iyi netin</div>
-                                <div style={{ fontSize: 15, fontWeight: 800, color: c.mid }}>{enIyiNet}</div>
-                              </div>
-                            )}
-                          </div>
-                          {profile.hedef_aciklama && (
-                            <div style={{ fontSize: 12, color: "#555", marginTop: 8, lineHeight: 1.5 }}>
-                              {profile.hedef_aciklama}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
+                    {/* Hedef — artık ayrı bir bileşen; aynısı ana ekranda da
+                        duruyor. İki kopya yazsaydık biri güncellenip diğeri
+                        eskide kalırdı. */}
+                    <SinavHedefi profil={profile} enIyiNet={enIyiNet} color={c}
+                      onDuzenle={() => setShowProfileForm(true)} sikistir />
+
                     {/* Kişisel */}
                     {(profile.birth_date || profile.phone) && (
                       <div style={{ display: "flex", gap: 8 }}>
@@ -948,9 +914,14 @@ export default function StudentDashboard({ userId, userName }) {
                   <span style={{ fontSize: 8, color: "rgba(255,255,255,0.85)", fontWeight: 700, letterSpacing: 0.5 }}>PROFİL</span>
                 </button>
               </div>
-              {/* Haftanın sözü — hero'nun hemen altında, istatistiklerin
-                  üstünde. Panele her girişte görülen ama sıranın önüne
-                  geçmeyen bir yer. */}
+              {/* Sınav hedefi — hero'nun hemen altında, panelin en görünür
+                  yerinde. Girilmemişse hatırlatma olarak çıkıyor ve
+                  doğrudan hedef alanlarının olduğu forma götürüyor. */}
+              <SinavHedefi profil={profile} enIyiNet={enIyiNet} color={c}
+                onDuzenle={() => { setShowProfileForm(true); setShowProfileModal(true); }} />
+
+              {/* Haftanın sözü — istatistiklerin üstünde. Panele her
+                  girişte görülen ama sıranın önüne geçmeyen bir yer. */}
               <HaftaninSozu color={c} />
 
               {/* İstatistikler */}
@@ -1382,6 +1353,10 @@ export default function StudentDashboard({ userId, userName }) {
         <Bolum baslik="Koçlarım ve Program" color={c} id="bolum-baglanti" sekmeler={[
           { ad: "Koçlarım", icerik: <div id="bolum-baglanti"><BaglantiYonetimi userId={userId} rol="student" color={c} onDegisti={loadAll} /></div> },
           { ad: "Haftalık Program", icerik: <HaftalikProgram tasks={tasks} programOgeleri={programOgeleri} ogrenciAdi={userName} color={c} variant="kart" /> },
+          // Öğrenci kendi kaynağını ekliyor; koçun eklediklerini de
+          // burada salt okunur görüyor.
+          { ad: "Kaynaklarım", id: "bolum-soru-bankasi",
+            icerik: <SoruBankasi userId={userId} color={c} rol="student" /> },
         ]} />
       </>}
     />
