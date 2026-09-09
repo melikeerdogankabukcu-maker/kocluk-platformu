@@ -12,18 +12,32 @@ import { imzaliUrl } from "../lib/depo";
 // ── AÇILAN BOŞ SEKME ŞART ───────────────────────────────────────
 // window.open ÖNCE, imza sonra. Ters sırada yapsaydık — önce imzayı
 // bekleyip sonra pencere açsaydık — tarayıcı o açılışı kullanıcı
-// hareketine bağlayamaz ve engellenmiş açılır pencere sayardı. Bu
-// yüzden boş sekme tıklamayla aynı anda açılıyor, adresi sonra
-// dolduruluyor.
+// hareketine bağlayamaz ve engellenmiş açılır pencere sayardı.
+//
+// ── "noopener" BAYRAĞI VERİLMİYOR ───────────────────────────────
+// window.open'a noopener verildiğinde tarayıcı sekmeyi açıyor ama
+// PENCERE REFERANSI DÖNDÜRMÜYOR (null). O zaman elimizde adresini
+// dolduracağımız bir sekme kalmıyordu: boş bir sekme açılıyor,
+// uygulamanın açık olduğu sayfa da dosyaya gidiyordu. Bağlantı
+// koparma işini bayrakla değil, sekme açıldıktan sonra
+// `opener = null` diyerek yapıyoruz — aynı korumayı verir, referansı
+// kaybettirmez.
+//
+// ── ENGELLENİRSE SAYFA KAÇIRILMIYOR ─────────────────────────────
+// Açılır pencere engelliyse referans yine null geliyor. O durumda
+// mevcut sekmeyi dosyaya yönlendirmek, kullanıcının açık işini
+// kaybettirir. Onun yerine hazır adres yerinde bir bağlantı olarak
+// gösteriliyor; ikinci tık dosyayı açıyor.
 export default function GuvenliBaglanti({ url, children, style, baslik }) {
   const [bekliyor, setBekliyor] = useState(false);
+  const [hazirUrl, setHazirUrl] = useState(null);
 
   const ac = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (bekliyor) return;
 
-    const sekme = window.open("", "_blank", "noopener,noreferrer");
+    const sekme = window.open("", "_blank");
     setBekliyor(true);
     try {
       const imzali = await imzaliUrl(url);
@@ -32,12 +46,27 @@ export default function GuvenliBaglanti({ url, children, style, baslik }) {
         alert("Dosya açılamadı. Bu dosyayı görme yetkiniz olmayabilir ya da dosya silinmiş olabilir.");
         return;
       }
-      if (sekme) sekme.location.href = imzali;
-      else window.location.href = imzali;   // açılır pencere engellendiyse
+      if (sekme) {
+        sekme.opener = null;
+        // replace: yeni sekmenin geçmişinde about:blank kalmasın,
+        // geri düğmesi boş sayfaya takılmasın.
+        sekme.location.replace(imzali);
+      } else {
+        setHazirUrl(imzali);
+      }
     } finally {
       setBekliyor(false);
     }
   };
+
+  if (hazirUrl) {
+    return (
+      <a href={hazirUrl} target="_blank" rel="noopener noreferrer" title={baslik}
+        onClick={e => e.stopPropagation()} style={style}>
+        {children}
+      </a>
+    );
+  }
 
   return (
     <a href="#" onClick={ac} title={baslik}
