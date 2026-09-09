@@ -37,6 +37,7 @@ import Modal from "../components/Modal";
 import OgrenciAvatari from "../components/OgrenciAvatari";
 import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
+import OdevOnerisi from "../components/OdevOnerisi";
 import PanelDuzen from "../components/PanelDuzen";
 
 export default function TeacherDashboard({ userId, userName, role }) {
@@ -1093,6 +1094,10 @@ export default function TeacherDashboard({ userId, userName, role }) {
               : null },
           { ad: "Son Testler", id: "bolum-test", rozet: recentTests.length, icerik: sonTestKarti },
         ]} />
+
+        {/* Ödev önerisi — kaynakların hemen üstünde: öneriler o
+            kitaplardan çıkıyor, ikisi birlikte okunsun. */}
+        <OdevOnerisi userId={userId} students={students} color={c} onAtandi={loadData} />
 
         <Bolum baslik="İçerik" color={c} sekmeler={[
           { ad: "Programlar", icerik: <ProgramDuzenleyici userId={userId} students={students} color={c} /> },
