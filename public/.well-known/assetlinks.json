@@ -3,9 +3,9 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "PAKET_ADI_BURAYA",
+      "package_name": "app.vercel.kocluk_platformu.twa",
       "sha256_cert_fingerprints": [
-        "IMZA_PARMAK_IZI_BURAYA"
+        "91:3B:FE:CC:1D:29:F5:E4:58:19:D4:21:3D:B3:C8:18:6E:AB:95:9B:10:92:86:26:8E:EB:5C:C7:86:8B:EF:C2"
       ]
     }
   }

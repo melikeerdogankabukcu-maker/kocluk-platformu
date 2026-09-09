@@ -27,3 +27,10 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Android imza anahtarı — depoya ASLA girmemeli.
+# Bu anahtar kaybolursa uygulama bir daha güncellenemez; sızarsa
+# başkası sizin uygulamanız adına paket imzalayabilir.
+*.keystore
+*.jks
+signing-key-info.txt
