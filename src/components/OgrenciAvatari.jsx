@@ -4,10 +4,14 @@
 // öğrenci listesi) ve fotoğraf eklenince üçünün de aynı davranması
 // gerekiyor. Tek yerde tutuluyor ki biri baş harflerde kalmasın.
 //
-// Fotoğraf yüklenemezse (dosya silinmiş, ağ yok) sessizce baş harflere
-// düşüyor: kırık görsel simgesi göstermek, fotoğrafı hiç olmayan
-// öğrencininkinden daha kötü görünürdü.
-import { useState } from "react";
+// Fotoğraf yüklenemezse (dosya silinmiş, yetki yok, ağ yok) sessizce
+// baş harflere düşüyor: kırık görsel simgesi göstermek, fotoğrafı hiç
+// olmayan öğrencininkinden daha kötü görünürdü.
+//
+// Fotoğraf artık kapalı bir depodan geliyor ve imzalı adresi
+// GuvenliGorsel üretiyor; imza gelene kadar da baş harfler duruyor,
+// yani boş bir kutu görünmüyor.
+import GuvenliGorsel from "./GuvenliGorsel";
 
 export const basHarfler = (ad = "") =>
   ad.trim().split(/\s+/).filter(Boolean).map(w => w[0]).join("").slice(0, 2).toLocaleUpperCase("tr");
@@ -16,8 +20,12 @@ export default function OgrenciAvatari({
   ad, fotoUrl, boyut = 36, kose = 10,
   zemin = "#eee", yazi = "#555", yaziBoyut,
 }) {
-  const [bozuk, setBozuk] = useState(false);
-  const goster = fotoUrl && !bozuk;
+  const harfler = (
+    <span style={{
+      fontSize: yaziBoyut ?? Math.round(boyut * 0.34),
+      fontWeight: 800, color: yazi, letterSpacing: 0.5,
+    }}>{basHarfler(ad)}</span>
+  );
 
   return (
     <div style={{
@@ -25,15 +33,10 @@ export default function OgrenciAvatari({
       background: zemin, overflow: "hidden",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
-      {goster ? (
-        <img src={fotoUrl} alt={ad ?? "Profil fotoğrafı"} onError={() => setBozuk(true)}
+      {fotoUrl ? (
+        <GuvenliGorsel url={fotoUrl} alt={ad ?? "Profil fotoğrafı"} yedek={harfler}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-      ) : (
-        <span style={{
-          fontSize: yaziBoyut ?? Math.round(boyut * 0.34),
-          fontWeight: 800, color: yazi, letterSpacing: 0.5,
-        }}>{basHarfler(ad)}</span>
-      )}
+      ) : harfler}
     </div>
   );
 }

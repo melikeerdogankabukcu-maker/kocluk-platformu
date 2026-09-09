@@ -1,4 +1,5 @@
 import { testOzetMetni } from "../lib/testHelpers";
+import GuvenliBaglanti from "./GuvenliBaglanti";
 
 // Görev öğesi: durum + koç doğrulaması.
 //
@@ -58,10 +59,9 @@ export default function TaskItem({ done, label, sub, color,
             }}>
               🧪 {testOzetMetni(t)}
               {(t.dosyalar ?? []).map((d, i, hepsi) => (
-                <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
-                  onClick={e => e.stopPropagation()} title={d.ad}
+                <GuvenliBaglanti key={d.url} url={d.url} baslik={d.ad}
                   style={{ color: "#7a5c92", textDecoration: "none" }}
-                >📎{hepsi.length > 1 ? i + 1 : ""}</a>
+                >📎{hepsi.length > 1 ? i + 1 : ""}</GuvenliBaglanti>
               ))}
             </span>
           ))}

@@ -35,6 +35,7 @@ import SinavAnalizi from "../components/SinavAnalizi";
 import Bolum from "../components/Bolum";
 import Modal from "../components/Modal";
 import OgrenciAvatari from "../components/OgrenciAvatari";
+import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
 import PanelDuzen from "../components/PanelDuzen";
 
@@ -435,10 +436,10 @@ export default function TeacherDashboard({ userId, userName, role }) {
                     </div>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
                       {t.file_url && (
-                        <a href={t.file_url} target="_blank" rel="noreferrer" style={{
+                        <GuvenliBaglanti url={t.file_url} style={{
                           fontSize: 11, padding: "3px 10px", borderRadius: 99,
                           background: "#f5f2ee", color: "#555", textDecoration: "none",
-                        }}>📎 Görüntüle</a>
+                        }}>📎 Görüntüle</GuvenliBaglanti>
                       )}
                       {oran != null && (
                         <span style={{
@@ -712,9 +713,9 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                         }}>
                                           🧪 {ts.correct_count ?? 0}/{ts.question_count ?? 0}
                                           {odevDosyalari(ts).map((d, i) => (
-                                            <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
-                                              title={d.ad} style={{ color: "#7a5c92", textDecoration: "none" }}
-                                            >📎{odevDosyalari(ts).length > 1 ? i + 1 : ""}</a>
+                                            <GuvenliBaglanti key={d.url} url={d.url}
+                                              baslik={d.ad} style={{ color: "#7a5c92", textDecoration: "none" }}
+                                            >📎{odevDosyalari(ts).length > 1 ? i + 1 : ""}</GuvenliBaglanti>
                                           ))}
                                         </span>
                                       ))}
@@ -723,12 +724,12 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                           öğrenciler hâlâ gönderebiliyor; göstermezsek
                                           yükledikleri şey kimseye ulaşmıyor. */}
                                       {odevDosyalari(gorevGonderimMap[t.id]).map((d, i, hepsi) => (
-                                        <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
-                                          title={`Ödev dosyası: ${d.ad}`} style={{
+                                        <GuvenliBaglanti key={d.url} url={d.url}
+                                          baslik={`Ödev dosyası: ${d.ad}`} style={{
                                             flexShrink: 0, fontSize: 9.5, fontWeight: 700,
                                             padding: "1px 6px", borderRadius: 99,
                                             background: "#f5f2ee", color: "#555", textDecoration: "none",
-                                          }}>📎{hepsi.length > 1 ? i + 1 : ""} ödev</a>
+                                          }}>📎{hepsi.length > 1 ? i + 1 : ""} ödev</GuvenliBaglanti>
                                       ))}
                                       {/* Doğrulama rozeti — koç bir karar verdiyse görünür */}
                                       {t.ogretmen_onayi && (

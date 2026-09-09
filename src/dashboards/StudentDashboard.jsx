@@ -31,6 +31,7 @@ import SeviyeAvatar from "../components/SeviyeAvatar";
 import OgrenciAvatari from "../components/OgrenciAvatari";
 import HaftaninSozu from "../components/HaftaninSozu";
 import SinavHedefi from "../components/SinavHedefi";
+import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
 import { HaftalikSoruGrafigi, CalismaSerisi, DogrulukTrendi, DersDagilimi } from "../components/CalismaGrafikleri";
 import { useProgramAtama } from "../hooks/useProgramAtama";
@@ -1041,9 +1042,9 @@ export default function StudentDashboard({ userId, userName }) {
                             fontSize: 11, padding: "3px 5px 3px 10px", borderRadius: 99,
                             background: "#f5f2ee", color: "#555", maxWidth: 200,
                           }}>
-                            <a href={d.url} target="_blank" rel="noreferrer" title={d.ad}
+                            <GuvenliBaglanti url={d.url} baslik={d.ad}
                               style={{ color: "#555", textDecoration: "none", overflow: "hidden",
-                                textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📎 {d.ad}</a>
+                                textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📎 {d.ad}</GuvenliBaglanti>
                             <button onClick={() => setMevcutDosyalar(l => l.filter((_, j) => j !== i))}
                               title="Kaldır" style={{
                                 border: "none", background: "transparent", cursor: "pointer",
@@ -1141,10 +1142,10 @@ export default function StudentDashboard({ userId, userName }) {
                     </div>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
                       {odevDosyalari(t).map((d, i, hepsi) => (
-                        <a key={d.url} href={d.url} target="_blank" rel="noreferrer" title={d.ad} style={{
+                        <GuvenliBaglanti key={d.url} url={d.url} baslik={d.ad} style={{
                           fontSize: 11, padding: "2px 7px", borderRadius: 99,
                           background: "#f5f2ee", color: "#555", textDecoration: "none",
-                        }}>📎{hepsi.length > 1 ? i + 1 : ""}</a>
+                        }}>📎{hepsi.length > 1 ? i + 1 : ""}</GuvenliBaglanti>
                       ))}
                       <span style={{
                         fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 99,

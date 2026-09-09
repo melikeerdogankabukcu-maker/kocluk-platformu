@@ -4,6 +4,8 @@ import { useMesajlar } from "../hooks/useMesajlar";
 import { odevDosyalari, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
+import GuvenliBaglanti from "./GuvenliBaglanti";
+import GuvenliGorsel from "./GuvenliGorsel";
 
 // Mesajlaşma ekranı: solda kişiler, seçilince yazışma açılır.
 //
@@ -200,22 +202,25 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
                         {odevDosyalari(m).map(d => {
                           const gorsel = /\.(png|jpe?g|gif|webp|heic)$/i.test(d.ad);
                           return gorsel ? (
-                            <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
-                              style={{ display: "block", marginTop: m.content ? 6 : 0 }}>
-                              <img src={d.url} alt={d.ad} style={{
-                                maxWidth: "100%", maxHeight: 190, borderRadius: 8, display: "block",
-                              }} />
-                            </a>
+                            <div key={d.url} style={{ marginTop: m.content ? 6 : 0 }}>
+                              <GuvenliGorsel url={d.url} alt={d.ad}
+                                style={{ maxWidth: "100%", maxHeight: 190, borderRadius: 8, display: "block" }}
+                                yedek={
+                                  <GuvenliBaglanti url={d.url} baslik={d.ad} style={{
+                                    fontSize: 11.5, fontWeight: 600,
+                                    color: benim ? "#fff" : c.text, textDecoration: "underline",
+                                  }}>📎 {d.ad}</GuvenliBaglanti>
+                                } />
+                            </div>
                           ) : (
-                            <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
-                              title={d.ad}
+                            <GuvenliBaglanti key={d.url} url={d.url} baslik={d.ad}
                               style={{
                                 display: "block", marginTop: m.content ? 6 : 0,
                                 fontSize: 11.5, fontWeight: 600,
                                 color: benim ? "#fff" : c.text,
                                 textDecoration: "underline",
                                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                              }}>📎 {d.ad}</a>
+                              }}>📎 {d.ad}</GuvenliBaglanti>
                           );
                         })}
                       </div>

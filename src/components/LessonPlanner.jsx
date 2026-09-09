@@ -6,6 +6,7 @@ import { testOzetMetni } from "../lib/testHelpers";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import CalendarMonth from "./CalendarMonth";
+import GuvenliBaglanti from "./GuvenliBaglanti";
 
 // Ortak ders planlama bloğu (öğretmen + öğrenci).
 // props:
@@ -189,10 +190,10 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
           </div>
         </div>
         {t.file_url && (
-          <a href={t.file_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{
+          <GuvenliBaglanti url={t.file_url} style={{
             fontSize: 11, padding: "3px 10px", borderRadius: 99, flexShrink: 0,
             background: "#fff", color: "#7B4FA0", textDecoration: "none", border: "1px solid #EAD9F5",
-          }}>📎 Görüntüle</a>
+          }}>📎 Görüntüle</GuvenliBaglanti>
         )}
       </div>
     </div>
