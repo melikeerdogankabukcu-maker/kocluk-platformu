@@ -32,7 +32,7 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
   const [adet,   setAdet]   = useState(5);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [islemde, setIslemde] = useState(false);
-  const [kaynak,  setKaynak]  = useState({ bolumler: [], bankalar: [] });
+  const [kaynak,  setKaynak]  = useState({ bolumler: [], bankalar: [], atamalar: [] });
   const [veri,    setVeri]    = useState({ tests: [], tasks: [] });
   // bolumId -> { karar, created_at }. Koçun daha önce ne dediği.
   const [kararlar, setKararlar] = useState({});
@@ -59,12 +59,20 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
   }, [sinavTurleri, examSubjectsOf, topicsOf]);
 
   const kaynaklariYukle = useCallback(async () => {
-    const [{ veri: bankalar }, { veri: bolumler }] = await Promise.all([
+    const [{ veri: bankalar }, { veri: bolumler }, { veri: atamalar }] = await Promise.all([
       calistir(supabase.from("soru_bankalari").select("*"), "Kaynaklar", { sessiz: true }),
       calistir(supabase.from("soru_bankasi_bolumleri").select("*").not("konu", "is", null),
         "Kaynak bolumleri", { sessiz: true }),
+      // Tablo yoksa (migration çalışmadıysa) boş geçiyor; o durumda
+      // tanımlama yok sayılıyor ve eski davranış sürüyor.
+      calistir(supabase.from("soru_bankasi_atamalari").select("*"),
+        "Kaynak atamalari", { sessiz: true }),
     ]);
-    setKaynak({ bankalar: bankalar ?? [], bolumler: bolumler ?? [] });
+    setKaynak({
+      bankalar: bankalar ?? [],
+      bolumler: bolumler ?? [],
+      atamalar: atamalar ?? [],
+    });
   }, []);
 
   useEffect(() => { if (acik) kaynaklariYukle(); }, [acik, kaynaklariYukle]);
@@ -97,7 +105,7 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
 
   const uret = () => {
     const liste = oneriUret({
-      bolumler: kaynak.bolumler, bankalar: kaynak.bankalar,
+      bolumler: ogrencininBolumleri, bankalar: kaynak.bankalar,
       tests: veri.tests, tasks: veri.tasks,
       konuSirasi, kararlar, adet,
     });
@@ -109,6 +117,22 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
 
   const guncelle = (anahtar, alan, deger) =>
     setOneriler(l => l.map(o => (o.anahtar === anahtar ? { ...o, [alan]: deger } : o)));
+
+  // ── ÖĞRENCİDE OLMAYAN KİTAPTAN ÖDEV ÇIKMASIN ────────────────
+  // Kaynak fiziksel bir nesne. Tanımlaması olan kitap yalnızca
+  // tanımlandığı öğrenciler için aday; hiç tanımlaması olmayan kitap
+  // eskisi gibi herkese açık (bkz. soru_bankasi_atama_migration.sql).
+  const ogrencininBolumleri = useMemo(() => {
+    const tanimli = new Map();       // banka_id -> Set(student_id)
+    (kaynak.atamalar ?? []).forEach(a => {
+      if (!tanimli.has(a.banka_id)) tanimli.set(a.banka_id, new Set());
+      tanimli.get(a.banka_id).add(a.student_id);
+    });
+    return kaynak.bolumler.filter(b => {
+      const kume = tanimli.get(b.banka_id);
+      return !kume || kume.size === 0 || kume.has(secili);
+    });
+  }, [kaynak.bolumler, kaynak.atamalar, secili]);
 
   const secilenler = (oneriler ?? []).filter(o => secimler[o.anahtar]);
 
@@ -166,7 +190,7 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
     border: `1.5px solid ${RENK.cizgi}`, fontSize: YAZI.ikincil, boxSizing: "border-box",
   };
 
-  const bolumSayisi = kaynak.bolumler.length;
+  const bolumSayisi = ogrencininBolumleri.length;
 
   return (
     <Card id="bolum-oneri">
@@ -198,14 +222,20 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
               fontSize: YAZI.ikincil, color: RENK.uyari.metin, background: RENK.uyari.zemin,
               padding: `${BOSLUK.m}px`, borderRadius: KOSE.m, lineHeight: 1.55,
             }}>
-              Öneri üretebilmek için önce <b>Soru Bankası</b>'na bir kitap ekleyip
-              içindekilerini aktarmanız gerekiyor. Öneriler o kitapların
-              bölümlerinden çıkıyor.
+              {kaynak.bolumler.length === 0
+                ? <>Öneri üretebilmek için önce <b>Soru Bankası</b>'na bir kitap ekleyip
+                   içindekilerini aktarmanız gerekiyor. Öneriler o kitapların
+                   bölümlerinden çıkıyor.</>
+                : <>Kitaplıkta {kaynak.bolumler.length} bölüm var ama hiçbiri bu
+                   öğrenciye tanımlı değil. <b>Soru Bankası</b>'nda kitabı açıp
+                   "bu kaynak kimde var" listesinden bu öğrenciyi seçin.</>}
             </div>
           ) : (
             <>
               <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik }}>
-                {bolumSayisi} bölüm, {kaynak.bankalar.length} kaynak taranıyor
+                {bolumSayisi} bölüm taranıyor
+                {kaynak.bolumler.length > bolumSayisi &&
+                  ` · ${kaynak.bolumler.length - bolumSayisi} bölüm bu öğrenciye tanımlı olmayan kaynaklarda`}
                 {oneriler?.redEdilen > 0 &&
                   ` · daha önce elediğiniz ${oneriler.redEdilen} bölüm beklemede`}
               </div>

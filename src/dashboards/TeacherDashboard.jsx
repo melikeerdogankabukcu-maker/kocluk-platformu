@@ -1103,7 +1103,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
           { ad: "Programlar", icerik: <ProgramDuzenleyici userId={userId} students={students} color={c} /> },
           { ad: "Müfredat", icerik: <KonuYonetimi userId={userId} color={c} /> },
           { ad: "Soru Bankası", id: "bolum-soru-bankasi",
-            icerik: <SoruBankasi userId={userId} color={c} /> },
+            icerik: <SoruBankasi userId={userId} students={students} color={c} /> },
         ]} />
 
         {/* Koç yardımcısı — öğrenci seçicili */}

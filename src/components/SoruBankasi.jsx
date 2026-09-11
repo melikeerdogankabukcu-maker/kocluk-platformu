@@ -3,6 +3,7 @@ import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 import { useTopics } from "../lib/TopicsContext";
 import { sayfaSayisi } from "../lib/icindekiler";
+import { sadelestir } from "../lib/konuEslestir";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
@@ -23,7 +24,7 @@ import IcindekilerAktar from "./IcindekilerAktar";
 // Bölümlerin müfredat konusuna bağlanması ödev önerisinin temeli:
 // "öğrenci şu konuda zayıf" bilgisi zaten var, eksik olan o konunun
 // hangi kitabın hangi sayfalarında olduğuydu.
-export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
+export default function SoruBankasi({ userId, students = [], color: c, rol = "teacher" }) {
   const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();
 
   const [acik,     setAcik]     = useState(false);
@@ -35,6 +36,9 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
   const [aktaran,  setAktaran]  = useState(null);    // içindekiler aktarılan kitabın id'si
   const [duzenlenen, setDuzenlenen] = useState(null); // { id, ad, yayinevi, sinav_turu, ders }
   const [islemde,  setIslemde]  = useState(false);
+  const [bilgi,    setBilgi]    = useState(null);   // son işlemin sonucu
+  // banka_id -> Set(student_id). Boş küme = tüm öğrencilere açık.
+  const [atamalar, setAtamalar] = useState({});
 
   const yukle = useCallback(async () => {
     setYukleniyor(true);
@@ -59,7 +63,18 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
       const harita = {};
       (bolumler ?? []).forEach(b => { (harita[b.banka_id] ??= []).push(b); });
       setBolumMap(harita);
-    } else setBolumMap({});
+
+      // Tablo yoksa (migration çalışmadıysa) sessizce boş geçiyor:
+      // tanımlama olmadan da kitaplık eskisi gibi çalışıyor.
+      const { veri: atama } = await calistir(
+        supabase.from("soru_bankasi_atamalari").select("*")
+          .in("banka_id", liste.map(b => b.id)),
+        "Kaynak atamalari", { sessiz: true }
+      );
+      const aHarita = {};
+      (atama ?? []).forEach(a => { (aHarita[a.banka_id] ??= new Set()).add(a.student_id); });
+      setAtamalar(aHarita);
+    } else { setBolumMap({}); setAtamalar({}); }
 
     setYukleniyor(false);
   }, []);
@@ -123,22 +138,45 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
     yukle();
   };
 
-  // İçindekiler kaydı: önce eski bölümler siliniyor, sonra yenileri
-  // yazılıyor. Üstüne eklemek, ikinci kez aktaran koçta her bölümü iki
-  // kez gösterirdi ve hangisinin güncel olduğu belli olmazdı.
+  // İçindekiler kaydı — ÜSTÜNE YAZMIYOR, EKLİYOR.
+  //
+  // Önceki sürüm önce bütün bölümleri siliyordu. Sonucu şuydu: bir
+  // kitabın içindekileri iki sayfaysa, ikinci sayfayı aktaran koç
+  // birinciyi kaybediyordu — üstelik bunu ancak kaydettikten sonra
+  // fark ediyordu. İçindekiler çoğu kitapta birden fazla sayfa ve
+  // fotoğraf fotoğraf aktarılıyor; doğal akış eklemek.
+  //
+  // ── TEKRAR EDENLER ATLANIYOR ──────────────────────────────────
+  // Ekleme, aynı sayfayı iki kez aktaran koçta her bölümü iki kez
+  // gösterme riski taşıyor. Aynı başlık + aynı başlangıç sayfası
+  // zaten varsa o satır yazılmıyor ve koça kaç tanesinin atlandığı
+  // söyleniyor.
   const bolumleriKaydet = async (banka, bolumler) => {
     setIslemde(true);
-    const { hata: silmeHatasi } = await calistir(
-      supabase.from("soru_bankasi_bolumleri").delete().eq("banka_id", banka.id),
-      "Eski bolumleri silme"
-    );
-    if (silmeHatasi) { setIslemde(false); return; }
+    const mevcut = bolumMap[banka.id] ?? [];
+    const anahtar = (baslik, sayfa) => `${sadelestir(baslik)}#${sayfa ?? ""}`;
+    const varolan = new Set(mevcut.map(b => anahtar(b.baslik, b.sayfa_bas)));
+
+    const yeniler = bolumler.filter(b => !varolan.has(anahtar(b.baslik, b.sayfaBas)));
+    const atlanan = bolumler.length - yeniler.length;
+
+    if (yeniler.length === 0) {
+      setIslemde(false);
+      setBilgi(`Bu bölümlerin hepsi kitapta zaten var (${atlanan} satır atlandı).`);
+      setAktaran(null);
+      setSecili(banka.id);
+      return;
+    }
+
+    // Sıra mevcutların devamından: yeni satırlar listenin sonuna
+    // eklensin, araya karışmasın.
+    const enBuyukSira = mevcut.reduce((m, b) => Math.max(m, b.sira ?? 0), 0);
 
     const { hata } = await calistir(
       supabase.from("soru_bankasi_bolumleri").insert(
-        bolumler.map(b => ({
+        yeniler.map((b, i) => ({
           banka_id:  banka.id,
-          sira:      b.sira,
+          sira:      enBuyukSira + i + 1,
           baslik:    b.baslik,
           konu:      b.konu || null,
           sayfa_bas: b.sayfaBas ?? null,
@@ -149,9 +187,63 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
     );
     setIslemde(false);
     if (hata) return;
+    setBilgi(`${yeniler.length} bölüm eklendi.` +
+      (atlanan > 0 ? ` ${atlanan} satır zaten vardı, atlandı.` : ""));
     setAktaran(null);
     setSecili(banka.id);
     yukle();
+  };
+
+  // İçindekileri tamamen temizle.
+  //
+  // Ekleme varsayılan olunca, baştan almak isteyen koçun elinde bir yol
+  // kalmıyordu: eskiden yeniden aktarmak sessizce siliyordu, artık
+  // silmiyor. Bu düğme o işi AÇIKÇA ve onay alarak yapıyor.
+  const bolumleriTemizle = async (banka) => {
+    const adet = (bolumMap[banka.id] ?? []).length;
+    if (adet === 0) return;
+    if (!window.confirm(
+      `"${banka.ad}" kitabının ${adet} bölümü silinsin mi?
+
+` +
+      `İçindekileri baştan aktarmak için kullanın. Bu kitaptan verilmiş ` +
+      `görevler silinmez.`
+    )) return;
+    setIslemde(true);
+    const { hata } = await calistir(
+      supabase.from("soru_bankasi_bolumleri").delete().eq("banka_id", banka.id),
+      "Bolumleri temizleme"
+    );
+    setIslemde(false);
+    if (hata) return;
+    setBilgi(`${adet} bölüm silindi.`);
+    yukle();
+  };
+
+  // Bir öğrenciyi kaynağa ekle / çıkar.
+  //
+  // Liste BOŞKEN kaynak tüm öğrencilere açık; ilk öğrenci eklendiği an
+  // kural daralıyor. Bu, mevcut kaynakların bu özellik eklenince
+  // birdenbire görünmez olmasını engelliyor.
+  const atamaDegistir = async (banka, ogrenciId, ekle) => {
+    setIslemde(true);
+    const { hata } = ekle
+      ? await calistir(
+          supabase.from("soru_bankasi_atamalari")
+            .upsert({ banka_id: banka.id, student_id: ogrenciId },
+                    { onConflict: "banka_id,student_id" }),
+          "Kaynak atama")
+      : await calistir(
+          supabase.from("soru_bankasi_atamalari").delete()
+            .eq("banka_id", banka.id).eq("student_id", ogrenciId),
+          "Kaynak atamasi kaldirma");
+    setIslemde(false);
+    if (hata) return;
+    setAtamalar(a => {
+      const kume = new Set(a[banka.id] ?? []);
+      if (ekle) kume.add(ogrenciId); else kume.delete(ogrenciId);
+      return { ...a, [banka.id]: kume };
+    });
   };
 
   // Kitabın dersine ait müfredat konuları. Ders seçilmemişse o sınavın
@@ -193,6 +285,12 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: BOSLUK.s }}>
+          {bilgi && (
+            <div style={{
+              fontSize: YAZI.ikincil, color: RENK.basari.metin, background: RENK.basari.zemin,
+              padding: `${BOSLUK.s}px ${BOSLUK.m}px`, borderRadius: KOSE.m, lineHeight: 1.5,
+            }}>{bilgi}</div>
+          )}
           {/* Kitap listesi */}
           {bankalar.length === 0 && !yeniForm && (
             <div style={{ fontSize: YAZI.ikincil, color: RENK.metinCokSoluk, padding: "10px 0", textAlign: "center", lineHeight: 1.55 }}>
@@ -259,6 +357,52 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
                       </div>
                     )}
 
+                    {/* ── BU KAYNAĞI KİMLER KULLANIYOR ──────────────
+                        Kitap fiziksel bir nesne: öğrencinin elinde
+                        olmayan kaynaktan ödev vermek anlamsız. Liste
+                        BOŞKEN kaynak tüm öğrencilere açık kalıyor —
+                        aksi hâlde bu özellik eklendiği anda mevcut
+                        kaynaklar hiç kimseye görünmez olurdu. */}
+                    {benim && rol !== "student" && students.length > 0 && (() => {
+                      const secilenler = atamalar[b.id] ?? new Set();
+                      const hepsi = secilenler.size === 0;
+                      return (
+                        <div style={{
+                          padding: BOSLUK.m, borderRadius: KOSE.m,
+                          background: RENK.yuzey, border: `1px solid ${RENK.cizgi}`,
+                        }}>
+                          <div style={{
+                            fontSize: YAZI.mikro, fontWeight: 700, color: RENK.metinCokSoluk,
+                            letterSpacing: 0.3, marginBottom: BOSLUK.s,
+                          }}>
+                            BU KAYNAK KİMDE VAR — {hepsi
+                              ? "tüm öğrencileriniz"
+                              : `${secilenler.size} öğrenci`}
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: BOSLUK.xs }}>
+                            {students.map(o => {
+                              const secili2 = secilenler.has(o.id);
+                              return (
+                                <button key={o.id} disabled={islemde}
+                                  onClick={() => atamaDegistir(b, o.id, !secili2)} style={{
+                                    padding: "5px 11px", borderRadius: KOSE.tam,
+                                    fontSize: YAZI.kucuk, fontWeight: 600, cursor: "pointer",
+                                    border: `1.5px solid ${secili2 ? c.bg : RENK.cizgi}`,
+                                    background: secili2 ? c.bg : "#fff",
+                                    color: secili2 ? "#fff" : RENK.metinSoluk,
+                                  }}>{o.full_name}</button>
+                              );
+                            })}
+                          </div>
+                          <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, marginTop: BOSLUK.s, lineHeight: 1.5 }}>
+                            {hepsi
+                              ? "Kimse seçilmediği için bu kaynak tüm öğrencilerinize açık. Bir öğrenci seçtiğinizde yalnızca seçtikleriniz görür ve ödev önerisi yalnızca onlara bu kaynaktan çıkar."
+                              : "Yalnızca seçili öğrenciler bu kaynağı görüyor. Hepsinin seçimini kaldırırsanız kaynak yine tüm öğrencilerinize açılır."}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {!benim && (
                       <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, lineHeight: 1.5 }}>
                         Bu kaynağı {b.sahip?.full_name ?? "başka biri"} ekledi; yalnızca ekleyen düzenleyebilir.
@@ -322,12 +466,12 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
 
                     {benim && duzenlenen?.id !== b.id && (
                     <div style={{ display: "flex", gap: BOSLUK.s }}>
-                      <button onClick={() => setAktaran(b.id)} style={{
+                      <button onClick={() => { setBilgi(null); setAktaran(b.id); }} style={{
                         flex: 1, padding: "8px 0", borderRadius: KOSE.m,
                         border: `1.5px dashed ${c.mid}`, background: "transparent",
                         color: c.mid, fontSize: YAZI.ikincil, fontWeight: 600, cursor: "pointer",
                       }}>
-                        {bolumler.length === 0 ? "İçindekileri aktar" : "İçindekileri yeniden aktar"}
+                        {bolumler.length === 0 ? "İçindekileri aktar" : "+ İçindekiler ekle"}
                       </button>
                       <button onClick={() => kitapSil(b)} disabled={islemde} style={{
                         padding: "8px 14px", borderRadius: KOSE.m,
@@ -335,6 +479,12 @@ export default function SoruBankasi({ userId, color: c, rol = "teacher" }) {
                         color: RENK.metinSoluk, fontSize: YAZI.ikincil, cursor: "pointer",
                       }}>Sil</button>
                     </div>
+                    )}
+                    {benim && bolumler.length > 0 && duzenlenen?.id !== b.id && (
+                      <button onClick={() => bolumleriTemizle(b)} disabled={islemde} style={{
+                        alignSelf: "flex-start", background: "none", border: "none", padding: 0,
+                        color: RENK.metinSoluk, fontSize: YAZI.kucuk, cursor: "pointer",
+                      }}>İçindekileri temizle ({bolumler.length} bölüm)</button>
                     )}
                     {benim && duzenlenen?.id !== b.id && (
                       <button onClick={() => setDuzenlenen({
