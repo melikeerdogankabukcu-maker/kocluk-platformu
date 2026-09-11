@@ -32,6 +32,14 @@ export const SAYFA_DILIMI = 12;
 // Son bu kadar günde görev atanmış konu yeniden önerilmiyor.
 export const TEKRAR_BEKLEME_GUN = 7;
 
+// ── REDDEDİLEN ÖNERİ NE KADAR BEKLER ────────────────────────────
+// Koçun elediği bölüm bu süre boyunca yeniden önerilmiyor. Kalıcı
+// olarak silinmiyor: "bu konuyu ŞİMDİ vermeyeceğim" ile "bu konuyu
+// ASLA vermeyeceğim" aynı şey değil ve öğrencinin durumu iki ay sonra
+// değişmiş olabilir. Süre dolunca öneri, o günkü verilere göre yeniden
+// değerlendiriliyor.
+export const RED_BEKLEME_GUN = 45;
+
 const GUN_MS = 86400000;
 const anahtarla = (ders, konu) => `${sadelestir(ders)}||${sadelestir(konu)}`;
 
@@ -152,6 +160,7 @@ export function oneriUret({
   tests = [], tasks = [],
   agirliklar = {},      // { "ders||konu": sayı } — isteğe bağlı öncelik çarpanı
   konuSirasi = {},      // { "ders||konu": müfredattaki sıra } — eşitlik bozucu
+  kararlar = {},        // { bolumId: { karar: "kabul"|"red", created_at } }
   adet = 5,
   baslangic = new Date(),
   gunAraligi = 1,
@@ -162,9 +171,21 @@ export function oneriUret({
   const simdi = Date.now();
 
   const adaylar = [];
+  let redEdilen = 0;                                 // koça sayısı söyleniyor
 
   for (const bolum of bolumler) {
     if (!bolum.konu) continue;                       // müfredata bağlanmamış
+
+    // ── KOÇUN ÖNCEKİ KARARI ───────────────────────────────────
+    // Kabul edilen bölüm zaten görev olarak açıldı, yeniden
+    // önerilmesinin anlamı yok. Reddedilen bölüm bekleme süresi
+    // boyunca dışarıda; süre dolunca yeniden değerlendiriliyor.
+    const karar = kararlar[bolum.id];
+    if (karar?.karar === "kabul") continue;
+    if (karar?.karar === "red") {
+      const gecen = simdi - new Date(karar.created_at).getTime();
+      if (gecen < RED_BEKLEME_GUN * GUN_MS) { redEdilen += 1; continue; }
+    }
     const banka = bankaHarita.get(bolum.banka_id);
     const ders = banka?.ders ?? "";
     const a = anahtarla(ders, bolum.konu);
@@ -276,7 +297,7 @@ export function oneriUret({
   // Tarihler: bugünden sonraki günlere sırayla dağıtılıyor.
   const bas = new Date(baslangic);
   bas.setHours(0, 0, 0, 0);
-  return secilen.map((o, i) => {
+  const liste = secilen.map((o, i) => {
     const t = new Date(bas.getTime() + (i * gunAraligi + 1) * GUN_MS);
     const g = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
     return {
@@ -285,6 +306,11 @@ export function oneriUret({
       baslik: [o.bolumBasligi, o.sayfaMetni].filter(Boolean).join(" — "),
     };
   });
+
+  // Elenen öneri sayısı listeye iliştiriliyor: koç "neden az öneri
+  // çıktı" sorusunun cevabını görebilsin, sessizce eksilmesin.
+  liste.redEdilen = redEdilen;
+  return liste;
 }
 
 export const SEBEP_ETIKET = {

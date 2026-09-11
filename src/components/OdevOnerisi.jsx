@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 import { useTopics } from "../lib/TopicsContext";
-import { oneriUret, SEBEP_ETIKET, SAYFA_DILIMI } from "../lib/odevOnerisi";
+import { oneriUret, SEBEP_ETIKET, SAYFA_DILIMI, RED_BEKLEME_GUN } from "../lib/odevOnerisi";
 import { sadelestir } from "../lib/konuEslestir";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Card from "./Card";
@@ -34,6 +34,8 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
   const [islemde, setIslemde] = useState(false);
   const [kaynak,  setKaynak]  = useState({ bolumler: [], bankalar: [] });
   const [veri,    setVeri]    = useState({ tests: [], tasks: [] });
+  // bolumId -> { karar, created_at }. Koçun daha önce ne dediği.
+  const [kararlar, setKararlar] = useState({});
   const [oneriler, setOneriler] = useState(null);   // null = henüz üretilmedi
   const [secimler, setSecimler] = useState({});     // anahtar -> bool
   const [sonuc,   setSonuc]   = useState(null);
@@ -74,13 +76,18 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
   const ogrenciVerisi = useCallback(async (id) => {
     if (!id) return;
     setYukleniyor(true);
-    const [{ veri: tests }, { veri: tasks }] = await Promise.all([
+    const [{ veri: tests }, { veri: tasks }, { veri: kararSatir }] = await Promise.all([
       calistir(supabase.from("test_sessions").select("*").eq("student_id", id),
         "Ogrenci testleri", { sessiz: true }),
       calistir(supabase.from("tasks").select("*").eq("student_id", id),
         "Ogrenci gorevleri", { sessiz: true }),
+      // Tablo yoksa (migration çalışmadıysa) sessizce boş geçiyor:
+      // öneri motoru kararlar olmadan da çalışır, yalnızca öğrenmez.
+      calistir(supabase.from("oneri_kararlari").select("*").eq("student_id", id),
+        "Oneri kararlari", { sessiz: true }),
     ]);
     setVeri({ tests: tests ?? [], tasks: tasks ?? [] });
+    setKararlar(Object.fromEntries((kararSatir ?? []).map(k => [k.bolum_id, k])));
     setYukleniyor(false);
   }, []);
 
@@ -92,7 +99,7 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
     const liste = oneriUret({
       bolumler: kaynak.bolumler, bankalar: kaynak.bankalar,
       tests: veri.tests, tasks: veri.tasks,
-      konuSirasi, adet,
+      konuSirasi, kararlar, adet,
     });
     setOneriler(liste);
     // Hepsi baştan seçili: koçun işi onaylamak, tek tek işaretlemek değil.
@@ -108,6 +115,7 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
   const ata = async () => {
     if (secilenler.length === 0) return;
     setIslemde(true);
+    const elenenler = (oneriler ?? []).filter(o => !secimler[o.anahtar]);
     const satirlar = secilenler.map(o => ({
       student_id: secili,
       teacher_id: userId,
@@ -122,12 +130,35 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
     const { hata } = await calistir(
       supabase.from("tasks").insert(satirlar), "Onerilen gorevleri atama"
     );
+    if (hata) { setIslemde(false); return; }
+
+    // ── KARARI KAYDET ─────────────────────────────────────────
+    // Atananlar "kabul", işareti kaldırılanlar "red". Red olmadan
+    // koç aynı öneriyi her hafta yeniden elemek zorunda kalıyordu.
+    //
+    // Kayıt BAŞARISIZ OLURSA görev atamasını geri almıyoruz: görevler
+    // asıl iş, karar kaydı öğrenme kolaylığı. Tabloyu henüz
+    // oluşturmamış bir kurulumda da akış çalışmaya devam etmeli.
+    const kararSatirlari = [
+      ...secilenler.map(o => ({ student_id: secili, bolum_id: o.bolumId, karar: "kabul", karar_veren: userId })),
+      ...elenenler.map(o => ({ student_id: secili, bolum_id: o.bolumId, karar: "red", karar_veren: userId })),
+    ].filter(k => k.bolum_id);
+
+    if (kararSatirlari.length > 0) {
+      await calistir(
+        supabase.from("oneri_kararlari").upsert(kararSatirlari, { onConflict: "student_id,bolum_id" }),
+        "Oneri karari kaydetme", { sessiz: true }
+      );
+    }
+
     setIslemde(false);
-    if (hata) return;
-    setSonuc(`${satirlar.length} görev atandı.`);
+    setSonuc(
+      `${satirlar.length} görev atandı.` +
+      (elenenler.length > 0 ? ` Elediğiniz ${elenenler.length} öneri ${RED_BEKLEME_GUN} gün boyunca tekrar çıkmayacak.` : "")
+    );
     setOneriler(null);
     onAtandi?.();
-    ogrenciVerisi(secili);      // yeni görevler bir sonraki öneriye yansısın
+    ogrenciVerisi(secili);      // yeni görevler ve kararlar yansısın
   };
 
   const girdiStil = {
@@ -175,6 +206,8 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
             <>
               <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik }}>
                 {bolumSayisi} bölüm, {kaynak.bankalar.length} kaynak taranıyor
+                {oneriler?.redEdilen > 0 &&
+                  ` · daha önce elediğiniz ${oneriler.redEdilen} bölüm beklemede`}
               </div>
 
               {sonuc && (
