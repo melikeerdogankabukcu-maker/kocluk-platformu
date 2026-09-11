@@ -32,6 +32,11 @@ const SATIR = new RegExp(`^(.*?)[${DOLGU_KARAKTER}]*?(\\d{1,4})(?:\\s*[-–—]\
 // "ÜNİTE 10 Çarpanlara Ayırma" satırında ön ek temizlenmeden kalıyordu.
 const BAS_NUMARA = /^\s*(?:(?:b[öo]l[üu]m|[üu]n[iİıI]te|test|konu)\s*)?\d{1,3}\s*[.)\-–—:]?\s+/i;
 
+// Bölüm/ünite başlığı: sayfa numarası taşımayan, "BÖLÜM"/"ÜNİTE"
+// geçen satır. Noktalı I açıkça yazılıyor — /i bayrağı "İ" ile düz
+// "i"yi eşleştirmiyor (aynı tuzağa BAS_NUMARA'da da düşülmüştü).
+const BOLUM_BASLIGI = /^\s*(?:\d{1,3}\s*[.)\-–—:]?\s*)?(?:b[öo]l[üu]m|[üu]n[iİıI]te|k[iİıI]s[iİıI]m)\s*[:.\-–—]?\s*(.+?)\s*$/i;
+
 // Ayrıştırmaya hiç girmemesi gereken satırlar
 const ATLANACAK = /^\s*(?:i[çc]indekiler|contents|sayfa|page|[içc]erik)\s*$/i;
 
@@ -102,9 +107,26 @@ export function icindekileriAyristir(metin) {
   const bulunan = [];
   const atlanan = [];
 
+  // ── BÖLÜM BAŞLIĞI BAĞLAM OLARAK TUTULUYOR ──────────────────
+  // "02. BÖLÜM: MADDE VE ÖZELLİKLERİ" satırının sayfa numarası yok,
+  // o yüzden bölüm olarak kaydedilmiyor. Ama altındaki girdiler için
+  // KİMLİK taşıyor: kitabın alt başlıkları ("Kütle - Hacim ve
+  // Özkütle", "Adesyon, Kohezyon...") müfredattan daha ince taneli ve
+  // tek başlarına hiçbir müfredat konusuna oturmuyorlar. Bölüm adı
+  // ise tam olarak müfredattaki konu: "Madde ve Özellikleri".
+  //
+  // Bu bağlam olmadan koca bir bölümün altı girdisi de "bağlanmadı"
+  // kalıyor ve ödev önerisinde hiç kullanılamıyordu.
+  let bolumBasligi = null;
+
   for (const satir of satirlar(metin)) {
     const m = SATIR.exec(satir);
-    if (!m) { atlanan.push(satir); continue; }
+    if (!m) {
+      const b = BOLUM_BASLIGI.exec(satir);
+      if (b) bolumBasligi = basligiTemizle(b[1]);
+      atlanan.push(satir);
+      continue;
+    }
 
     const baslik = basligiTemizle(m[1]);
     // Başlıksız satır (yalnız numaralar) ya da harfsiz satır işe yaramaz
@@ -112,7 +134,7 @@ export function icindekileriAyristir(metin) {
 
     const bas = Number(m[2]);
     const son = m[3] ? Number(m[3]) : null;
-    bulunan.push({ baslik, sayfaBas: bas, sayfaSon: son });
+    bulunan.push({ baslik, sayfaBas: bas, sayfaSon: son, bolum: bolumBasligi });
   }
 
   // Sayfa numarası artan gitmeyen satırlar genelde yanlış okumadır
@@ -132,6 +154,7 @@ export function icindekileriAyristir(metin) {
     return {
       sira: i + 1,
       baslik: b.baslik,
+      bolum: b.bolum ?? null,
       sayfaBas: b.sayfaBas,
       sayfaSon,
       supheli: geriGidiyor,

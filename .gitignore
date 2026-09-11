@@ -34,3 +34,6 @@ dist-ssr
 *.keystore
 *.jks
 signing-key-info.txt
+
+# Tesseract dil verisi — OCR sınamasında indiriliyor, depoya girmemeli (4,7 MB)
+*.traineddata

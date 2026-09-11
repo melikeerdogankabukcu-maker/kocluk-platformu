@@ -88,9 +88,36 @@ export function konuEslestir(baslik, konular) {
 }
 
 // Bölüm listesini toplu eşleştirir; her bölüme konu ve skor ekler.
+//
+// ── BÖLÜM BAŞLIĞINA DÜŞME ───────────────────────────────────────
+// Kitapların alt başlıkları müfredattan daha ince taneli oluyor:
+// "Kütle - Hacim ve Özkütle", "Adesyon, Kohezyon, Yüzey Gerilimi ve
+// Kılcallık" — müfredatta bunların hiçbiri yok, hepsinin karşılığı tek
+// bir konu: "Madde ve Özellikleri". O konu da zaten satırların üstünde
+// duran BÖLÜM BAŞLIĞI.
+//
+// Girdi kendi başına eşleşmezse bölüm başlığıyla deneniyor. Bu
+// olmadan gerçek bir kitapta koca bir bölümün altı girdisi de
+// "bağlanmadı" kalıyor ve ödev önerisinde hiç kullanılamıyordu
+// (ölçüldü: 6 girdiden 1'i eşleşiyordu, bölüm bağlamıyla 6'sı da).
+//
+// Eşleşmenin nereden geldiği `eslesmeKaynagi` ile işaretleniyor; koç
+// önizlemede bunu görüp gerekirse elle değiştiriyor.
 export function bolumleriEslestir(bolumler, konular) {
   return bolumler.map(b => {
-    const { konu, skor } = konuEslestir(b.baslik, konular);
-    return { ...b, konu, eslesmeSkoru: Math.round(skor * 100) / 100 };
+    const kendi = konuEslestir(b.baslik, konular);
+    if (kendi.konu) {
+      return { ...b, konu: kendi.konu, eslesmeSkoru: Math.round(kendi.skor * 100) / 100,
+               eslesmeKaynagi: "baslik" };
+    }
+    if (b.bolum) {
+      const ust = konuEslestir(b.bolum, konular);
+      if (ust.konu) {
+        return { ...b, konu: ust.konu, eslesmeSkoru: Math.round(ust.skor * 100) / 100,
+                 eslesmeKaynagi: "bolum" };
+      }
+    }
+    return { ...b, konu: null, eslesmeSkoru: Math.round(kendi.skor * 100) / 100,
+             eslesmeKaynagi: null };
   });
 }

@@ -112,7 +112,11 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
   };
 
   const bolumGuncelle = (sira, alan, deger) =>
-    setBolumler(list => list.map(b => (b.sira === sira ? { ...b, [alan]: deger } : b)));
+    setBolumler(list => list.map(b => (b.sira === sira
+      // Konu elle seçilince eşleşmenin kaynağı da değişiyor; yoksa
+      // satır "bölüm başlığından geldi" demeye devam ederdi.
+      ? { ...b, [alan]: deger, ...(alan === "konu" ? { eslesmeKaynagi: deger ? "elle" : null } : {}) }
+      : b)));
 
   const bolumSil = (sira) =>
     setBolumler(list => list.filter(b => b.sira !== sira).map((b, i) => ({ ...b, sira: i + 1 })));
@@ -238,6 +242,11 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
                     {b.sayfaBas}–{b.sayfaSon ?? "?"}
                     {sayfaSayisi(b) != null ? ` · ${sayfaSayisi(b)} sayfa` : " · bitiş bilinmiyor"}
                     {b.supheli && " · ⚠ sayfa numarası geriye gidiyor"}
+                    {/* Bölüm başlığından devralınan eşleşme işaretleniyor:
+                        kitabın alt başlığı müfredatta yoksa konu üstteki
+                        bölüm adından geliyor ve bu her zaman doğru olmayabilir. */}
+                    {b.eslesmeKaynagi === "bolum" && b.bolum &&
+                      ` · konu bölüm başlığından: "${b.bolum}"`}
                   </div>
                 </div>
 
