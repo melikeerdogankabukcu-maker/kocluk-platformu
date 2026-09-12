@@ -167,6 +167,79 @@ export function yenidenNumarala(sirali) {
     .filter((b, i) => b.sira !== sirali[i].sira);
 }
 
+// ── SAAT ────────────────────────────────────────────────────────
+// "HH:MM" ya da "HH:MM:SS" → dakika. Geçersizse null.
+export function saatDakika(saat) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(saat ?? "");
+  if (!m) return null;
+  const s = Number(m[1]), d = Number(m[2]);
+  if (s > 23 || d > 59) return null;
+  return s * 60 + d;
+}
+
+export const saatKisalt = (saat) => (saat ? String(saat).slice(0, 5) : "");
+
+// Saatin düştüğü zaman dilimi. Sınırlar okul günü düşünülerek:
+// öğleden önce sabah, 17:00'a kadar öğleden sonra, sonrası akşam.
+export function dilimTahmini(saat) {
+  const dk = saatDakika(saat);
+  if (dk == null) return null;
+  if (dk < 12 * 60) return "sabah";
+  if (dk < 17 * 60) return "ogle";
+  return "aksam";
+}
+
+// Saati olan blok hücrede saatine göre yerleşsin: "16:00" bloğu "18:00"
+// bloğunun altında görünmesin. Dönen değer, yeni bloğun ÖNÜNE girmesi
+// gereken bloğun id'si (yeniSira'nın hedefId'si); saatsiz ya da en geç
+// saatteyse null (hücre sonu).
+//
+// Saatsiz bloklar sıralamayı bozmaz: saatli bir blok, önündeki ilk
+// saatli ve daha geç bloğun önüne giriyor; araya giren saatsiz bloklar
+// koçun sürüklediği yerde kalıyor.
+export function saateGoreHedef(sirali, saat, haricId = null) {
+  const dk = saatDakika(saat);
+  if (dk == null) return null;
+  const sonraki = sirali.find(b => b.id !== haricId && saatDakika(b.baslangic_saati) != null
+    && saatDakika(b.baslangic_saati) > dk);
+  return sonraki?.id ?? null;
+}
+
+export function saatAraligi(b) {
+  const bas = saatKisalt(b.baslangic_saati), son = saatKisalt(b.bitis_saati);
+  if (!bas) return "";
+  return son ? `${bas}–${son}` : bas;
+}
+
+// Açık sayacın o ana kadar geçen dakikası (gösterim için). Sunucu ile
+// cihaz saati arasındaki fark `fark` ms olarak veriliyor; cihaz saati
+// yanlışsa ekrandaki süre de yanlış akmasın.
+export function sayacGecen(sayacBaslangic, fark = 0, simdi = Date.now()) {
+  if (!sayacBaslangic) return 0;
+  const bas = new Date(sayacBaslangic).getTime();
+  if (Number.isNaN(bas)) return 0;
+  return Math.max(0, Math.floor((simdi + fark - bas) / 60000));
+}
+
+// ── TEST SONUCU ─────────────────────────────────────────────────
+// Veritabanındaki test_sayilari_tutarli kısıtıyla aynı kural: istemci
+// önce kendisi söylesin, öğrenci anlamsız bir sunucu hatası görmesin.
+export function testDenetle({ soru, dogru, yanlis }) {
+  const s = soru === "" || soru == null ? null : Number(soru);
+  if (s == null) return { gecerli: true, bos: true };
+  const d = dogru === "" || dogru == null ? 0 : Number(dogru);
+  const y = yanlis === "" || yanlis == null ? null : Number(yanlis);
+  if (!Number.isInteger(s) || s <= 0) return { gecerli: false, hata: "Soru sayısı sıfırdan büyük olmalı" };
+  if (!Number.isInteger(d) || d < 0 || (y != null && (!Number.isInteger(y) || y < 0))) {
+    return { gecerli: false, hata: "Doğru ve yanlış eksi olamaz" };
+  }
+  if (d + (y ?? 0) > s) return { gecerli: false, hata: `Doğru + yanlış (${d + (y ?? 0)}) soru sayısını (${s}) geçemez` };
+  // Net yalnızca yanlış girildiyse: yanlış bilinmeden net hesaplamak
+  // yanlışı sıfır saymak olurdu (testHelpers'daki kuralın aynısı).
+  const net = y == null ? null : Math.round((d - y / 4) * 100) / 100;
+  return { gecerli: true, bos: false, soru: s, dogru: d, yanlis: y, net };
+}
+
 // ── İLERLEME ────────────────────────────────────────────────────
 export function ilerleme(bloklar) {
   const toplam = bloklar.length;
@@ -177,6 +250,9 @@ export function ilerleme(bloklar) {
     toplam, yapilan,
     oran: toplam ? Math.round((yapilan / toplam) * 100) : null,
     dakika, yapilanDakika,
+    // Bildirilen ve sayaçla ölçülen ayrı: koç ikisinin farkını görsün.
+    calisilanDk: bloklar.reduce((s, b) => s + (b.calisilan_dk || 0), 0),
+    sayacDk: bloklar.reduce((s, b) => s + (b.sayacla_olculen_dk || 0), 0),
     devreden: bloklar.filter(b => b.devreden && !b.yapildi).length,
   };
 }

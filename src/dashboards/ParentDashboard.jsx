@@ -24,6 +24,7 @@ import Mesajlar from "../components/Mesajlar";
 import Bolum from "../components/Bolum";
 import PanelDuzen from "../components/PanelDuzen";
 import HaftalikOzet from "../components/HaftalikOzet";
+import CalismaPlani from "../components/CalismaPlani";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
 
 export default function ParentDashboard({ userId, userName }) {
@@ -305,6 +306,14 @@ export default function ParentDashboard({ userId, userName }) {
                 <StatCard label="Tamamlanan"    value={doneTasks}  sub="görev"     color={c.mid} />
                 <StatCard label="Tamamlanma"    value={`%${pct}`}  sub="oran"      color={c.mid} />
               </div>
+
+        {/* Çocuğun bu haftaki çalışma planı — SALT OKUNUR. Veli neyin
+            planlandığını, ne kadarının yapıldığını ve ne kadar çalışıldığını
+            görüyor; işaret koyamıyor, sayaç başlatamıyor. Varsayılan KAPALI:
+            velinin panelde ilk baktığı yer takvim ve özet, plan ayrıntısı
+            isteyene açılsın. */}
+              <CalismaPlani rol="veli" studentId={child.id} color={c}
+                baslik={`${child.full_name.split(" ")[0]} — Bu Haftaki Plan`} varsayilanAcik={false} />
 
         {/* Takvim — velinin en sık baktığı yer */}
               <Card id="bolum-ders">

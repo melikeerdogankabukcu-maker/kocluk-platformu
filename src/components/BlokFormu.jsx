@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 import { useTopics } from "../lib/TopicsContext";
-import { GUNLER, DILIMLER, TURLER, videoCoz } from "../lib/calismaPlani";
+import { GUNLER, DILIMLER, TURLER, videoCoz, dilimTahmini, saatDakika, saatKisalt } from "../lib/calismaPlani";
+import { saatEkle } from "../lib/lessonHelpers";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Modal from "./Modal";
 
@@ -23,6 +24,7 @@ const bosForm = (gun, dilim) => ({
   exam_type: "",
   banka_id: "", bolum_id: "", sayfa_bas: "", sayfa_son: "",
   video_url: "", aciklama: "",
+  baslangic_saati: "", bitis_saati: "",
 });
 
 export default function BlokFormu({ studentId, blok = null, gun = 0, dilim = "aksam",
@@ -35,13 +37,39 @@ export default function BlokFormu({ studentId, blok = null, gun = 0, dilim = "ak
       ...bosForm(blok.gun, blok.dilim),
       ...Object.fromEntries(Object.entries(blok).map(([k, v]) => [k, v ?? ""])),
       exam_type: dersinTuru?.(blok.ders, blok.konu) ?? sinavTurleri[0] ?? "TYT",
+      // DB "18:00:00" veriyor; input[type=time] saniyeli değerde BOŞ açılıyor
+      // ve koç saati silinmiş sanıyordu (ders planlamada da aynı tuzak vardı).
+      baslangic_saati: saatKisalt(blok.baslangic_saati),
+      bitis_saati: saatKisalt(blok.bitis_saati),
     };
   });
+  // Bitiş saati kendiliğinden mi dolduruldu? Koç elle yazdıysa artık
+  // dokunulmuyor (ders planlamadaki "1 saat önerisi" ile aynı kural).
+  const [bitisOto, setBitisOto] = useState(!blok?.bitis_saati);
   const [baslikElle, setBaslikElle] = useState(!!blok);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [kaynak, setKaynak] = useState({ bankalar: [], bolumler: [] });
 
   const alan = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Başlangıç saati girilince: zaman dilimi saate göre seçiliyor ve
+  // bitiş, süre biliniyorsa başlangıç + süre olarak öneriliyor. Böylece
+  // 19:00'a konan blok "sabah" hücresinde kalmıyor.
+  const baslangicDegisti = (saat) => setForm(f => {
+    const dilimYeni = dilimTahmini(saat) ?? f.dilim;
+    const sure = Number(f.sure_dk);
+    const bitis = bitisOto && saat && sure > 0 ? saatEkle(saat, sure) : f.bitis_saati;
+    return { ...f, baslangic_saati: saat, dilim: dilimYeni, bitis_saati: bitis };
+  });
+
+  const sureDegisti = (v) => setForm(f => {
+    const sure = Number(v);
+    const bitis = bitisOto && f.baslangic_saati && sure > 0 ? saatEkle(f.baslangic_saati, sure) : f.bitis_saati;
+    return { ...f, sure_dk: v, bitis_saati: bitis };
+  });
+
+  const saatGecerli = !form.baslangic_saati || !form.bitis_saati
+    || saatDakika(form.bitis_saati) > saatDakika(form.baslangic_saati);
 
   // Kaynaklar yalnızca "Soru bankası" türü seçilince okunuyor.
   useEffect(() => {
@@ -99,7 +127,7 @@ export default function BlokFormu({ studentId, blok = null, gun = 0, dilim = "ak
   const video = form.tur === "video" ? videoCoz(form.video_url) : null;
 
   const gecerli =
-    form.baslik.trim() &&
+    form.baslik.trim() && saatGecerli &&
     (form.tur !== "video" || video?.tur === "youtube" || video?.tur === "vimeo" || video?.tur === "baglanti") &&
     (form.tur !== "kaynak" || form.banka_id);
 
@@ -123,6 +151,9 @@ export default function BlokFormu({ studentId, blok = null, gun = 0, dilim = "ak
       sayfa_son: form.tur === "kaynak" ? sayi(form.sayfa_son) : null,
       video_url: form.tur === "video" ? form.video_url.trim() : null,
       aciklama:  form.aciklama?.trim() || null,
+      baslangic_saati: form.baslangic_saati || null,
+      // Başlangıç yoksa bitiş anlamsız; tek başına kalmasın.
+      bitis_saati: form.baslangic_saati ? (form.bitis_saati || null) : null,
     }) ?? {};
     setKaydediliyor(false);
     if (!hata) onKapat();
@@ -280,9 +311,31 @@ export default function BlokFormu({ studentId, blok = null, gun = 0, dilim = "ak
           </div>
           <div style={{ flex: "1 1 90px" }}>
             <label style={etiket}>Süre (dk)</label>
-            <input type="number" min="1" value={form.sure_dk} onChange={e => alan("sure_dk", e.target.value)} style={girdi} />
+            <input type="number" min="1" value={form.sure_dk} onChange={e => sureDegisti(e.target.value)} style={girdi} />
           </div>
         </div>
+
+        {/* Çalışma saati — isteğe bağlı. Girilirse blok hücresinde saatine
+            göre sıralanıyor ve öğrenci panelinde saatiyle görünüyor. */}
+        <div style={{ display: "flex", gap: BOSLUK.s, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 120px" }}>
+            <label style={etiket}>Başlangıç saati (isteğe bağlı)</label>
+            <input type="time" value={form.baslangic_saati} onChange={e => baslangicDegisti(e.target.value)} style={girdi} />
+          </div>
+          <div style={{ flex: "1 1 120px" }}>
+            <label style={etiket}>
+              Bitiş saati{bitisOto && form.bitis_saati && form.sure_dk ? " · süreden önerildi" : ""}
+            </label>
+            <input type="time" value={form.bitis_saati} disabled={!form.baslangic_saati}
+              onChange={e => { setBitisOto(false); alan("bitis_saati", e.target.value); }}
+              style={{ ...girdi, opacity: form.baslangic_saati ? 1 : 0.5 }} />
+          </div>
+        </div>
+        {!saatGecerli && (
+          <div style={{ fontSize: YAZI.kucuk, color: RENK.hata.metin, marginTop: -BOSLUK.s }}>
+            Bitiş saati başlangıçtan sonra olmalı.
+          </div>
+        )}
 
         <div>
           <label style={etiket}>Not (isteğe bağlı)</label>

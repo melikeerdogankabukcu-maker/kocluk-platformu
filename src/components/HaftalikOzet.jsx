@@ -20,6 +20,15 @@ const sayi = (v, bos = "—") =>
 
 // students verilirse (koç paneli) bir seçici çıkıyor; verilmezse
 // (öğrenci/veli paneli) doğrudan studentId kullanılıyor.
+// "95" -> "1 sa 35 dk". Tablo dar; saat üstü süreleri dakika olarak
+// yazmak (ör. "340") okunmuyordu.
+const dakikaMetni = (dk) => {
+  if (!dk) return "0";
+  if (dk < 60) return `${dk} dk`;
+  const sa = Math.floor(dk / 60), kalan = dk % 60;
+  return kalan ? `${sa} sa ${kalan} dk` : `${sa} sa`;
+};
+
 export default function HaftalikOzet({ studentId, students = null, color: c,
   yenilenebilir = false, baslik = "Haftalık Özet" }) {
   const [secili,   setSecili]   = useState(studentId ?? students?.[0]?.id ?? "");
@@ -108,11 +117,13 @@ export default function HaftalikOzet({ studentId, students = null, color: c,
 
           {/* Geniş tablo dar ekranda taşmasın */}
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 540 }}>
               <thead>
                 <tr>
                   <th style={{ ...baslikHucre, textAlign: "left" }}>HAFTA</th>
                   <th style={baslikHucre} title="Bu hafta fiilen yapılan / bu haftanın görevleri">GÖREV</th>
+                  <th style={baslikHucre} title="Çalışma planında yapılan blok / planlanan blok">PLAN</th>
+                  <th style={baslikHucre} title="Öğrencinin bildirdiği çalışma süresi (sayaçla ölçülen kısmı parantezde)">SÜRE</th>
                   <th style={baslikHucre}>SORU</th>
                   <th style={baslikHucre} title="Yalnızca yanlış sayısı girilmiş testlerden">NET</th>
                   <th style={baslikHucre} title="Deneme sınavı net ortalaması">DENEME</th>
@@ -137,6 +148,31 @@ export default function HaftalikOzet({ studentId, students = null, color: c,
                         {oran !== null && (
                           <span style={{ fontSize: 9.5, color: "#bbb" }}> %{oran}</span>
                         )}
+                      </td>
+                      {/* Plan uyumu. Planı olmayan hafta "—": 0/0'ı %0 göstermek
+                          "plan vardı, hiç yapılmadı" ile karışırdı. */}
+                      <td style={hucre}>
+                        {(s.plan_blok ?? 0) > 0 ? (
+                          <>
+                            <span style={{ color: s.plan_yapilan > 0 ? "#1A6B3C" : "#bbb", fontWeight: 700 }}>
+                              {s.plan_yapilan}
+                            </span>
+                            <span style={{ color: "#ccc" }}> / </span>
+                            <span style={{ color: "#888" }}>{s.plan_blok}</span>
+                            <span style={{ fontSize: 9.5, color: "#bbb" }}> %{Math.round((s.plan_yapilan / s.plan_blok) * 100)}</span>
+                          </>
+                        ) : <span style={{ color: "#ccc" }}>—</span>}
+                      </td>
+                      <td style={hucre}
+                        title={(s.plan_dk ?? 0) > 0 ? `Planlanan ${s.plan_dk} dk` : undefined}>
+                        {(s.calisilan_dk ?? 0) > 0 ? (
+                          <>
+                            <span style={{ color: "#333" }}>{dakikaMetni(s.calisilan_dk)}</span>
+                            {(s.sayac_dk ?? 0) > 0 && (
+                              <span style={{ fontSize: 9.5, color: "#bbb" }}> ({dakikaMetni(s.sayac_dk)})</span>
+                            )}
+                          </>
+                        ) : <span style={{ color: "#ccc" }}>—</span>}
                       </td>
                       <td style={hucre}>
                         {/* Çubuk, sayıyı okumadan haftalar arası farkı gösteriyor */}
@@ -184,6 +220,8 @@ export default function HaftalikOzet({ studentId, students = null, color: c,
 
           <div style={{ fontSize: 10, color: "#aaa", lineHeight: 1.5 }}>
             <b>Görev</b>: bu hafta fiilen yapılan / bu haftanın görevleri.{" "}
+            <b>Plan</b>: çalışma planında yapılan / planlanan blok.{" "}
+            <b>Süre</b>: öğrencinin bildirdiği; parantezdeki kısmı sayaçla ölçülen.{" "}
             <b>Net</b> yalnızca yanlış sayısı girilmiş testlerden hesaplanır;
             <span style={{ color: "#C9A227" }}> *</span> işareti o haftanın
             testlerinin bir kısmında ayrım girilmediğini gösterir.

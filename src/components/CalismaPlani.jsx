@@ -7,6 +7,7 @@ import { useCalismaPlani } from "../hooks/useCalismaPlani";
 import {
   GUNLER, GUN_KISA, DILIMLER, TURLER, haftaBasi, haftaKaydir, haftaAraligiMetni,
   tarihMetni, bugununGunu, hucreBloklari, ilerleme, sureMetni, blokAltBilgi,
+  saatAraligi, sayacGecen,
 } from "../lib/calismaPlani";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Card from "./Card";
@@ -14,6 +15,7 @@ import SectionTitle from "./SectionTitle";
 import Modal from "./Modal";
 import BlokFormu from "./BlokFormu";
 import VideoOynatici from "./VideoOynatici";
+import TamamlaDiyalogu from "./TamamlaDiyalogu";
 
 // Haftalık çalışma planı panosu.
 //
@@ -56,9 +58,12 @@ function useKapsayiciGenisligi() {
 
 export default function CalismaPlani({
   rol = "ogrenci", studentId: sabitOgrenci = null, ogrenciler = null,
-  color: c, baslik = "Haftalık Çalışma Planı", varsayilanAcik = true,
+  color: c, baslik = "Haftalık Çalışma Planı", varsayilanAcik = true, onDegisti = null,
 }) {
   const koc = rol === "koc";
+  // Veli: planı ve ilerlemeyi salt okunur görür; işaret koyamaz, sayaç
+  // başlatamaz. Öğrenci işaretler; koç düzenler.
+  const ogrenci = rol === "ogrenci";
   const [acik, setAcik] = useState(varsayilanAcik);
   const [secili, setSecili] = useState(sabitOgrenci ?? ogrenciler?.[0]?.id ?? "");
   const [pazartesi, setPazartesi] = useState(() => haftaBasi());
@@ -82,6 +87,35 @@ export default function CalismaPlani({
   const [form, setForm]   = useState(null);   // { blok } | { gun, dilim }
   const [video, setVideo] = useState(null);   // blok
   const [surukle, setSurukle] = useState(null);
+  const [tamamlanan, setTamamlanan] = useState(null);   // blok
+
+  // Açık bir sayaç varken ekrandaki süre akmalı. Yalnızca o durumda
+  // saniyede değil 20 saniyede bir tazeleniyor: dakika gösteriliyor,
+  // daha sık çizmek boşa pil harcardı.
+  const [simdi, setSimdi] = useState(Date.now());
+  const sayacVar = p.bloklar.some(b => b.sayac_baslangic);
+  useEffect(() => {
+    if (!sayacVar) return;
+    setSimdi(Date.now());
+    const t = setInterval(() => setSimdi(Date.now()), 20000);
+    return () => clearInterval(t);
+  }, [sayacVar]);
+
+  const sayacCevir = async (b) => {
+    const { kirpildi, hata } = await p.sayac(b.id, b.sayac_baslangic ? "durdur" : "basla");
+    if (!hata && kirpildi) {
+      alert("Sayaç 4 saatten uzun açık kalmış; bu bloğa en fazla 4 saat yazıldı. " +
+            "Gerçek süreyi \"Yaptım\" derken düzeltebilirsin.");
+    }
+  };
+
+  // İşaret: yapılmamış bloğa tıklamak tamamlama penceresini açar
+  // (süre + test sonucu). Yapılmış bloğun işaretini kaldırmak doğrudan;
+  // girilmiş test SİLİNMİYOR, yeniden işaretlenince form onunla açılıyor.
+  const isaretCevir = (b) => {
+    if (b.yapildi) p.tamamla(b.id, { yapildi: false });
+    else setTamamlanan(b);
+  };
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -103,6 +137,11 @@ export default function CalismaPlani({
 
   const ozet = useMemo(() => ilerleme(p.bloklar), [p.bloklar]);
 
+  // Bloklar değişince dışarıya haber ver. Koç panelindeki öğrenci satırı
+  // planı ayrı okuyor; bu olmadan panoda işaretlenen blok, satırdaki
+  // "📅 3/7" rozetinde sayfa yenilenene kadar görünmezdi.
+  useEffect(() => { onDegisti?.(); }, [p.bloklar]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!p.etkin) return null;      // tablo yok: migration çalışmamış
 
   const gunTarihi = (i) => {
@@ -117,8 +156,13 @@ export default function CalismaPlani({
       bloklar={hucreBloklari(p.bloklar, gun, dilim)}
       onEkle={() => setForm({ gun, dilim })}
       onBlok={(b) => (koc ? setForm({ blok: b }) : null)}
-      onCevir={(b) => p.yapildiCevir(b.id)}
+      onCevir={isaretCevir}
       onVideo={setVideo}
+      onSayac={sayacCevir}
+      ogrenci={ogrenci}
+      testler={p.testler}
+      saatFarki={p.saatFarki}
+      simdi={simdi}
       dar={dar}
     />
   );
@@ -171,7 +215,11 @@ export default function CalismaPlani({
                   <div style={{ display: "flex", justifyContent: "space-between", gap: BOSLUK.s, flexWrap: "wrap", fontSize: YAZI.kucuk, color: RENK.metinIkincil, marginBottom: 5 }}>
                     <span>
                       <b style={{ color: c.text }}>{ozet.yapilan}/{ozet.toplam}</b> blok yapıldı
-                      {ozet.dakika > 0 && <> · {sureMetni(ozet.yapilanDakika)} / {sureMetni(ozet.dakika)}</>}
+                      {ozet.dakika > 0 && <> · planlanan {sureMetni(ozet.dakika)}</>}
+                      {ozet.calisilanDk > 0 && <> · çalışılan <b style={{ color: c.text }}>{sureMetni(ozet.calisilanDk)}</b></>}
+                      {/* Sayaçla ölçülen ayrıca: koç bildirilen süreyle
+                          ölçüleni karşılaştırabilsin. */}
+                      {ozet.sayacDk > 0 && <> (sayaçla {sureMetni(ozet.sayacDk)})</>}
                     </span>
                     {ozet.devreden > 0 && (
                       <span style={{ color: RENK.uyari.metin, fontWeight: 600 }}>
@@ -245,7 +293,7 @@ export default function CalismaPlani({
                 )}
 
                 <DragOverlay dropAnimation={null}>
-                  {surukle ? <BlokGovde blok={surukle} koc color={c} surukleniyor /> : null}
+                  {surukle ? <BlokGovde blok={surukle} koc color={c} surukleniyor testler={p.testler} /> : null}
                 </DragOverlay>
               </DndContext>
 
@@ -269,11 +317,23 @@ export default function CalismaPlani({
           onKapat={() => setForm(null)} />
       )}
 
+      {tamamlanan && (
+        <TamamlaDiyalogu
+          blok={p.bloklar.find(b => b.id === tamamlanan.id) ?? tamamlanan}
+          test={p.testler[tamamlanan.id] ?? null}
+          saatFarki={p.saatFarki} color={c}
+          onKaydet={(alanlar) => p.tamamla(tamamlanan.id, alanlar)}
+          onKapat={() => setTamamlanan(null)} />
+      )}
+
       {video && (
         <Modal title={video.baslik} onClose={() => setVideo(null)} maxWidth={760}>
           <VideoOynatici adres={video.video_url} color={c} />
-          {!koc && (
-            <button onClick={async () => { await p.yapildiCevir(video.id); setVideo(null); }} style={{
+          {ogrenci && (
+            <button onClick={() => {
+              const b = video; setVideo(null);
+              if (b.yapildi) p.tamamla(b.id, { yapildi: false }); else setTamamlanan(b);
+            }} style={{
               marginTop: BOSLUK.m, width: "100%", padding: "11px 0", borderRadius: KOSE.m, border: "none",
               background: video.yapildi ? RENK.yuzey : c.bg, color: video.yapildi ? RENK.metinSoluk : "#fff",
               fontSize: YAZI.govde, fontWeight: 700, cursor: "pointer",
@@ -310,7 +370,7 @@ function BosPlan({ koc, color: c, buHafta, onOlustur }) {
   if (!koc) {
     return (
       <div style={{ fontSize: YAZI.ikincil, color: RENK.metinCokSoluk, padding: "18px 0", textAlign: "center", lineHeight: 1.6 }}>
-        Koçun {buHafta ? "bu hafta" : "bu hafta için"} henüz bir çalışma planı hazırlamadı.
+        Bu hafta için henüz bir çalışma planı hazırlanmadı.
       </div>
     );
   }
@@ -357,7 +417,8 @@ function GunSekmesi({ gun, etiket, tarih, secili, bugun, adet, yapilan, koc, col
   );
 }
 
-function Hucre({ gun, dilim, bloklar, koc, bugun, color: c, onEkle, onBlok, onCevir, onVideo, dar }) {
+function Hucre({ gun, dilim, bloklar, koc, bugun, color: c, onEkle, onBlok, onCevir, onVideo, onSayac,
+  ogrenci, testler, saatFarki, simdi, dar }) {
   const { setNodeRef, isOver } = useDroppable({ id: `hucre:${gun}:${dilim}`, data: { gun, dilim }, disabled: !koc });
   return (
     <div ref={setNodeRef} style={{
@@ -369,7 +430,9 @@ function Hucre({ gun, dilim, bloklar, koc, bugun, color: c, onEkle, onBlok, onCe
     }}>
       {bloklar.map(b => (
         <BlokKart key={b.id} blok={b} koc={koc} color={c}
-          onClick={() => onBlok(b)} onCevir={() => onCevir(b)} onVideo={() => onVideo(b)} />
+          ogrenci={ogrenci} test={testler?.[b.id]} saatFarki={saatFarki} simdi={simdi}
+          onClick={() => onBlok(b)} onCevir={() => onCevir(b)} onVideo={() => onVideo(b)}
+          onSayac={() => onSayac(b)} />
       ))}
       {koc && (
         <button onClick={onEkle} title="Blok ekle" style={{
@@ -382,7 +445,7 @@ function Hucre({ gun, dilim, bloklar, koc, bugun, color: c, onEkle, onBlok, onCe
   );
 }
 
-function BlokKart({ blok, koc, color: c, onClick, onCevir, onVideo }) {
+function BlokKart({ blok, koc, color: c, onClick, onCevir, onVideo, onSayac, ogrenci, test, saatFarki, simdi }) {
   const drag = useDraggable({ id: blok.id, data: { blok }, disabled: !koc });
   // Blok aynı zamanda bırakma hedefi: üstüne bırakılan blok ONUN ÖNÜNE girer
   const drop = useDroppable({ id: `blok:${blok.id}`, data: { gun: blok.gun, dilim: blok.dilim, hedefId: blok.id }, disabled: !koc });
@@ -395,35 +458,54 @@ function BlokKart({ blok, koc, color: c, onClick, onCevir, onVideo }) {
         borderTop: drop.isOver && !drag.isDragging ? `3px solid ${c.mid}` : "3px solid transparent",
         touchAction: koc ? "manipulation" : undefined,
       }}>
-      <BlokGovde blok={blok} koc={koc} color={c} onClick={onClick} onCevir={onCevir} onVideo={onVideo} />
+      <BlokGovde blok={blok} koc={koc} color={c} onClick={onClick} onCevir={onCevir} onVideo={onVideo}
+        onSayac={onSayac} ogrenci={ogrenci} test={test} saatFarki={saatFarki} simdi={simdi} />
     </div>
   );
 }
 
-function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, surukleniyor }) {
+function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac,
+  ogrenci, test, saatFarki = 0, simdi, surukleniyor }) {
   const t = TURLER[b.tur] ?? TURLER.serbest;
   const alt = blokAltBilgi(b);
+  const saat = saatAraligi(b);
+  const acik = !!b.sayac_baslangic;
+  const gecen = acik ? sayacGecen(b.sayac_baslangic, saatFarki, simdi) : 0;
+  const olculen = (b.sayacla_olculen_dk || 0) + gecen;
+
+  // Etkileşimli düğmeler sürükleme algılayıcısını BAŞLATMAMALI; yoksa
+  // ▶'ye ya da sayaca basmak bazen düğmeyi değil bloğu tutuyordu.
+  const dugmeKorumasi = {
+    onPointerDown: e => e.stopPropagation(),
+    onTouchStart:  e => e.stopPropagation(),
+  };
+
   return (
     <div onClick={koc ? onClick : undefined} style={{
-      background: b.yapildi ? RENK.basari.zemin : "#fff",
-      border: `1px solid ${b.devreden && !b.yapildi ? "#F0D9A8" : RENK.cizgi}`,
-      borderLeft: `3px solid ${b.yapildi ? RENK.basari.metin : b.devreden ? "#EF9F27" : c.mid}`,
+      background: b.yapildi ? RENK.basari.zemin : acik ? "#FFFBEA" : "#fff",
+      border: `1px solid ${acik ? "#F2D27A" : b.devreden && !b.yapildi ? "#F0D9A8" : RENK.cizgi}`,
+      borderLeft: `3px solid ${b.yapildi ? RENK.basari.metin : acik ? "#E0A526" : b.devreden ? "#EF9F27" : c.mid}`,
       borderRadius: KOSE.s, padding: "5px 6px",
       cursor: koc ? (surukleniyor ? "grabbing" : "grab") : "default",
       boxShadow: surukleniyor ? "0 8px 20px rgba(0,0,0,.18)" : "none",
       width: surukleniyor ? 180 : undefined,
     }}>
       <div style={{ display: "flex", gap: 5, alignItems: "flex-start" }}>
-        {!koc && (
+        {ogrenci ? (
           <input type="checkbox" checked={!!b.yapildi} aria-label="Yaptım"
-            onChange={onCevir} onClick={e => e.stopPropagation()}
+            onChange={onCevir} onClick={e => e.stopPropagation()} {...dugmeKorumasi}
             style={{ marginTop: 1, width: 15, height: 15, flexShrink: 0, cursor: "pointer", accentColor: c.bg }} />
-        )}
+        ) : !koc && b.yapildi ? (
+          <span aria-label="Yapıldı" style={{ fontSize: 11, color: RENK.basari.metin, fontWeight: 800, flexShrink: 0 }}>✓</span>
+        ) : null}
         <div style={{ flex: 1, minWidth: 0 }}>
+          {saat && (
+            <div style={{ fontSize: 9.5, fontWeight: 700, color: c.text, marginBottom: 1 }}>🕘 {saat}</div>
+          )}
           <div style={{
             fontSize: YAZI.kucuk, fontWeight: 700, lineHeight: 1.3,
             color: b.yapildi ? RENK.metinSoluk : RENK.metin,
-            textDecoration: b.yapildi && !koc ? "line-through" : "none",
+            textDecoration: b.yapildi && ogrenci ? "line-through" : "none",
             overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
             wordBreak: "break-word",
           }}>
@@ -434,6 +516,30 @@ function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, suruklen
               {alt}
             </div>
           )}
+
+          {/* Sonuç şeridi: çalışılan süre ve bağlı test. Koç ve veli bloğa
+              bakınca "yapıldı"nın ne demek olduğunu görsün — işaretin
+              arkasında 5 dakika mı, 50 soru mu var. */}
+          {!surukleniyor && (b.calisilan_dk != null || test) && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+              {b.calisilan_dk != null && (
+                <span title={b.sayacla_olculen_dk ? `Sayaçla ölçülen: ${sureMetni(b.sayacla_olculen_dk)}` : "Öğrencinin bildirdiği süre"}
+                  style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: KOSE.tam, background: c.light, color: c.text }}>
+                  ⏱ {sureMetni(b.calisilan_dk) || "0 dk"}{b.sayacla_olculen_dk > 0 ? " ⚲" : ""}
+                </span>
+              )}
+              {test && (
+                <span title={test.yanlis_count != null
+                    ? `${test.question_count} soru · ${test.correct_count} doğru · ${test.yanlis_count} yanlış`
+                    : `${test.question_count} soru · ${test.correct_count} doğru`}
+                  style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: KOSE.tam, background: RENK.mor.zemin, color: RENK.mor.metin }}>
+                  📝 {test.correct_count}/{test.question_count}
+                  {test.yanlis_count != null ? ` · ${Math.round((test.correct_count - test.yanlis_count / 4) * 100) / 100} net` : ""}
+                </span>
+              )}
+            </div>
+          )}
+
           {(b.devreden && !b.yapildi) && (
             <div style={{ fontSize: 9, fontWeight: 700, color: RENK.uyari.metin, marginTop: 2 }}>↻ geçen hafta yapılmadı</div>
           )}
@@ -444,16 +550,32 @@ function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, suruklen
           )}
         </div>
       </div>
-      {b.tur === "video" && b.video_url && !surukleniyor && (
-        <button
-          onClick={e => { e.stopPropagation(); onVideo?.(); }}
-          // Sürükleme algılayıcısı düğmede başlamasın; yoksa ▶'ye basmak
-          // bazen videoyu açmak yerine bloğu tutuyordu.
-          onPointerDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
-          style={{
-            marginTop: 4, width: "100%", padding: "3px 0", borderRadius: KOSE.s, border: "none",
-            background: c.light, color: c.text, fontSize: 10, fontWeight: 700, cursor: "pointer",
-          }}>▶ İzle</button>
+
+      {!surukleniyor && (
+        <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+          {b.tur === "video" && b.video_url && (
+            <button onClick={e => { e.stopPropagation(); onVideo?.(); }} {...dugmeKorumasi} style={{
+              flex: 1, padding: "3px 0", borderRadius: KOSE.s, border: "none",
+              background: c.light, color: c.text, fontSize: 10, fontWeight: 700, cursor: "pointer",
+            }}>▶ İzle</button>
+          )}
+          {/* Sayaç yalnızca öğrencide ve yapılmamış blokta. Veli ve koç
+              açık sayacı GÖRÜYOR (kart sarı, süre akıyor) ama kontrol edemiyor. */}
+          {ogrenci && !b.yapildi && (
+            <button onClick={e => { e.stopPropagation(); onSayac?.(); }} {...dugmeKorumasi}
+              aria-label={acik ? "Sayacı durdur" : "Sayacı başlat"} style={{
+                flex: 1, padding: "3px 0", borderRadius: KOSE.s, cursor: "pointer",
+                border: acik ? "none" : `1px solid ${RENK.cizgi}`,
+                background: acik ? "#E0A526" : "#fff", color: acik ? "#fff" : RENK.metinSoluk,
+                fontSize: 10, fontWeight: 700,
+              }}>{acik ? `⏸ ${olculen} dk` : olculen > 0 ? `⏱ ${olculen} dk · sürdür` : "⏱ Başla"}</button>
+          )}
+          {!ogrenci && acik && (
+            <span style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#9A6B00", padding: "3px 0" }}>
+              ⏱ şu an çalışıyor · {olculen} dk
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

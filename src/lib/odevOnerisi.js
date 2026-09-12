@@ -153,6 +153,35 @@ function dersAciliyeti(d) {
   return 0;
 }
 
+// ── ÇALIŞMA PLANI DURUMU ────────────────────────────────────────
+// Haftalık plandaki bloklar da bir "çalışma" kaydı. Onları görmeden motor
+// iki yanlış yapıyordu:
+//
+//  1) Planda bir konuyu ÇALIŞIP işaretlemiş ama test girmemiş öğrenciye
+//     o konu için "Hiç çalışılmamış" diyordu. Çalışıldı; yalnızca
+//     ölçülmedi. Doğru etiket "az veri".
+//  2) Plana üç hafta üst üste konup hiç yapılmayan konu motor için
+//     görünmezdi — oysa koçun en çok bilmesi gereken şeylerden biri.
+//
+// Bloklar ders+konu ile eşleşiyor. Konusu olmayan bloklar (serbest
+// "haftalık tekrar" gibi) hiçbir konuya yazılmıyor.
+//
+// planBloklari: [{ ders, konu, yapildi, hafta_basi }] — hafta_basi planın
+// haftası ("YYYY-MM-DD").
+export function planDurumu(planBloklari = [], buHafta = null) {
+  const harita = new Map();
+  planBloklari.forEach(b => {
+    if (!b.konu) return;
+    const a = anahtarla(b.ders ?? "", b.konu);
+    if (!harita.has(a)) harita.set(a, { toplam: 0, yapilan: 0, buHaftaAcik: false });
+    const h = harita.get(a);
+    h.toplam += 1;
+    if (b.yapildi) h.yapilan += 1;
+    else if (buHafta && b.hafta_basi === buHafta) h.buHaftaAcik = true;
+  });
+  return harita;
+}
+
 // ── ÖNERİ ÜRETİMİ ───────────────────────────────────────────────
 export function oneriUret({
   bolumler = [],        // soru_bankasi_bolumleri satırları
@@ -161,12 +190,15 @@ export function oneriUret({
   agirliklar = {},      // { "ders||konu": sayı } — isteğe bağlı öncelik çarpanı
   konuSirasi = {},      // { "ders||konu": müfredattaki sıra } — eşitlik bozucu
   kararlar = {},        // { bolumId: { karar: "kabul"|"red", created_at } }
+  planBloklari = [],    // son haftaların plan blokları (hafta_basi ile)
+  buHafta = null,       // "YYYY-MM-DD" — bu haftanın pazartesisi
   adet = 5,
   baslangic = new Date(),
   gunAraligi = 1,
 } = {}) {
   const durum = konuDurumu({ tests, tasks });
   const dersler = dersDurumu({ tests, tasks });
+  const planlar = planDurumu(planBloklari, buHafta);
   const bankaHarita = new Map(bankalar.map(b => [b.id, b]));
   const simdi = Date.now();
 
@@ -204,16 +236,30 @@ export function oneriUret({
     // kitaptaki sıraya karışıp kayboluyordu.
     const dersDurum = dersler.get(sadelestir(ders));
     const dersEk = dersAciliyeti(dersDurum);
+    const pd = planlar.get(a);
+    const planYapilmayan = pd ? pd.toplam - pd.yapilan : 0;
 
     let sebep, gerekce, puan;
     if (d?.dogruluk != null && d.dogruluk < ZAYIF_ESIGI) {
       sebep = "zayif";
       puan = 100 + (ZAYIF_ESIGI - d.dogruluk);          // 100–165
       gerekce = `${d.soru} soruda %${d.dogruluk} doğruluk`;
+    } else if (pd && pd.toplam >= 2 && pd.yapilan / pd.toplam < 0.5) {
+      // Plana defalarca konup yapılmayan konu: "yarım kalmış" katmanı.
+      // Tek bir yapılmamış blok yeterli sinyal değil (bu hafta daha
+      // bitmemiş olabilir); en az iki kez planlanmış olmalı.
+      sebep = "yarim";
+      puan = 70 + (planYapilmayan / pd.toplam) * 10;    // 70–80
+      gerekce = `Planda ${pd.toplam} kez yer aldı, ${planYapilmayan} tanesi yapılmadı`;
     } else if (d?.tamamlanma != null && d.tamamlanma < 50) {
       sebep = "yarim";
       puan = 70 + (50 - d.tamamlanma) / 5;              // 70–80
       gerekce = `${d.gorevToplam} görevin ${d.gorevTamam}'i tamamlanmış`;
+    } else if ((!d || (d.soru === 0 && d.gorevToplam === 0)) && pd?.yapilan > 0) {
+      // Planda çalışılmış ama test girilmemiş: "hiç çalışılmamış" DEĞİL.
+      sebep = "az_veri";
+      puan = 30 + dersEk / 2;
+      gerekce = `Planda ${pd.yapilan} kez çalışıldı ama test sonucu girilmedi`;
     } else if (!d || (d.soru === 0 && d.gorevToplam === 0)) {
       sebep = "bos";
       puan = 40 + dersEk;                               // 40–70
@@ -241,6 +287,13 @@ export function oneriUret({
     // veriyor. Motorun işi bilgilendirmek, gizlemek değil.
     const ekNotlar = [];
     if (d?.acikGorev) { puan *= 0.55; ekNotlar.push("bu konuda açık görev var"); }
+    // Bu haftanın planında zaten var ve henüz yapılmadı: açık görevle aynı
+    // mantık — gizleme, ama öncelik düşür ve söyle.
+    if (pd?.buHaftaAcik) { puan *= 0.55; ekNotlar.push("bu hafta planında var"); }
+    // Başka bir sebeple (ör. zayıf) önerilse de plan geçmişi bilinsin.
+    if (sebep !== "yarim" && planYapilmayan > 0 && !pd.buHaftaAcik) {
+      ekNotlar.push(`planda ${planYapilmayan} kez yapılmadı`);
+    }
     if (d?.sonAtama && simdi - d.sonAtama.getTime() < TEKRAR_BEKLEME_GUN * GUN_MS) {
       const gun = Math.max(1, Math.round((simdi - d.sonAtama.getTime()) / GUN_MS));
       puan *= 0.7;

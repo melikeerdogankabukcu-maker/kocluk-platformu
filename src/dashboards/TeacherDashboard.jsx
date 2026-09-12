@@ -40,6 +40,8 @@ import SoruBankasi from "../components/SoruBankasi";
 import OdevOnerisi from "../components/OdevOnerisi";
 import PanelDuzen from "../components/PanelDuzen";
 import CalismaPlani from "../components/CalismaPlani";
+import { useHaftalikPlanlar } from "../hooks/useHaftalikPlanlar";
+import { GUN_KISA, DILIMLER, TURLER, ilerleme, sureMetni, saatAraligi, blokAltBilgi } from "../lib/calismaPlani";
 
 export default function TeacherDashboard({ userId, userName, role }) {
   const c = COLORS.teacher;
@@ -89,6 +91,10 @@ export default function TeacherDashboard({ userId, userName, role }) {
 
   // Öğrenci analizi (Python backend) — satıra tıklayınca getir + önbelleğe al
   const { expandedId: expandedStudent, toggle: toggleAnaliz, getAnaliz, getOneriler, isLoading: isLoadingAnalizFor, isUyaniyor: isUyaniyorAnalizFor } = useAnalizCache();
+
+  // Bu haftanın planları — öğrenci satırında plan uyumu, açılınca bloklar.
+  // Öğrenci listesiyle birlikte yeniden okunuyor (students değişince).
+  const { planlar: haftaPlanlari, yukle: planlariTazele } = useHaftalikPlanlar(students.map(s => s.id));
 
   const loadData = async () => {
     // Yalnızca bu öğretmene bağlı öğrenciler. teacher_students tablosu henüz
@@ -514,6 +520,21 @@ export default function TeacherDashboard({ userId, userName, role }) {
                             <span style={{ fontSize: 13, fontWeight: 600, color: "#222" }}>{s.full_name}</span>
                             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                               {alertType && <AlertChip type={alertType} text={alertType === "danger" ? "Başlamadı" : "Az ilerledi"} />}
+                              {/* Bu haftanın plan uyumu. Planı yoksa hiç çıkmıyor:
+                                  "plan yok" ile "plan var ama yapılmadı" aynı
+                                  görünmesin. */}
+                              {haftaPlanlari[s.id]?.bloklar.length > 0 && (() => {
+                                const oz = ilerleme(haftaPlanlari[s.id].bloklar);
+                                const renk = oz.oran >= 70 ? "#1A6B3C" : oz.oran >= 35 ? "#854F0B" : "#A32D2D";
+                                const ipucu = "Bu haftaki plan: " + oz.toplam + " bloğun " + oz.yapilan + " tanesi yapıldı"
+                                  + (oz.calisilanDk ? ", " + sureMetni(oz.calisilanDk) + " çalışıldı" : "")
+                                  + (oz.devreden ? ", " + oz.devreden + " blok geçen haftadan devretti" : "");
+                                return (
+                                  <span title={ipucu} style={{ fontSize: 10.5, fontWeight: 700, color: renk, whiteSpace: "nowrap" }}>
+                                    📅 {oz.yapilan}/{oz.toplam}{oz.devreden > 0 ? " ↻" + oz.devreden : ""}
+                                  </span>
+                                );
+                              })()}
                               <span style={{ fontSize: 11, color: "#888" }}>{done}/{total} görev</span>
                               <span style={{ fontSize: 11, color: c.mid, fontWeight: 700 }}>{isOpen ? "▲" : "▼"}</span>
                             </div>
@@ -579,6 +600,68 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                     {prof.parent2_email ? ` · ✉️ ${prof.parent2_email}` : ""}
                                   </div>
                                 )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Bu haftaki plan — konu konu ne planlandı, ne yapıldı, testi
+                              ne çıktı. "Yapıldı" işaretinin arkasında ne olduğu
+                              burada: süre ve bağlı test sonucu. */}
+                          {haftaPlanlari[s.id]?.bloklar.length > 0 && (() => {
+                            const { bloklar: pb, testler: pt } = haftaPlanlari[s.id];
+                            const oz = ilerleme(pb);
+                            const dilimAd = Object.fromEntries(DILIMLER.map(x => [x.kod, x.ad]));
+                            return (
+                              <div style={{ padding: "8px 12px", borderRadius: 10, background: "#fafaf8", marginBottom: 8 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: "#aaa" }}>
+                                    BU HAFTAKİ PLAN ({oz.yapilan}/{oz.toplam})
+                                  </span>
+                                  <span style={{ fontSize: 10, color: "#999" }}>
+                                    {oz.dakika > 0 && "planlanan " + sureMetni(oz.dakika)}
+                                    {oz.calisilanDk > 0 && " · çalışılan " + sureMetni(oz.calisilanDk)}
+                                    {oz.sayacDk > 0 && " (sayaçla " + sureMetni(oz.sayacDk) + ")"}
+                                  </span>
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                  {pb.map(b => {
+                                    const t = pt[b.id];
+                                    const alt = blokAltBilgi(b);
+                                    return (
+                                      <div key={b.id} style={{ display: "flex", alignItems: "baseline", gap: 7, fontSize: 11.5 }}>
+                                        <span style={{ flexShrink: 0, color: b.yapildi ? "#1A6B3C" : b.sayac_baslangic ? "#E0A526" : "#c8c2ba", fontWeight: 700 }}>
+                                          {b.yapildi ? "✓" : b.sayac_baslangic ? "⏱" : "○"}
+                                        </span>
+                                        <span style={{ flexShrink: 0, color: "#888", minWidth: 58 }}>
+                                          {GUN_KISA[b.gun]} {saatAraligi(b) || dilimAd[b.dilim]}
+                                        </span>
+                                        <span style={{ flex: 1, minWidth: 0, color: b.yapildi ? "#777" : "#333" }}>
+                                          {TURLER[b.tur]?.simge} {b.baslik}
+                                          {alt && <span style={{ color: "#aaa" }}> · {alt}</span>}
+                                          {b.devreden && !b.yapildi && <span style={{ color: "#854F0B", fontWeight: 600 }}> · ↻ devretti</span>}
+                                        </span>
+                                        {b.calisilan_dk != null && (
+                                          <span style={{ flexShrink: 0, color: "#888", fontSize: 10.5 }}
+                                            title={b.sayacla_olculen_dk ? "Sayaçla ölçülen " + b.sayacla_olculen_dk + " dk" : "Öğrencinin bildirdiği"}>
+                                            {sureMetni(b.calisilan_dk) || "0 dk"}{b.sayacla_olculen_dk > 0 ? " ⚲" : ""}
+                                          </span>
+                                        )}
+                                        {t && (
+                                          <span style={{
+                                            flexShrink: 0, fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 99,
+                                            background: "#F8F3FC", color: "#7a5c92",
+                                          }}>
+                                            {t.correct_count}/{t.question_count}
+                                            {t.yanlis_count != null ? " · " + (Math.round((t.correct_count - t.yanlis_count / 4) * 100) / 100) + " net" : ""}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div style={{ fontSize: 9.5, color: "#bbb", marginTop: 5 }}>
+                                  ⚲ sayaçla ölçülmüş süre · diğer süreler öğrencinin bildirdiği
+                                </div>
                               </div>
                             );
                           })()}
@@ -917,7 +1000,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
         {/* Haftalık çalışma planı — öğrenci listesinin hemen altında.
             Görev atamanın YERİNE değil YANINDA: görev tek seferlik,
             tarihli iş; plan haftanın ızgarasına yerleşen çalışma blokları. */}
-              <CalismaPlani rol="koc" ogrenciler={students} color={c} />
+              <CalismaPlani rol="koc" ogrenciler={students} color={c} onDegisti={planlariTazele} />
 
         {/* Görev atama formu — artık sayfada durmuyor, açılır pencerede.
             Öğrenci listesinin başlığındaki "+ Görev Ata" ve bir görevin

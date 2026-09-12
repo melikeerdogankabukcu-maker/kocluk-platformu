@@ -34,7 +34,7 @@ import HaftaninSozu from "../components/HaftaninSozu";
 import SinavHedefi from "../components/SinavHedefi";
 import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
-import { HaftalikSoruGrafigi, CalismaSerisi, DogrulukTrendi, DersDagilimi } from "../components/CalismaGrafikleri";
+import { HaftalikSoruGrafigi, CalismaSerisi, DogrulukTrendi, DersDagilimi, CalismaSuresiGrafigi } from "../components/CalismaGrafikleri";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
 
@@ -1331,6 +1331,7 @@ export default function StudentDashboard({ userId, userName }) {
             dört kart uzardı; aynı soruyu farklı açılardan yanıtladıkları
             için tek bölümde sekme sekme duruyorlar. */}
         <Bolum baslik="Çalışma Grafiklerim" color={c} id="bolum-grafik" sekmeler={[
+          { ad: "Çalışma süresi", icerik: <CalismaSuresiGrafigi studentId={userId} color={c} /> },
           { ad: "Haftalık soru", icerik: <HaftalikSoruGrafigi tests={testSessions} color={c} /> },
           { ad: "Serim",         icerik: <CalismaSerisi tests={testSessions} tasks={tasks} color={c} /> },
           { ad: "Doğruluk",      icerik: <DogrulukTrendi tests={testSessions} color={c} /> },

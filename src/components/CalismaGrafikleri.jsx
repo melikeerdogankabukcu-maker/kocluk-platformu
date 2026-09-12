@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+import { supabase } from "../supabase";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
@@ -416,6 +418,120 @@ export function DersDagilimi({ tests = [], color: c, ustSinir = 7 }) {
             </div>
           );
         })}
+      </div>
+    </Card>
+  );
+}
+
+
+// ── 5. ÇALIŞMA SÜRESİ VE PLAN UYUMU ─────────────────────────────
+// Öbür dört grafik öğrencinin testlerinden hesaplanıyor; bu grafik
+// haftalık özetten okuyor (ogrenci_haftalik), çünkü plan ve süre bilgisi
+// orada zaten hafta hafta toplanmış ve özet tabloyla aynı sayıyı
+// göstermesi gerekiyor — iki yerde iki ayrı hesap birbirini tutmazdı.
+//
+// PLANLANAN ile ÇALIŞILAN yan yana: öğrenci planın ne kadarını
+// gerçekleştirdiğini görsün. Sayaçla ölçülen kısım çalışılan çubuğun
+// içinde koyu tonla; bildirilen süreyle ölçülen süre arasındaki fark
+// göz önünde dursun ama suçlayıcı bir dille değil, aynı çubuğun bir
+// parçası olarak.
+export function CalismaSuresiGrafigi({ studentId, color: c, hafta = 8 }) {
+  const [satirlar, setSatirlar] = useState(null);
+
+  useEffect(() => {
+    if (!studentId) return;
+    let gecerli = true;
+    const kutular = sonHaftalar(hafta);
+    supabase.from("ogrenci_haftalik")
+      .select("hafta, plan_blok, plan_yapilan, plan_dk, calisilan_dk, sayac_dk")
+      .eq("student_id", studentId)
+      .gte("hafta", kutular[0].anahtar)
+      .lte("hafta", kutular[kutular.length - 1].anahtar)
+      .then(({ data, error }) => {
+        if (!gecerli) return;
+        // Sütunlar yoksa (migration çalışmadıysa) grafik boş durum gösteriyor
+        const harita = new Map((error ? [] : data ?? []).map(r => [r.hafta, r]));
+        setSatirlar(kutular.map(k => ({ ...k, ...(harita.get(k.anahtar) ?? {}) })));
+      });
+    return () => { gecerli = false; };
+  }, [studentId, hafta]);
+
+  if (satirlar === null) {
+    return <Card><SectionTitle title="Çalışma sürem" color={c.mid} />{bosDurum("Yükleniyor...")}</Card>;
+  }
+
+  const planli = satirlar.filter(r => (r.plan_blok ?? 0) > 0 || (r.calisilan_dk ?? 0) > 0);
+  if (planli.length === 0) {
+    return (
+      <Card>
+        <SectionTitle title="Çalışma sürem" color={c.mid} />
+        {bosDurum("Çalışma planındaki blokları işaretleyip süreni girdikçe haftaların burada birikecek.")}
+      </Card>
+    );
+  }
+
+  const enBuyuk = Math.max(1, ...satirlar.map(r => Math.max(r.plan_dk ?? 0, r.calisilan_dk ?? 0)));
+  const son = satirlar[satirlar.length - 1];
+  const uyum = (son.plan_blok ?? 0) > 0 ? Math.round((son.plan_yapilan / son.plan_blok) * 100) : null;
+  const saat = (dk) => (dk >= 60 ? `${Math.floor(dk / 60)} sa${dk % 60 ? ` ${dk % 60} dk` : ""}` : `${dk} dk`);
+
+  return (
+    <Card>
+      <SectionTitle title="Çalışma sürem" color={c.mid} />
+
+      <div style={{ fontSize: YAZI.ikincil, color: RENK.metinIkincil, marginBottom: BOSLUK.m, lineHeight: 1.5 }}>
+        {uyum != null ? (
+          <>Bu hafta planının <b style={{ color: c.text }}>%{uyum}</b>'ini yaptın
+            {(son.calisilan_dk ?? 0) > 0 && <>, <b style={{ color: c.text }}>{saat(son.calisilan_dk)}</b> çalıştın</>}.</>
+        ) : (son.calisilan_dk ?? 0) > 0 ? (
+          <>Bu hafta <b style={{ color: c.text }}>{saat(son.calisilan_dk)}</b> çalıştın.</>
+        ) : "Bu hafta için henüz plan ya da süre kaydı yok."}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 120, marginBottom: BOSLUK.s }}>
+        {satirlar.map((r, i) => {
+          const plan = r.plan_dk ?? 0, calis = r.calisilan_dk ?? 0, sayac = Math.min(r.sayac_dk ?? 0, calis);
+          const sonuncu = i === satirlar.length - 1;
+          return (
+            <div key={r.anahtar}
+              title={`${kisaTarih(r.bas)} haftası · planlanan ${saat(plan)} · çalışılan ${saat(calis)}${sayac ? ` (sayaçla ${saat(sayac)})` : ""}`}
+              style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 2, height: "100%" }}>
+              {/* Planlanan: soluk, arkadaki çubuk */}
+              <div style={{
+                width: "40%", height: `${Math.max((plan / enBuyuk) * 100, plan ? 4 : 2)}%`,
+                background: RENK.cizgi, borderRadius: `${KOSE.s}px ${KOSE.s}px 2px 2px`,
+              }} />
+              {/* Çalışılan: sayaçla ölçülen kısım altta koyu */}
+              <div style={{
+                width: "40%", height: `${Math.max((calis / enBuyuk) * 100, calis ? 4 : 2)}%`,
+                display: "flex", flexDirection: "column-reverse",
+                borderRadius: `${KOSE.s}px ${KOSE.s}px 2px 2px`, overflow: "hidden",
+                background: calis ? c.mid : RENK.cizgi, opacity: sonuncu || !calis ? 1 : 0.7,
+              }}>
+                {calis > 0 && sayac > 0 && (
+                  <div style={{ height: `${(sayac / calis) * 100}%`, background: c.bg }} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", gap: 6 }}>
+        {satirlar.map((r, i) => (
+          <div key={r.anahtar} style={{
+            flex: 1, minWidth: 0, textAlign: "center",
+            fontSize: YAZI.mikro - 1, color: RENK.metinSilik, whiteSpace: "nowrap", overflow: "hidden",
+          }}>
+            {i === 0 || i === satirlar.length - 1 || i % 3 === 0 ? kisaTarih(r.bas) : ""}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: BOSLUK.m, flexWrap: "wrap", marginTop: BOSLUK.s, fontSize: YAZI.mikro, color: RENK.metinSoluk }}>
+        <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: RENK.cizgi, marginRight: 4 }} />planlanan</span>
+        <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: c.mid, marginRight: 4 }} />çalışılan</span>
+        <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: c.bg, marginRight: 4 }} />sayaçla ölçülen</span>
       </div>
     </Card>
   );

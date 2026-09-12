@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
-import { tarihMetni, hucreBloklari, yeniSira, yenidenNumarala } from "../lib/calismaPlani";
+import { tarihMetni, hucreBloklari, yeniSira, yenidenNumarala, saateGoreHedef } from "../lib/calismaPlani";
 
 // Bir öğrencinin bir haftalık çalışma planı.
 //
@@ -11,11 +11,18 @@ import { tarihMetni, hucreBloklari, yeniSira, yenidenNumarala } from "../lib/cal
 // gitmesi demekti. Değişiklik önce ekranda yapılıyor, yazma başarısız
 // olursa plan sunucudan yeniden okunuyor — ekran asla sunucuyla
 // uyuşmayan bir durumda kalmıyor.
+//
+// Sayaç ve tamamlama İYİMSER DEĞİL: ikisi de sunucuda hesaplanan değer
+// döndürüyor (ölçülen dakika, açılan test). Ekrana tahmin yazıp sonra
+// düzeltmek, öğrencinin "45 dk" görüp ardından "32 dk"ya düşmesi demekti.
 export function useCalismaPlani(studentId, pazartesi) {
   const [plan, setPlan]         = useState(null);
   const [bloklar, setBloklar]   = useState([]);
+  const [testler, setTestler]   = useState({});     // blok_id -> test
   const [yukleniyor, setYukleniyor] = useState(true);
   const [etkin, setEtkin]       = useState(true);   // tablo var mı
+  // Sunucu saati - cihaz saati (ms). Sayaç süresi ekranda bununla akıyor.
+  const [saatFarki, setSaatFarki] = useState(0);
   const hafta = pazartesi ? tarihMetni(pazartesi) : null;
 
   // Hızlı hafta değişiminde geç gelen eski yanıt yeni haftanın üstüne
@@ -23,7 +30,7 @@ export function useCalismaPlani(studentId, pazartesi) {
   const istekNo = useRef(0);
 
   const yukle = useCallback(async () => {
-    if (!studentId || !hafta) { setPlan(null); setBloklar([]); setYukleniyor(false); return; }
+    if (!studentId || !hafta) { setPlan(null); setBloklar([]); setTestler({}); setYukleniyor(false); return; }
     const no = ++istekNo.current;
     setYukleniyor(true);
 
@@ -38,7 +45,7 @@ export function useCalismaPlani(studentId, pazartesi) {
       // hata gösterilmiyor — panelin geri kalanı etkilenmesin.
       if (error.code === "42P01" || error.code === "PGRST205") setEtkin(false);
       else console.error("[Calisma plani]", error);
-      setPlan(null); setBloklar([]); setYukleniyor(false);
+      setPlan(null); setBloklar([]); setTestler({}); setYukleniyor(false);
       return;
     }
 
@@ -47,9 +54,23 @@ export function useCalismaPlani(studentId, pazartesi) {
       const { data: b } = await supabase
         .from("calisma_bloklari").select("*").eq("plan_id", p.id);
       if (no !== istekNo.current) return;
-      setBloklar(b ?? []);
+      const liste = b ?? [];
+      setBloklar(liste);
+
+      // Bloklara bağlı testler. blok_id sütunu yoksa (ikinci migration
+      // çalışmadıysa) sorgu hata verir; o zaman testsiz devam ediliyor.
+      if (liste.length) {
+        const { data: t, error: tHata } = await supabase
+          .from("test_sessions")
+          .select("id, blok_id, question_count, correct_count, yanlis_count, created_at")
+          .in("blok_id", liste.map(x => x.id));
+        if (no !== istekNo.current) return;
+        setTestler(tHata ? {} : Object.fromEntries((t ?? []).map(x => [x.blok_id, x])));
+      } else {
+        setTestler({});
+      }
     } else {
-      setBloklar([]);
+      setBloklar([]); setTestler({});
     }
     setYukleniyor(false);
   }, [studentId, hafta]);
@@ -67,9 +88,15 @@ export function useCalismaPlani(studentId, pazartesi) {
     return { hata };
   };
 
+  // Hücrede nereye girsin: saati varsa saatine göre, yoksa sona.
+  const yerlesimSirasi = (liste, gun, dilim, saat, haricId = null) => {
+    const hucre = hucreBloklari(liste.filter(b => b.id !== haricId), gun, dilim);
+    return yeniSira(hucre, saateGoreHedef(hucre, saat)).sira;
+  };
+
   const blokEkle = async (alanlar) => {
     if (!plan) return { hata: true };
-    const { sira } = yeniSira(hucreBloklari(bloklar, alanlar.gun, alanlar.dilim), null);
+    const sira = yerlesimSirasi(bloklar, alanlar.gun, alanlar.dilim, alanlar.baslangic_saati);
     const { veri, hata } = await calistir(
       supabase.from("calisma_bloklari")
         .insert({ ...alanlar, plan_id: plan.id, sira }).select().single(),
@@ -84,14 +111,17 @@ export function useCalismaPlani(studentId, pazartesi) {
     const eski = bloklar.find(b => b.id === id);
     if (!eski) return { hata: true };
 
-    // Gün ya da dilim formdan değiştiyse blok hedef hücrenin SONUNA gider;
-    // eski hücredeki sırasını yeni hücrede taşımak anlamsız olurdu.
-    let ek = {};
-    if ((alanlar.gun ?? eski.gun) !== eski.gun || (alanlar.dilim ?? eski.dilim) !== eski.dilim) {
-      const hedef = hucreBloklari(bloklar.filter(b => b.id !== id), alanlar.gun ?? eski.gun, alanlar.dilim ?? eski.dilim);
-      ek = { sira: yeniSira(hedef, null).sira };
-    }
-    const guncel = { ...alanlar, ...ek };
+    // Hücre ya da saat değiştiyse blok yeni yerine (saatine göre) oturuyor.
+    // Yalnızca başlık/not değiştiyse sırasına dokunulmuyor: koçun
+    // sürüklediği yer korunuyor.
+    const gun   = alanlar.gun   ?? eski.gun;
+    const dilim = alanlar.dilim ?? eski.dilim;
+    const saat  = "baslangic_saati" in alanlar ? alanlar.baslangic_saati : eski.baslangic_saati;
+    const yerDegisti = gun !== eski.gun || dilim !== eski.dilim
+      || (saat ?? null) !== (eski.baslangic_saati ? String(eski.baslangic_saati).slice(0, 5) : null);
+    const guncel = yerDegisti
+      ? { ...alanlar, sira: yerlesimSirasi(bloklar, gun, dilim, saat, id) }
+      : alanlar;
 
     setBloklar(l => l.map(b => (b.id === id ? { ...b, ...guncel } : b)));
     const { hata } = await calistir(
@@ -162,21 +192,39 @@ export function useCalismaPlani(studentId, pazartesi) {
     return { hata };
   };
 
-  const yapildiCevir = async (id) => {
-    const blok = bloklar.find(b => b.id === id);
-    if (!blok) return {};
-    const yeni = !blok.yapildi;
-    setBloklar(l => l.map(b => (b.id === id ? { ...b, yapildi: yeni } : b)));
-    const { hata } = await calistir(
-      supabase.from("calisma_bloklari").update({ yapildi: yeni }).eq("id", id),
-      "Blok isaretleme"
+  // ── SAYAÇ ─────────────────────────────────────────────────────
+  // Başlangıç anı sunucuda tutuluyor; uygulama kapansa da sayaç sürüyor.
+  // 'basla' öğrencinin açık başka sayacını durdurduğu için yanıt sonrası
+  // bütün bloklar yeniden okunuyor — yalnız bu bloğu güncellemek, durdurulan
+  // öbür bloğu ekranda hâlâ işliyor gösterirdi.
+  const sayac = async (id, islem) => {
+    const { veri, hata } = await calistir(
+      supabase.rpc("calisma_sayaci", { p_blok: id, p_islem: islem }),
+      islem === "basla" ? "Sayac baslatma" : "Sayac durdurma"
     );
-    if (hata) await yukle();
+    if (hata) return { hata };
+    if (veri?.simdi) setSaatFarki(new Date(veri.simdi).getTime() - Date.now());
+    await yukle();
+    return { kirpildi: !!veri?.kirpildi, eklenen: veri?.eklenen_dk ?? 0 };
+  };
+
+  // ── TAMAMLA ───────────────────────────────────────────────────
+  // İşaret + bildirilen süre + (varsa) test sonucu TEK sunucu işleminde.
+  // soru boş gönderilirse var olan teste dokunulmuyor.
+  const tamamla = async (id, { yapildi, calisilanDk = null, soru = null, dogru = null, yanlis = null }) => {
+    const { hata } = await calistir(
+      supabase.rpc("calisma_blogu_tamamla", {
+        p_blok: id, p_yapildi: yapildi,
+        p_calisilan_dk: calisilanDk, p_soru: soru, p_dogru: dogru, p_yanlis: yanlis,
+      }),
+      "Blok tamamlama"
+    );
+    if (!hata) await yukle();
     return { hata };
   };
 
   return {
-    plan, bloklar, yukleniyor, etkin,
-    yukle, olustur, blokEkle, blokGuncelle, blokSil, tasi, yapildiCevir,
+    plan, bloklar, testler, yukleniyor, etkin, saatFarki,
+    yukle, olustur, blokEkle, blokGuncelle, blokSil, tasi, sayac, tamamla,
   };
 }

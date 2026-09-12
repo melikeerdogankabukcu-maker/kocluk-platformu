@@ -4,6 +4,11 @@ import { calistir } from "../lib/db";
 import { useTopics } from "../lib/TopicsContext";
 import { oneriUret, SEBEP_ETIKET, SAYFA_DILIMI, RED_BEKLEME_GUN } from "../lib/odevOnerisi";
 import { sadelestir } from "../lib/konuEslestir";
+import { haftaBasi, haftaKaydir, tarihMetni } from "../lib/calismaPlani";
+
+// Plan geçmişinden kaç hafta okunuyor. Uzun tutulmuyor: iki ay önce
+// planda yapılmamış bir konu, bugünkü önceliği anlatmıyor.
+const PLAN_GECMIS_HAFTA = 4;
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
@@ -33,7 +38,7 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
   const [yukleniyor, setYukleniyor] = useState(false);
   const [islemde, setIslemde] = useState(false);
   const [kaynak,  setKaynak]  = useState({ bolumler: [], bankalar: [], atamalar: [] });
-  const [veri,    setVeri]    = useState({ tests: [], tasks: [] });
+  const [veri,    setVeri]    = useState({ tests: [], tasks: [], planBloklari: [] });
   // bolumId -> { karar, created_at }. Koçun daha önce ne dediği.
   const [kararlar, setKararlar] = useState({});
   const [oneriler, setOneriler] = useState(null);   // null = henüz üretilmedi
@@ -94,7 +99,21 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
       calistir(supabase.from("oneri_kararlari").select("*").eq("student_id", id),
         "Oneri kararlari", { sessiz: true }),
     ]);
-    setVeri({ tests: tests ?? [], tasks: tasks ?? [] });
+    // Son haftaların plan blokları, planın haftasıyla birlikte. Tablo yoksa
+    // (plan migration'ı çalışmadıysa) sessizce boş: motor plansız da çalışır.
+    let planBloklari = [];
+    const { data: planlar } = await supabase
+      .from("calisma_planlari").select("id, hafta_basi")
+      .eq("student_id", id)
+      .gte("hafta_basi", tarihMetni(haftaKaydir(haftaBasi(), -PLAN_GECMIS_HAFTA)));
+    if (planlar?.length) {
+      const { data: bloklar } = await supabase
+        .from("calisma_bloklari").select("plan_id, ders, konu, yapildi")
+        .in("plan_id", planlar.map(x => x.id));
+      const haftasi = Object.fromEntries(planlar.map(x => [x.id, x.hafta_basi]));
+      planBloklari = (bloklar ?? []).map(b => ({ ...b, hafta_basi: haftasi[b.plan_id] }));
+    }
+    setVeri({ tests: tests ?? [], tasks: tasks ?? [], planBloklari });
     setKararlar(Object.fromEntries((kararSatir ?? []).map(k => [k.bolum_id, k])));
     setYukleniyor(false);
   }, []);
@@ -108,6 +127,7 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
       bolumler: ogrencininBolumleri, bankalar: kaynak.bankalar,
       tests: veri.tests, tasks: veri.tasks,
       konuSirasi, kararlar, adet,
+      planBloklari: veri.planBloklari, buHafta: tarihMetni(haftaBasi()),
     });
     setOneriler(liste);
     // Hepsi baştan seçili: koçun işi onaylamak, tek tek işaretlemek değil.
