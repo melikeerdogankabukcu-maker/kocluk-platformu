@@ -25,6 +25,7 @@ import HaftalikOzet from "../components/HaftalikOzet";
 import Asistan from "../components/Asistan";
 import Bolum from "../components/Bolum";
 import PanelDuzen from "../components/PanelDuzen";
+import CalismaPlani from "../components/CalismaPlani";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import Rozetler from "../components/Rozetler";
 import SeviyeAvatar from "../components/SeviyeAvatar";
@@ -934,6 +935,10 @@ export default function StudentDashboard({ userId, userName }) {
 
         {/* Takvim — öğrencinin her gün baktığı yer, en üstte */}
               {/* Takvim + Ders Planlama (dersler + görevler + çözülen testler) */}
+              {/* Haftalık çalışma planı — takvimin üstünde: öğrencinin
+                  "bugün ne çalışacağım" sorusunun cevabı burada. */}
+              <CalismaPlani rol="ogrenci" studentId={userId} color={c} baslik="Bu Haftaki Planım" />
+
               <div id="bolum-ders"><LessonPlanner
                 userId={userId} role="student" counterparts={teachers} color={c}
                 tasks={tasks} tests={testsForCalendar}

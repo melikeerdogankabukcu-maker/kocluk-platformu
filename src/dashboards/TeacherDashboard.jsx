@@ -39,6 +39,7 @@ import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
 import OdevOnerisi from "../components/OdevOnerisi";
 import PanelDuzen from "../components/PanelDuzen";
+import CalismaPlani from "../components/CalismaPlani";
 
 export default function TeacherDashboard({ userId, userName, role }) {
   const c = COLORS.teacher;
@@ -912,6 +913,11 @@ export default function TeacherDashboard({ userId, userName, role }) {
                   );
                 })}
               </Card>
+
+        {/* Haftalık çalışma planı — öğrenci listesinin hemen altında.
+            Görev atamanın YERİNE değil YANINDA: görev tek seferlik,
+            tarihli iş; plan haftanın ızgarasına yerleşen çalışma blokları. */}
+              <CalismaPlani rol="koc" ogrenciler={students} color={c} />
 
         {/* Görev atama formu — artık sayfada durmuyor, açılır pencerede.
             Öğrenci listesinin başlığındaki "+ Görev Ata" ve bir görevin
