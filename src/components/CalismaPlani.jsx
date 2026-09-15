@@ -17,6 +17,8 @@ import BlokFormu from "./BlokFormu";
 import VideoOynatici from "./VideoOynatici";
 import TamamlaDiyalogu from "./TamamlaDiyalogu";
 import ProgramdanEkle from "./ProgramdanEkle";
+import GuvenliBaglanti from "./GuvenliBaglanti";
+import { odevDosyalari } from "../lib/odevDosyalari";
 
 // Haftalık çalışma planı panosu.
 //
@@ -116,12 +118,27 @@ export default function CalismaPlani({
     }
   };
 
-  // İşaret: yapılmamış bloğa tıklamak tamamlama penceresini açar
-  // (süre + test sonucu). Yapılmış bloğun işaretini kaldırmak doğrudan;
-  // girilmiş test SİLİNMİYOR, yeniden işaretlenince form onunla açılıyor.
+  // İşaret: bloğa tıklamak tamamlama penceresini açar (süre + test +
+  // görseller). Yapılmış blokta da aynı pencere: öğrenci sonradan görsel
+  // ekleyebilsin; işareti kaldırmak pencerenin içindeki ayrı düğme.
+  // Koçun onayladığı blok kilitli — sunucu da reddediyor.
   const isaretCevir = (b) => {
-    if (b.yapildi) p.tamamla(b.id, { yapildi: false });
-    else setTamamlanan(b);
+    if (b.koc_onayi === "onaylandi") return;
+    setTamamlanan(b);
+  };
+
+  // Koç onayı. İade sebebi görevdeki gibi isteğe bağlı bir notla soruluyor.
+  const onayCevir = async (b, karar) => {
+    let not = null;
+    if (karar === "iade_edildi") {
+      not = window.prompt(
+        `"${b.baslik}" iade edilecek.\n\n` +
+        `Öğrenci bloğu yeniden "yapılacak" olarak görecek.\n` +
+        `Sebebini yazabilirsiniz (isteğe bağlı):`, ""
+      );
+      if (not === null) return;
+    }
+    await p.onayla(b.id, karar, not);
   };
 
   const sensors = useSensors(
@@ -143,6 +160,7 @@ export default function CalismaPlani({
   };
 
   const ozet = useMemo(() => ilerleme(p.bloklar), [p.bloklar]);
+  const bekleyenOnay = p.bloklar.filter(b => b.yapildi && !b.koc_onayi).length;
 
   // Bloklar değişince dışarıya haber ver. Koç panelindeki öğrenci satırı
   // planı ayrı okuyor; bu olmadan panoda işaretlenen blok, satırdaki
@@ -164,6 +182,7 @@ export default function CalismaPlani({
       onEkle={() => setForm({ gun, dilim })}
       onBlok={(b) => (koc ? setForm({ blok: b }) : null)}
       onCevir={isaretCevir}
+      onOnay={onayCevir}
       onVideo={setVideo}
       onSayac={sayacCevir}
       ogrenci={ogrenci}
@@ -236,6 +255,11 @@ export default function CalismaPlani({
                           ölçüleni karşılaştırabilsin. */}
                       {ozet.sayacDk > 0 && <> (sayaçla {sureMetni(ozet.sayacDk)})</>}
                     </span>
+                    {koc && bekleyenOnay > 0 && (
+                      <span style={{ color: RENK.uyari.metin, fontWeight: 700 }}>
+                        ⏳ {bekleyenOnay} blok onayınızı bekliyor
+                      </span>
+                    )}
                     {ozet.devreden > 0 && (
                       <span style={{ color: RENK.uyari.metin, fontWeight: 600 }}>
                         ↻ {ozet.devreden} blok geçen haftadan devretti
@@ -346,15 +370,17 @@ export default function CalismaPlani({
         <TamamlaDiyalogu
           blok={p.bloklar.find(b => b.id === tamamlanan.id) ?? tamamlanan}
           test={p.testler[tamamlanan.id] ?? null}
+          studentId={studentId}
           saatFarki={p.saatFarki} color={c}
           onKaydet={(alanlar) => p.tamamla(tamamlanan.id, alanlar)}
+          onGeriAl={() => p.tamamla(tamamlanan.id, { yapildi: false })}
           onKapat={() => setTamamlanan(null)} />
       )}
 
       {video && (
         <Modal title={video.baslik} onClose={() => setVideo(null)} maxWidth={760}>
           <VideoOynatici adres={video.video_url} color={c} />
-          {ogrenci && (
+          {ogrenci && video.koc_onayi !== "onaylandi" && (
             <button onClick={() => {
               const b = video; setVideo(null);
               if (b.yapildi) p.tamamla(b.id, { yapildi: false }); else setTamamlanan(b);
@@ -442,7 +468,7 @@ function GunSekmesi({ gun, etiket, tarih, secili, bugun, adet, yapilan, koc, col
   );
 }
 
-function Hucre({ gun, dilim, bloklar, koc, bugun, color: c, onEkle, onBlok, onCevir, onVideo, onSayac,
+function Hucre({ gun, dilim, bloklar, koc, bugun, color: c, onEkle, onBlok, onCevir, onOnay, onVideo, onSayac,
   ogrenci, testler, saatFarki, simdi, dar }) {
   const { setNodeRef, isOver } = useDroppable({ id: `hucre:${gun}:${dilim}`, data: { gun, dilim }, disabled: !koc });
   return (
@@ -457,7 +483,7 @@ function Hucre({ gun, dilim, bloklar, koc, bugun, color: c, onEkle, onBlok, onCe
         <BlokKart key={b.id} blok={b} koc={koc} color={c}
           ogrenci={ogrenci} test={testler?.[b.id]} saatFarki={saatFarki} simdi={simdi}
           onClick={() => onBlok(b)} onCevir={() => onCevir(b)} onVideo={() => onVideo(b)}
-          onSayac={() => onSayac(b)} />
+          onSayac={() => onSayac(b)} onOnay={(karar) => onOnay(b, karar)} />
       ))}
       {koc && (
         <button onClick={onEkle} title="Blok ekle" style={{
@@ -470,7 +496,7 @@ function Hucre({ gun, dilim, bloklar, koc, bugun, color: c, onEkle, onBlok, onCe
   );
 }
 
-function BlokKart({ blok, koc, color: c, onClick, onCevir, onVideo, onSayac, ogrenci, test, saatFarki, simdi }) {
+function BlokKart({ blok, koc, color: c, onClick, onCevir, onVideo, onSayac, onOnay, ogrenci, test, saatFarki, simdi }) {
   const drag = useDraggable({ id: blok.id, data: { blok }, disabled: !koc });
   // Blok aynı zamanda bırakma hedefi: üstüne bırakılan blok ONUN ÖNÜNE girer
   const drop = useDroppable({ id: `blok:${blok.id}`, data: { gun: blok.gun, dilim: blok.dilim, hedefId: blok.id }, disabled: !koc });
@@ -484,12 +510,12 @@ function BlokKart({ blok, koc, color: c, onClick, onCevir, onVideo, onSayac, ogr
         touchAction: koc ? "manipulation" : undefined,
       }}>
       <BlokGovde blok={blok} koc={koc} color={c} onClick={onClick} onCevir={onCevir} onVideo={onVideo}
-        onSayac={onSayac} ogrenci={ogrenci} test={test} saatFarki={saatFarki} simdi={simdi} />
+        onSayac={onSayac} onOnay={onOnay} ogrenci={ogrenci} test={test} saatFarki={saatFarki} simdi={simdi} />
     </div>
   );
 }
 
-function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac,
+function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac, onOnay,
   ogrenci, test, saatFarki = 0, simdi, surukleniyor }) {
   const t = TURLER[b.tur] ?? TURLER.serbest;
   const alt = blokAltBilgi(b);
@@ -497,6 +523,10 @@ function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac,
   const acik = !!b.sayac_baslangic;
   const gecen = acik ? sayacGecen(b.sayac_baslangic, saatFarki, simdi) : 0;
   const olculen = (b.sayacla_olculen_dk || 0) + gecen;
+  const onayli = b.koc_onayi === "onaylandi";
+  const iade = b.koc_onayi === "iade_edildi";
+  const bekliyor = b.yapildi && !b.koc_onayi;
+  const gorseller = odevDosyalari(test);
 
   // Etkileşimli düğmeler sürükleme algılayıcısını BAŞLATMAMALI; yoksa
   // ▶'ye ya da sayaca basmak bazen düğmeyi değil bloğu tutuyordu.
@@ -518,8 +548,9 @@ function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac,
       <div style={{ display: "flex", gap: 5, alignItems: "flex-start" }}>
         {ogrenci ? (
           <input type="checkbox" checked={!!b.yapildi} aria-label="Yaptım"
+            disabled={onayli} title={onayli ? "Koçun onayladı" : undefined}
             onChange={onCevir} onClick={e => e.stopPropagation()} {...dugmeKorumasi}
-            style={{ marginTop: 1, width: 15, height: 15, flexShrink: 0, cursor: "pointer", accentColor: c.bg }} />
+            style={{ marginTop: 1, width: 15, height: 15, flexShrink: 0, cursor: onayli ? "default" : "pointer", accentColor: c.bg }} />
         ) : !koc && b.yapildi ? (
           <span aria-label="Yapıldı" style={{ fontSize: 11, color: RENK.basari.metin, fontWeight: 800, flexShrink: 0 }}>✓</span>
         ) : null}
@@ -545,7 +576,7 @@ function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac,
           {/* Sonuç şeridi: çalışılan süre ve bağlı test. Koç ve veli bloğa
               bakınca "yapıldı"nın ne demek olduğunu görsün — işaretin
               arkasında 5 dakika mı, 50 soru mu var. */}
-          {!surukleniyor && (b.calisilan_dk != null || test) && (
+          {!surukleniyor && (b.calisilan_dk != null || test || onayli || bekliyor) && (
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
               {b.calisilan_dk != null && (
                 <span title={b.sayacla_olculen_dk ? `Sayaçla ölçülen: ${sureMetni(b.sayacla_olculen_dk)}` : "Öğrencinin bildirdiği süre"}
@@ -562,9 +593,34 @@ function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac,
                   {test.yanlis_count != null ? ` · ${Math.round((test.correct_count - test.yanlis_count / 4) * 100) / 100} net` : ""}
                 </span>
               )}
+              {/* Çözüm görselleri — dosyayı açmak bloğu düzenlemeyi açmasın */}
+              {gorseller.map((g, i) => (
+                <span key={i} {...dugmeKorumasi} onClick={e => e.stopPropagation()}>
+                  <GuvenliBaglanti url={g.url} baslik={g.ad} style={{
+                    fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: KOSE.tam,
+                    background: RENK.yuzey, color: c.text, textDecoration: "none", display: "inline-block",
+                  }}>📎{gorseller.length > 1 ? i + 1 : ""}</GuvenliBaglanti>
+                </span>
+              ))}
+              {onayli && (
+                <span title={b.onay_tarihi ? `Onay: ${new Date(b.onay_tarihi).toLocaleDateString("tr-TR")}` : undefined}
+                  style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: KOSE.tam, background: RENK.basari.zemin, color: RENK.basari.metin }}>
+                  ✓ onaylandı
+                </span>
+              )}
+              {bekliyor && !koc && (
+                <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: KOSE.tam, background: RENK.uyari.zemin, color: RENK.uyari.metin }}>
+                  ⏳ onay bekliyor
+                </span>
+              )}
             </div>
           )}
 
+          {iade && !surukleniyor && (
+            <div style={{ fontSize: 9, fontWeight: 700, color: RENK.hata.metin, marginTop: 2, lineHeight: 1.3 }}>
+              ↩ iade edildi{b.onay_notu ? `: ${b.onay_notu}` : ""}
+            </div>
+          )}
           {(b.devreden && !b.yapildi) && (
             <div style={{ fontSize: 9, fontWeight: 700, color: RENK.uyari.metin, marginTop: 2 }}>↻ geçen hafta yapılmadı</div>
           )}
@@ -575,6 +631,25 @@ function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac,
           )}
         </div>
       </div>
+
+      {/* Koç onayı. Karar sonradan değiştirilebilsin diye onaylı blokta
+          "İade", iade edilmişte "Onayla" duruyor. */}
+      {!surukleniyor && koc && (b.yapildi || b.koc_onayi) && (
+        <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+          {!onayli && (
+            <button onClick={e => { e.stopPropagation(); onOnay?.("onaylandi"); }} {...dugmeKorumasi} style={{
+              flex: 1, padding: "3px 0", borderRadius: KOSE.s, border: "none",
+              background: RENK.basari.zemin, color: RENK.basari.metin, fontSize: 10, fontWeight: 700, cursor: "pointer",
+            }}>✓ Onayla</button>
+          )}
+          {!iade && (
+            <button onClick={e => { e.stopPropagation(); onOnay?.("iade_edildi"); }} {...dugmeKorumasi} style={{
+              flex: 1, padding: "3px 0", borderRadius: KOSE.s, border: "none",
+              background: RENK.hata.zemin, color: RENK.hata.metin, fontSize: 10, fontWeight: 700, cursor: "pointer",
+            }}>↩ İade</button>
+          )}
+        </div>
+      )}
 
       {!surukleniyor && (
         <div style={{ display: "flex", gap: 4, marginTop: 4 }}>

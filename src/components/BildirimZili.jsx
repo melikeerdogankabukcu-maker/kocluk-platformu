@@ -4,7 +4,7 @@ import { bildirimHedefi, bolumeGit } from "../lib/bildirimHedef";
 
 const TUR_IKON = {
   gorev: "📋", odev: "📎", ders: "🗓️", sinav: "📊",
-  odeme: "💳", baglanti: "🔗", test: "🧪", rozet: "🏅",
+  odeme: "💳", baglanti: "🔗", test: "🧪", rozet: "🏅", plan: "📅",
 };
 
 // Üst bardaki bildirim zili: okunmamış sayacı + açılır liste.

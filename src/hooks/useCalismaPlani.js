@@ -62,7 +62,7 @@ export function useCalismaPlani(studentId, pazartesi) {
       if (liste.length) {
         const { data: t, error: tHata } = await supabase
           .from("test_sessions")
-          .select("id, blok_id, question_count, correct_count, yanlis_count, created_at")
+          .select("id, blok_id, question_count, correct_count, yanlis_count, dosyalar, file_url, file_name, created_at")
           .in("blok_id", liste.map(x => x.id));
         if (no !== istekNo.current) return;
         setTestler(tHata ? {} : Object.fromEntries((t ?? []).map(x => [x.blok_id, x])));
@@ -211,20 +211,46 @@ export function useCalismaPlani(studentId, pazartesi) {
   // ── TAMAMLA ───────────────────────────────────────────────────
   // İşaret + bildirilen süre + (varsa) test sonucu TEK sunucu işleminde.
   // soru boş gönderilirse var olan teste dokunulmuyor.
-  const tamamla = async (id, { yapildi, calisilanDk = null, soru = null, dogru = null, yanlis = null }) => {
+  // dosyalar null: görsellere dokunulmuyor. Dizi: testin görselleri
+  // bununla DEĞİŞTİRİLİYOR (kaldırılanlar dahil).
+  const tamamla = async (id, { yapildi, calisilanDk = null, soru = null, dogru = null, yanlis = null, dosyalar = null }) => {
+    const govde = {
+      p_blok: id, p_yapildi: yapildi,
+      p_calisilan_dk: calisilanDk, p_soru: soru, p_dogru: dogru, p_yanlis: yanlis,
+    };
+    // Parametre yalnızca gerektiğinde gönderiliyor: görselsiz kayıt, onay
+    // migration'ı henüz çalışmamış veritabanında da (6 parametreli eski
+    // fonksiyonla) çalışmaya devam etsin.
+    if (dosyalar !== null) govde.p_dosyalar = dosyalar;
     const { hata } = await calistir(
-      supabase.rpc("calisma_blogu_tamamla", {
-        p_blok: id, p_yapildi: yapildi,
-        p_calisilan_dk: calisilanDk, p_soru: soru, p_dogru: dogru, p_yanlis: yanlis,
-      }),
+      supabase.rpc("calisma_blogu_tamamla", govde),
       "Blok tamamlama"
     );
     if (!hata) await yukle();
     return { hata };
   };
 
+  // ── KOÇ ONAYI ─────────────────────────────────────────────────
+  // Görevdeki doğrulamanın aynısı. Onay bloğu "yapıldı"ya çeker (koç
+  // defteri elde gördüyse öğrenci işaretlememiş olabilir); iade
+  // "yapılmadı"ya düşürür ki öğrencinin panosunda yeniden açık görünsün.
+  // Onay damgası (kim, ne zaman) sunucuda yazılıyor.
+  const onayla = async (id, karar, not = null) => {
+    const onay = karar === "onaylandi";
+    const alanlar = { koc_onayi: karar, onay_notu: not?.trim() || null, yapildi: onay };
+    const onceki = bloklar;
+    setBloklar(l => l.map(b => (b.id === id ? { ...b, ...alanlar } : b)));
+    const { hata } = await calistir(
+      supabase.from("calisma_bloklari").update(alanlar).eq("id", id),
+      onay ? "Blok onayi" : "Blok iadesi"
+    );
+    if (hata) setBloklar(onceki);
+    else await yukle();
+    return { hata };
+  };
+
   return {
     plan, bloklar, testler, yukleniyor, etkin, saatFarki,
-    yukle, olustur, blokEkle, blokGuncelle, blokSil, tasi, sayac, tamamla,
+    yukle, olustur, blokEkle, blokGuncelle, blokSil, tasi, sayac, tamamla, onayla,
   };
 }

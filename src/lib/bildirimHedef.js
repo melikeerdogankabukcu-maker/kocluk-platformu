@@ -22,6 +22,8 @@ const HEDEFLER = {
   baglanti: { student: "bolum-baglanti", teacher: "bolum-baglanti" },
   rozet:    { student: "bolum-rozet",    parent:  "bolum-rozet" },
   mesaj:    { student: "bolum-mesaj",    teacher: "bolum-mesaj", parent: "bolum-mesaj" },
+  // Plan bloğu tamamlandı (koça) / onaylandı-iade edildi (öğrenciye)
+  plan:     { student: "bolum-plan",     teacher: "bolum-plan" },
   // Yalnızca yöneticiye gidiyor; aşağıdaki teacher→admin türetmesi bunu
   // etkilemiyor çünkü teacher anahtarı yok.
   kayit:    { admin: "bolum-rol" },

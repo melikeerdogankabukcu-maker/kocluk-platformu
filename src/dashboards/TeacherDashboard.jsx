@@ -531,9 +531,13 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                 const ipucu = "Bu haftaki plan: " + oz.toplam + " bloğun " + oz.yapilan + " tanesi yapıldı"
                                   + (oz.calisilanDk ? ", " + sureMetni(oz.calisilanDk) + " çalışıldı" : "")
                                   + (oz.devreden ? ", " + oz.devreden + " blok geçen haftadan devretti" : "");
+                                // Tamamlanıp koçun henüz bakmadığı bloklar
+                                const bekleyen = haftaPlanlari[s.id].bloklar.filter(b => b.yapildi && !b.koc_onayi).length;
                                 return (
-                                  <span title={ipucu} style={{ fontSize: 10.5, fontWeight: 700, color: renk, whiteSpace: "nowrap" }}>
+                                  <span title={ipucu + (bekleyen ? ", " + bekleyen + " blok onay bekliyor" : "")}
+                                    style={{ fontSize: 10.5, fontWeight: 700, color: renk, whiteSpace: "nowrap" }}>
                                     📅 {oz.yapilan}/{oz.toplam}{oz.devreden > 0 ? " ↻" + oz.devreden : ""}
+                                    {bekleyen > 0 && <span style={{ color: "#854F0B" }}> ⏳{bekleyen}</span>}
                                   </span>
                                 );
                               })()}
