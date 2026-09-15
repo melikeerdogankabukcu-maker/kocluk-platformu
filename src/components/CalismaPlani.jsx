@@ -16,6 +16,7 @@ import Modal from "./Modal";
 import BlokFormu from "./BlokFormu";
 import VideoOynatici from "./VideoOynatici";
 import TamamlaDiyalogu from "./TamamlaDiyalogu";
+import ProgramdanEkle from "./ProgramdanEkle";
 
 // Haftalık çalışma planı panosu.
 //
@@ -59,6 +60,7 @@ function useKapsayiciGenisligi() {
 export default function CalismaPlani({
   rol = "ogrenci", studentId: sabitOgrenci = null, ogrenciler = null,
   color: c, baslik = "Haftalık Çalışma Planı", varsayilanAcik = true, onDegisti = null,
+  tazele = 0,
 }) {
   const koc = rol === "koc";
   // Veli: planı ve ilerlemeyi salt okunur görür; işaret koyamaz, sayaç
@@ -88,6 +90,11 @@ export default function CalismaPlani({
   const [video, setVideo] = useState(null);   // blok
   const [surukle, setSurukle] = useState(null);
   const [tamamlanan, setTamamlanan] = useState(null);   // blok
+  const [programdan, setProgramdan] = useState(false);
+
+  // Plan dışarıdan değişti (ör. Program Kütüphanesi'nden aktarım):
+  // pano açıksa yeniden oku. İlk çizimde (tazele = 0) çalışmıyor.
+  useEffect(() => { if (tazele) p.yukle(); }, [tazele]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Açık bir sayaç varken ekrandaki süre akmalı. Yalnızca o durumda
   // saniyede değil 20 saniyede bir tazeleniyor: dakika gösteriliyor,
@@ -200,6 +207,14 @@ export default function CalismaPlani({
               <GezinmeDugmesi onClick={() => setPazartesi(h => haftaKaydir(h, 1))} etiket="›" baslik="Sonraki hafta" />
             </div>
           </div>
+
+          {koc && studentId && (
+            <button onClick={() => setProgramdan(true)} style={{
+              alignSelf: "flex-start", padding: "6px 12px", borderRadius: KOSE.tam,
+              border: `1.5px solid ${c.mid}`, background: "#fff", color: c.text,
+              fontSize: YAZI.kucuk, fontWeight: 700, cursor: "pointer",
+            }}>📚 Program kütüphanesinden ekle</button>
+          )}
 
           {p.yukleniyor ? (
             <div style={{ fontSize: YAZI.ikincil, color: RENK.metinCokSoluk, padding: "18px 0", textAlign: "center" }}>
@@ -315,6 +330,16 @@ export default function CalismaPlani({
           onKaydet={(alanlar) => (form.blok ? p.blokGuncelle(form.blok.id, alanlar) : p.blokEkle(alanlar))}
           onSil={form.blok ? () => p.blokSil(form.blok.id) : null}
           onKapat={() => setForm(null)} />
+      )}
+
+      {programdan && (
+        <ProgramdanEkle color={c} pazartesi={pazartesi}
+          ogrenciler={[{
+            id: studentId,
+            full_name: ogrenciler?.find(o => o.id === studentId)?.full_name ?? "Öğrenci",
+          }]}
+          onBitti={() => p.yukle()}
+          onKapat={() => setProgramdan(false)} />
       )}
 
       {tamamlanan && (

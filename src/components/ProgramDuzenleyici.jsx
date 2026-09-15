@@ -8,6 +8,7 @@ import { calistir } from "../lib/db";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import Modal from "./Modal";
+import ProgramdanEkle from "./ProgramdanEkle";
 
 const GUNLER = ["PAZARTESİ", "SALI", "ÇARŞAMBA", "PERŞEMBE", "CUMA", "CUMARTESİ", "PAZAR"];
 const ONCELIKLER = [
@@ -28,7 +29,7 @@ const bosHafta = (no) => ({
 // Program kütüphanesi (study_programs) ile atanmış program ayrıdır: burada
 // yapılan değişiklik, daha önce atanmış öğrencilerin planını ETKİLEMEZ
 // (atama anında içeriğin kopyası alınır).
-export default function ProgramDuzenleyici({ userId, students = [], color: c }) {
+export default function ProgramDuzenleyici({ userId, students = [], color: c, onPlanaAktarildi = null }) {
   const { programlar, dbden, yukle } = useStudyPrograms();
   const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();
 
@@ -61,6 +62,8 @@ export default function ProgramDuzenleyici({ userId, students = [], color: c }) 
   const [atamalar, setAtamalar]       = useState([]);
   const [atamaAcik, setAtamaAcik]     = useState(null);   // açık olan programın kodu
   const [atamaIslemde, setAtamaIslemde] = useState(false);
+  // Çalışma planına aktarım penceresi: { program, ogrenciler }
+  const [planaAktar, setPlanaAktar] = useState(null);
   const [atamaForm, setAtamaForm] = useState({
     student_id: "", baslangic: new Date().toISOString().split("T")[0],
   });
@@ -363,10 +366,27 @@ export default function ProgramDuzenleyici({ userId, students = [], color: c }) 
                       }}>{atamaIslemde ? "..." : "Ata"}</button>
                     </div>
 
+                    {/* Haftalık çalışma planına aktarım. "Ata"dan ayrı: görev ya da
+                        program kartı açmıyor, programın haftalarını öğrencinin
+                        plan panosuna blok olarak yerleştiriyor. Başlangıç haftası
+                        yukarıdaki tarihin haftası (pencerede değiştirilebilir). */}
+                    <button onClick={() => setPlanaAktar({
+                        program: p,
+                        ogrenciler: hedefOgrenciler().map(id => ({ id, full_name: ogrenciAdi(id) })),
+                      })}
+                      disabled={!atamaForm.student_id} style={{
+                        padding: "8px 0", borderRadius: 9, flexShrink: 0,
+                        border: `1.5px solid ${atamaForm.student_id ? c.mid : "#ddd"}`,
+                        background: "#fff", color: atamaForm.student_id ? c.text : "#bbb",
+                        fontSize: 12, fontWeight: 700,
+                        cursor: atamaForm.student_id ? "pointer" : "not-allowed",
+                      }}>📅 Haftalık çalışma planına aktar</button>
+
                     <div style={{ fontSize: 10, color: "#aaa", lineHeight: 1.5 }}>
                       {p.hazir === false
-                        ? "Bu program göreve dönüşür: her adım için öğrencide ayrı görev açılır."
-                        : "Haftalar aralıklı hedef olarak işler; hafta tamamlandığında öğrenci rozet kazanır."}
+                        ? "Ata: program göreve dönüşür, her adım için öğrencide ayrı görev açılır."
+                        : "Ata: haftalar aralıklı hedef olarak işler; hafta tamamlandığında öğrenci rozet kazanır."}
+                      {" "}Plana aktar: adımlar öğrencinin haftalık çalışma planına blok olarak yerleşir.
                     </div>
                   </div>
                 )}
@@ -387,6 +407,13 @@ export default function ProgramDuzenleyici({ userId, students = [], color: c }) 
           </div>
 
         </div>
+      )}
+
+      {planaAktar && (
+        <ProgramdanEkle color={c} program={planaAktar.program} ogrenciler={planaAktar.ogrenciler}
+          pazartesi={null} baslangicTarihi={atamaForm.baslangic}
+          onBitti={() => onPlanaAktarildi?.()}
+          onKapat={() => setPlanaAktar(null)} />
       )}
 
       {/* --- Düzenleyici --- */}

@@ -6,6 +6,8 @@
 // Yapı: program → haftalar → günler → ders satırları
 // Bir satırın anahtarı "hafta-günIndex-satırIndex" biçimindedir (ör. "2-0-1");
 // tamamlama kayıtları bu anahtarla tutulur.
+import { sureDakika } from "./programAktar";
+
 export const STUDY_PROGRAMS = {
     "yogun": {
       "id": "yogun",
@@ -1436,14 +1438,10 @@ const _tarihStr = (d) =>
 export const atamaProgrami = (atama) =>
   atama?.program_icerik ?? programGetir(atama?.program_id);
 
-// "35 dk" / "35" / "1 saat" -> dakika (int) | null
-const _dakika = (s) => {
-  if (!s) return null;
-  const metin = String(s).toLowerCase();
-  const n = parseInt(metin.replace(/[^0-9]/g, ""), 10);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return /saat/.test(metin) ? n * 60 : n;
-};
+// "35 dk" / "2 sa" / "2.5 sa" / "1 saat" -> dakika (int) | null.
+// Eski yerel ayrıştırıcı "2 sa"yı 2 dk, "2.5 sa"yı 25 dk okuyordu;
+// plan aktarımıyla aynı fonksiyon kullanılıyor.
+const _dakika = sureDakika;
 
 // Öğretmenin kendi yazdığı programı görev satırlarına çevirir.
 //

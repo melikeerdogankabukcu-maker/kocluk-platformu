@@ -95,6 +95,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
   // Bu haftanın planları — öğrenci satırında plan uyumu, açılınca bloklar.
   // Öğrenci listesiyle birlikte yeniden okunuyor (students değişince).
   const { planlar: haftaPlanlari, yukle: planlariTazele } = useHaftalikPlanlar(students.map(s => s.id));
+  // Program Kütüphanesi'nden plana aktarım olunca plan panosu yeniden okusun
+  const [planSurumu, setPlanSurumu] = useState(0);
 
   const loadData = async () => {
     // Yalnızca bu öğretmene bağlı öğrenciler. teacher_students tablosu henüz
@@ -1000,7 +1002,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
         {/* Haftalık çalışma planı — öğrenci listesinin hemen altında.
             Görev atamanın YERİNE değil YANINDA: görev tek seferlik,
             tarihli iş; plan haftanın ızgarasına yerleşen çalışma blokları. */}
-              <CalismaPlani rol="koc" ogrenciler={students} color={c} onDegisti={planlariTazele} />
+              <CalismaPlani rol="koc" ogrenciler={students} color={c} onDegisti={planlariTazele} tazele={planSurumu} />
 
         {/* Görev atama formu — artık sayfada durmuyor, açılır pencerede.
             Öğrenci listesinin başlığındaki "+ Görev Ata" ve bir görevin
@@ -1189,7 +1191,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
         <OdevOnerisi userId={userId} students={students} color={c} onAtandi={loadData} />
 
         <Bolum baslik="İçerik" color={c} sekmeler={[
-          { ad: "Programlar", icerik: <ProgramDuzenleyici userId={userId} students={students} color={c} /> },
+          { ad: "Programlar", icerik: <ProgramDuzenleyici userId={userId} students={students} color={c}
+              onPlanaAktarildi={() => { setPlanSurumu(v => v + 1); planlariTazele(); }} /> },
           { ad: "Müfredat", icerik: <KonuYonetimi userId={userId} color={c} /> },
           { ad: "Soru Bankası", id: "bolum-soru-bankasi",
             icerik: <SoruBankasi userId={userId} students={students} color={c} /> },
