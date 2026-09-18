@@ -1138,14 +1138,14 @@ export default function StudentDashboard({ userId, userName }) {
                   </div>
                 )}
                 {(tumTestlerAcik ? acikTestler : acikTestler.slice(0, 4)).map((t) => (
-                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: "1px solid #f5f2ee" }}>
-                    <div>
+                  <div key={t.id} style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 6, padding: "8px 0", borderTop: "1px solid #f5f2ee" }}>
+                    <div style={{ flex: "1 1 150px", minWidth: 0, textAlign: "left" }}>
                       <span style={{ fontSize: 13, fontWeight: 500, color: "#222" }}>{t.subject}</span>
                       {t.topic && <span style={{ fontSize: 11, color: "#aaa", marginLeft: 6 }}>{t.topic}</span>}
                       <div style={{ fontSize: 11, color: "#999", marginTop: 1 }}>{testOzetMetni(t)}</div>
                       <div style={{ fontSize: 11, color: "#bbb", marginTop: 1 }}>{new Date(t.created_at).toLocaleDateString("tr-TR")}</div>
                     </div>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 6, alignItems: "center", marginLeft: "auto", maxWidth: "100%" }}>
                       {odevDosyalari(t).map((d, i, hepsi) => (
                         <GuvenliBaglanti key={d.url} url={d.url} baslik={d.ad} style={{
                           fontSize: 11, padding: "2px 7px", borderRadius: 99,

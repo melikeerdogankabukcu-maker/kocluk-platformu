@@ -765,7 +765,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                         </div>
                                       </div>
                                     ) : (
-                                    <div key={t.id} style={{ display: "flex", alignItems: "baseline", gap: 7, fontSize: 11.5 }}>
+                                    <div key={t.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 7, fontSize: 11.5 }}>
                                       <span style={{ flexShrink: 0, color: t.is_done ? "#1A6B3C" : "#c8c2ba", fontWeight: 700 }}>
                                         {t.is_done ? "✓" : "○"}
                                       </span>
@@ -776,7 +776,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                           : "tarihsiz"}
                                       </span>
                                       <span style={{
-                                        flex: 1, minWidth: 0, color: t.is_done ? "#9aa" : "#333",
+                                        flex: "1 1 160px", minWidth: 0, textAlign: "left",
+                                        color: t.is_done ? "#9aa" : "#333",
                                         textDecoration: t.is_done ? "line-through" : "none",
                                       }}>
                                         {t.title}
@@ -786,6 +787,10 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                           </span>
                                         )}
                                       </span>
+                                      <span style={{
+                                        display: "inline-flex", flexWrap: "wrap", alignItems: "center",
+                                        justifyContent: "flex-end", gap: 5, marginLeft: "auto", maxWidth: "100%",
+                                      }}>
                                       {t.kaynak_program && (
                                         <span title={`${t.kaynak_program} programından`} style={{
                                           flexShrink: 0, fontSize: 9.5, fontWeight: 700, padding: "1px 6px",
@@ -798,7 +803,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                           önce görebilmeli. */}
                                       {(gorevTestMap[t.id] ?? []).map(ts => (
                                         <span key={ts.id} style={{
-                                          flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4,
+                                          display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 4,
+                                          maxWidth: "100%", boxSizing: "border-box",
                                           fontSize: 9.5, fontWeight: 700, padding: "1px 6px",
                                           borderRadius: 99, background: "#F8F3FC", color: "#7a5c92",
                                         }}>
@@ -861,6 +867,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                         flexShrink: 0, background: "none", border: "none", padding: "0 2px",
                                         color: "#C98A8A", fontSize: 12, cursor: "pointer",
                                       }}>✕</button>
+                                      </span>
                                     </div>
                                     )
                                   ))}

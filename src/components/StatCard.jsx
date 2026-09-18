@@ -2,7 +2,10 @@ export default function StatCard({ label, value, sub, color }) {
   return (
     <div style={{
       background: "#fff", border: "1px solid #f0ede8",
-      borderRadius: 14, padding: "16px 20px", flex: 1, minWidth: 110,
+      // minWidth 0 + border-box: üç kart yan yana dar ekrana sığsın.
+      // Eskiden minWidth 110 dolguya EK sayılıyordu (kart ~152 px); üç kart
+      // 375 px'lik telefonda ~480 px tutup sayfayı yana taşırıyordu.
+      borderRadius: 14, padding: "14px 12px", flex: 1, minWidth: 0, boxSizing: "border-box",
     }}>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontWeight: 500 }}>{label}</div>
       <div style={{ fontSize: 26, fontWeight: 700, color: color, lineHeight: 1 }}>{value}</div>

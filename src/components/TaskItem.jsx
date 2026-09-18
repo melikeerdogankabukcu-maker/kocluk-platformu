@@ -54,6 +54,7 @@ export default function TaskItem({ done, label, sub, color,
           {testler.map(t => (
             <span key={t.id} style={{
               display: "inline-flex", alignItems: "center", gap: 4,
+              flexWrap: "wrap", maxWidth: "100%", boxSizing: "border-box",
               fontSize: 11, padding: "2px 9px", borderRadius: 99,
               background: "#F8F3FC", color: "#7a5c92", fontWeight: 600,
             }}>
