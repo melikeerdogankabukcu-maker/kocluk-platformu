@@ -6,6 +6,7 @@ import { testOzetMetni } from "../lib/testHelpers";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import CalendarMonth from "./CalendarMonth";
+import Modal from "./Modal";
 import GuvenliBaglanti from "./GuvenliBaglanti";
 
 // Ortak ders planlama bloğu (öğretmen + öğrenci).
@@ -259,8 +260,14 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
             {st.label}
           </span>
         </div>
-        {/* Onay bekleyen ve karşı tarafın oluşturduğu ise onayla/reddet */}
-        {l.status === "beklemede" && !mine && (
+        {/* Onay YALNIZCA KOÇTA. Öğrenci ders onaylamıyor; kendi talebi
+            koçun onayını bekliyor (aşağıdaki satır). */}
+        {l.status === "beklemede" && role === "student" && (
+          <div style={{ fontSize: 10.5, color: "#854F0B", marginTop: 8 }}>
+            {mine ? "Talebin koçun onayını bekliyor" : "Koç onayı bekleniyor"}
+          </div>
+        )}
+        {l.status === "beklemede" && role === "teacher" && !mine && (
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
             <button onClick={() => respondLesson(l, true)} style={{
               fontSize: 11, padding: "4px 12px", borderRadius: 99, border: "none",
@@ -396,18 +403,12 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
     );
   };
 
-  return (
-    <>
-      {/* Ders Planla */}
-      <Card>
-        <SectionTitle title="Ders Planla" color={c.mid} />
-        {!showForm ? (
-          <button onClick={() => setShowForm(true)} style={{
-            width: "100%", padding: "11px 0", borderRadius: 12,
-            border: `1.5px dashed ${c.mid}`, background: "transparent",
-            color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
-          }}>+ Yeni Ders Planla</button>
-        ) : (
+  // ── DERS PLANLAMA FORMU ─────────────────────────────────────────
+  // Sayfada ayrı bir "Ders Planla" kartı olarak duruyordu; panelin en
+  // üstünde yer kaplıyor, çoğu gün kullanılmıyordu. Görev atamada
+  // yapılanın aynısı: takvimin üstünde küçük bir düğme, form açılır
+  // pencerede.
+  const formIcerigi = (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <select value={form.counterpart_id}
               onChange={e => setForm(f => ({ ...f, counterpart_id: e.target.value }))}
@@ -472,23 +473,34 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
                 flex: 1, padding: "11px 0", borderRadius: 12, border: "none",
                 background: c.bg, color: "#fff", fontSize: 13, fontWeight: 700,
                 cursor: "pointer", opacity: saving ? 0.7 : 1,
-              }}>{saving ? "Gönderiliyor..." : "Teklif Gönder"}</button>
+              }}>{saving ? "Gönderiliyor..." : role === "teacher" ? "Dersi Planla" : "Talep Gönder"}</button>
               <button onClick={() => setShowForm(false)} style={{
                 padding: "11px 16px", borderRadius: 12, border: "1.5px solid #f0ede8",
                 background: "#fff", color: "#888", fontSize: 13, cursor: "pointer",
               }}>İptal</button>
             </div>
             <div style={{ fontSize: 11, color: "#aaa", textAlign: "center" }}>
-              Teklif, {counterpartLabel.toLowerCase()} onayladıktan sonra takvimde görünür.
+              {role === "teacher"
+                ? "Ders takvime düşer ve öğrenciye bildirim gider."
+                : "Talebin koç onayladıktan sonra takvimde görünür."}
             </div>
           </div>
-        )}
-      </Card>
+  );
 
-      {/* Onay bekleyen teklifler */}
-      {pendingForMe.length > 0 && (
+  return (
+    <>
+      {showForm && (
+        <Modal title={role === "teacher" ? "Ders Planla" : "Ders Talebi"}
+          onClose={() => setShowForm(false)} maxWidth={460}>
+          {formIcerigi}
+        </Modal>
+      )}
+
+      {/* Onay bekleyen talepler — YALNIZCA KOÇTA. Öğrencinin onaylayacağı
+          bir şey kalmadı; koç planladığı anda ders onaylı. */}
+      {role === "teacher" && pendingForMe.length > 0 && (
         <Card>
-          <SectionTitle title={`Onayını Bekleyen Teklifler (${pendingForMe.length})`} color={c.mid} />
+          <SectionTitle title={`Onayını Bekleyen Talepler (${pendingForMe.length})`} color={c.mid} />
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {pendingForMe.map(renderLesson)}
           </div>
@@ -528,6 +540,12 @@ export default function LessonPlanner({ userId, role, counterparts, color: c,
       {/* Takvim */}
       <Card>
         <SectionTitle title="Takvimim" color={c.mid} />
+
+        <button onClick={() => setShowForm(true)} style={{
+          display: "block", marginBottom: 12, padding: "6px 12px", borderRadius: 99,
+          border: `1.5px solid ${c.mid}`, background: "#fff", color: c.text,
+          fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+        }}>+ {role === "teacher" ? "Ders Planla" : "Ders Talebi"}</button>
 
         {/* Devamsızlık özeti — yalnızca öğretmende, yalnızca işaretlenmiş
             dersi olan öğrenciler için. Katılım işaretlenmemişse satır
