@@ -18,6 +18,7 @@ import VideoOynatici from "./VideoOynatici";
 import TamamlaDiyalogu from "./TamamlaDiyalogu";
 import ProgramdanEkle from "./ProgramdanEkle";
 import GuvenliBaglanti from "./GuvenliBaglanti";
+import FizikselKontrol from "./FizikselKontrol";
 import { odevDosyalari } from "../lib/odevDosyalari";
 
 // Haftalık çalışma planı panosu.
@@ -93,6 +94,7 @@ export default function CalismaPlani({
   const [surukle, setSurukle] = useState(null);
   const [tamamlanan, setTamamlanan] = useState(null);   // blok
   const [programdan, setProgramdan] = useState(false);
+  const [kontrol, setKontrol] = useState(false);
 
   // Plan dışarıdan değişti (ör. Program Kütüphanesi'nden aktarım):
   // pano açıksa yeniden oku. İlk çizimde (tazele = 0) çalışmıyor.
@@ -228,11 +230,24 @@ export default function CalismaPlani({
           </div>
 
           {koc && studentId && (
-            <button onClick={() => setProgramdan(true)} style={{
-              alignSelf: "flex-start", padding: "6px 12px", borderRadius: KOSE.tam,
-              border: `1.5px solid ${c.mid}`, background: "#fff", color: c.text,
-              fontSize: YAZI.kucuk, fontWeight: 700, cursor: "pointer",
-            }}>📚 Program kütüphanesinden ekle</button>
+            <div style={{ display: "flex", gap: BOSLUK.s, flexWrap: "wrap" }}>
+              <button onClick={() => setProgramdan(true)} style={{
+                padding: "6px 12px", borderRadius: KOSE.tam,
+                border: `1.5px solid ${c.mid}`, background: "#fff", color: c.text,
+                fontSize: YAZI.kucuk, fontWeight: 700, cursor: "pointer",
+              }}>📚 Program kütüphanesinden ekle</button>
+              {/* Fiziksel kontrol: haftanın tamamı tek listede, toplu onay.
+                  Plan yoksa gösterilmiyor — onaylanacak bir şey yok. */}
+              {p.plan && p.bloklar.length > 0 && (
+                <button onClick={() => setKontrol(true)} style={{
+                  padding: "6px 12px", borderRadius: KOSE.tam, cursor: "pointer",
+                  border: `1.5px solid ${bekleyenOnay > 0 ? RENK.uyari.metin : c.mid}`,
+                  background: bekleyenOnay > 0 ? RENK.uyari.zemin : "#fff",
+                  color: bekleyenOnay > 0 ? RENK.uyari.metin : c.text,
+                  fontSize: YAZI.kucuk, fontWeight: 700,
+                }}>✓ Fiziksel kontrol{bekleyenOnay > 0 ? ` · ${bekleyenOnay}` : ""}</button>
+              )}
+            </div>
           )}
 
           {p.yukleniyor ? (
@@ -354,6 +369,12 @@ export default function CalismaPlani({
           onKaydet={(alanlar) => (form.blok ? p.blokGuncelle(form.blok.id, alanlar) : p.blokEkle(alanlar))}
           onSil={form.blok ? () => p.blokSil(form.blok.id) : null}
           onKapat={() => setForm(null)} />
+      )}
+
+      {kontrol && (
+        <FizikselKontrol bloklar={p.bloklar} testler={p.testler}
+          haftaMetni={haftaAraligiMetni(pazartesi)} color={c}
+          onOnayla={p.topluOnayla} onKapat={() => setKontrol(false)} />
       )}
 
       {programdan && (
@@ -632,17 +653,21 @@ function BlokGovde({ blok: b, koc, color: c, onClick, onCevir, onVideo, onSayac,
         </div>
       </div>
 
-      {/* Koç onayı. Karar sonradan değiştirilebilsin diye onaylı blokta
-          "İade", iade edilmişte "Onayla" duruyor. */}
-      {!surukleniyor && koc && (b.yapildi || b.koc_onayi) && (
+      {/* Koç onayı. İşaretlenmemiş blokta da "✓ Yapıldı say" duruyor:
+          fiziksel kontrolde koç defteri görüp onaylıyor, öğrencinin
+          işaretlemesini beklemiyor. Karar sonradan değiştirilebilsin diye
+          onaylı blokta "İade", iade edilmişte "Onayla" kalıyor. */}
+      {!surukleniyor && koc && (
         <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
           {!onayli && (
-            <button onClick={e => { e.stopPropagation(); onOnay?.("onaylandi"); }} {...dugmeKorumasi} style={{
-              flex: 1, padding: "3px 0", borderRadius: KOSE.s, border: "none",
-              background: RENK.basari.zemin, color: RENK.basari.metin, fontSize: 10, fontWeight: 700, cursor: "pointer",
-            }}>✓ Onayla</button>
+            <button onClick={e => { e.stopPropagation(); onOnay?.("onaylandi"); }} {...dugmeKorumasi}
+              title={b.yapildi ? "Öğrencinin bildirdiği işi onayla" : "Fiziksel kontrol: yapıldığını gördüm"}
+              style={{
+                flex: 1, padding: "3px 0", borderRadius: KOSE.s, border: "none",
+                background: RENK.basari.zemin, color: RENK.basari.metin, fontSize: 10, fontWeight: 700, cursor: "pointer",
+              }}>{b.yapildi ? "✓ Onayla" : "✓ Yapıldı say"}</button>
           )}
-          {!iade && (
+          {!iade && (b.yapildi || b.koc_onayi) && (
             <button onClick={e => { e.stopPropagation(); onOnay?.("iade_edildi"); }} {...dugmeKorumasi} style={{
               flex: 1, padding: "3px 0", borderRadius: KOSE.s, border: "none",
               background: RENK.hata.zemin, color: RENK.hata.metin, fontSize: 10, fontWeight: 700, cursor: "pointer",

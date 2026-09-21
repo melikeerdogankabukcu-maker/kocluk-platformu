@@ -249,8 +249,23 @@ export function useCalismaPlani(studentId, pazartesi) {
     return { hata };
   };
 
+  // Fiziksel kontrol: koç defteri elde görüp birden çok bloğu birlikte
+  // onaylıyor. Sunucuda TEK işlem (calisma_bloklari_onayla):
+  //  - hepsi ya da hiçbiri yazılıyor,
+  //  - öğrenciye blok başına değil, tek özet bildirim gidiyor,
+  //  - listeye başka koçun öğrencisinin bloğu karışırsa işlem reddediliyor.
+  const topluOnayla = async (idler) => {
+    if (!idler?.length) return {};
+    const { hata } = await calistir(
+      supabase.rpc("calisma_bloklari_onayla", { p_idler: idler }),
+      "Toplu blok onayi"
+    );
+    if (!hata) await yukle();
+    return { hata };
+  };
+
   return {
     plan, bloklar, testler, yukleniyor, etkin, saatFarki,
-    yukle, olustur, blokEkle, blokGuncelle, blokSil, tasi, sayac, tamamla, onayla,
+    yukle, olustur, blokEkle, blokGuncelle, blokSil, tasi, sayac, tamamla, onayla, topluOnayla,
   };
 }
