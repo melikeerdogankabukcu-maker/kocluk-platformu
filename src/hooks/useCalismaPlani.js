@@ -264,8 +264,39 @@ export function useCalismaPlani(studentId, pazartesi) {
     return { hata };
   };
 
+  // ── SIFIRLAMA ─────────────────────────────────────────────────
+  // İşaretleri temizle: bloklar kalır, hafta baştan yaşanır. Sayacın
+  // ÖLÇTÜĞÜ dakikalar duruyor (o süre gerçekten çalışıldı ve zaten
+  // yalnızca sayaç fonksiyonu yazabiliyor); sıfırlanan şey beyan ve onay.
+  const isaretleriTemizle = async () => {
+    if (!plan) return { hata: true };
+    const { hata } = await calistir(
+      supabase.from("calisma_bloklari")
+        .update({ yapildi: false, calisilan_dk: null, koc_onayi: null, onay_notu: null })
+        .eq("plan_id", plan.id),
+      "Plan isaretlerini temizleme"
+    );
+    if (!hata) await yukle();
+    return { hata };
+  };
+
+  // Planı sil: bloklar plana bağlı olduğu için birlikte gidiyor
+  // (ON DELETE CASCADE). Bloğa bağlı testler SİLİNMİYOR, yalnızca bağ
+  // kopuyor (blok_id ON DELETE SET NULL) — öğrencinin çözdüğü test
+  // analizden düşmesin.
+  const planiSil = async () => {
+    if (!plan) return { hata: true };
+    const { hata } = await calistir(
+      supabase.from("calisma_planlari").delete().eq("id", plan.id),
+      "Plan silme"
+    );
+    if (!hata) await yukle();
+    return { hata };
+  };
+
   return {
     plan, bloklar, testler, yukleniyor, etkin, saatFarki,
     yukle, olustur, blokEkle, blokGuncelle, blokSil, tasi, sayac, tamamla, onayla, topluOnayla,
+    isaretleriTemizle, planiSil,
   };
 }

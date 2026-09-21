@@ -19,6 +19,7 @@ import TamamlaDiyalogu from "./TamamlaDiyalogu";
 import ProgramdanEkle from "./ProgramdanEkle";
 import GuvenliBaglanti from "./GuvenliBaglanti";
 import FizikselKontrol from "./FizikselKontrol";
+import PlanSifirla from "./PlanSifirla";
 import { odevDosyalari } from "../lib/odevDosyalari";
 
 // Haftalık çalışma planı panosu.
@@ -95,6 +96,7 @@ export default function CalismaPlani({
   const [tamamlanan, setTamamlanan] = useState(null);   // blok
   const [programdan, setProgramdan] = useState(false);
   const [kontrol, setKontrol] = useState(false);
+  const [sifirla, setSifirla] = useState(false);
 
   // Plan dışarıdan değişti (ör. Program Kütüphanesi'nden aktarım):
   // pano açıksa yeniden oku. İlk çizimde (tazele = 0) çalışmıyor.
@@ -247,6 +249,16 @@ export default function CalismaPlani({
                   fontSize: YAZI.kucuk, fontWeight: 700,
                 }}>✓ Fiziksel kontrol{bekleyenOnay > 0 ? ` · ${bekleyenOnay}` : ""}</button>
               )}
+              {/* Sıfırlama: iki ayrı iş (işaretleri temizle / planı sil),
+                  ikisi de geri alınamaz. Bu yüzden panodaki düğme yalnızca
+                  pencereyi açıyor; karar ve uyarı orada. */}
+              {p.plan && p.bloklar.length > 0 && (
+                <button onClick={() => setSifirla(true)} style={{
+                  padding: "6px 12px", borderRadius: KOSE.tam, cursor: "pointer",
+                  border: `1.5px solid ${RENK.cizgi}`, background: "#fff",
+                  color: RENK.metinSoluk, fontSize: YAZI.kucuk, fontWeight: 700,
+                }}>↺ Sıfırla</button>
+              )}
             </div>
           )}
 
@@ -369,6 +381,12 @@ export default function CalismaPlani({
           onKaydet={(alanlar) => (form.blok ? p.blokGuncelle(form.blok.id, alanlar) : p.blokEkle(alanlar))}
           onSil={form.blok ? () => p.blokSil(form.blok.id) : null}
           onKapat={() => setForm(null)} />
+      )}
+
+      {sifirla && (
+        <PlanSifirla bloklar={p.bloklar} haftaMetni={haftaAraligiMetni(pazartesi)} color={c}
+          onTemizle={p.isaretleriTemizle} onSil={p.planiSil}
+          onKapat={() => setSifirla(false)} />
       )}
 
       {kontrol && (
