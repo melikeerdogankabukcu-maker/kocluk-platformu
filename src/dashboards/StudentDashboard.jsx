@@ -1390,7 +1390,8 @@ export default function StudentDashboard({ userId, userName }) {
 
         <Bolum baslik="Koçlarım ve Program" color={c} id="bolum-baglanti" sekmeler={[
           { ad: "Koçlarım", icerik: <div id="bolum-baglanti"><BaglantiYonetimi userId={userId} rol="student" color={c} onDegisti={loadAll} /></div> },
-          { ad: "Haftalık Program", icerik: <HaftalikProgram tasks={tasks} programOgeleri={programOgeleri} ogrenciAdi={userName} color={c} variant="kart" /> },
+          { ad: "Haftalık Program", icerik: <HaftalikProgram tasks={tasks} programOgeleri={programOgeleri}
+              planBloklari={planBloklari.bloklar} ogrenciAdi={userName} color={c} variant="kart" /> },
           // Öğrenci kendi kaynağını ekliyor; koçun eklediklerini de
           // burada salt okunur görüyor.
           { ad: "Kaynaklarım", id: "bolum-soru-bankasi",

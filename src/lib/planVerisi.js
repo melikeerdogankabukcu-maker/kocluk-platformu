@@ -34,31 +34,37 @@ export async function ogrencininBloklari(studentId) {
   return { bloklar: hepsi, buHafta: hepsi.filter(b => b.hafta_basi === buHaftaMetni) };
 }
 
-// Birden çok öğrencinin plan blok sayıları: { studentId: { toplam, yapilan } }
+// Birden çok öğrencinin plan blokları: { studentId: [blok, ...] }
 //
-// Koç panelindeki öğrenci satırı için. Öğrenci başına ayrı sorgu yerine
-// tek seferde: beş öğrenci on istek demekti.
-export async function ogrencilerinBlokSayilari(studentIdler = []) {
+// Koç paneli için: satırdaki ilerleme çubuğu ve yazdırılabilir haftalık
+// program aynı veriyi kullanıyor. Öğrenci başına ayrı sorgu yerine tek
+// seferde — beş öğrenci on istek demekti.
+export async function ogrencilerinBloklari(studentIdler = []) {
   if (!studentIdler.length) return {};
 
   const { data: planlar, error } = await supabase
-    .from("calisma_planlari").select("id, student_id").in("student_id", studentIdler);
+    .from("calisma_planlari").select("id, student_id, hafta_basi").in("student_id", studentIdler);
   if (error || !planlar?.length) return {};
 
   const { data: bloklar, error: bHata } = await supabase
-    .from("calisma_bloklari").select("plan_id, yapildi")
+    .from("calisma_bloklari")
+    .select("id, plan_id, gun, dilim, tur, baslik, ders, konu, aciklama, " +
+            "baslangic_saati, bitis_saati, sure_dk, yapildi, koc_onayi")
     .in("plan_id", planlar.map(p => p.id));
   if (bHata) return {};
 
-  const ogrencisi = Object.fromEntries(planlar.map(p => [p.id, p.student_id]));
-  const sayim = {};
+  const plan = Object.fromEntries(planlar.map(p => [p.id, p]));
+  const harita = {};
   (bloklar ?? []).forEach(b => {
-    const ogr = ogrencisi[b.plan_id];
-    if (!ogr) return;
-    const g = sayim[ogr] ?? { toplam: 0, yapilan: 0 };
-    g.toplam += 1;
-    if (b.yapildi) g.yapilan += 1;
-    sayim[ogr] = g;
+    const p = plan[b.plan_id];
+    if (!p) return;
+    (harita[p.student_id] ??= []).push({ ...b, hafta_basi: p.hafta_basi });
   });
-  return sayim;
+  return harita;
 }
+
+// Blok listesinden ilerleme sayısı
+export const blokSayisi = (bloklar = []) => ({
+  toplam: bloklar.length,
+  yapilan: bloklar.filter(b => b.yapildi).length,
+});

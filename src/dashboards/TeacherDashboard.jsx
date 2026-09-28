@@ -41,7 +41,7 @@ import OdevOnerisi from "../components/OdevOnerisi";
 import PanelDuzen from "../components/PanelDuzen";
 import CalismaPlani from "../components/CalismaPlani";
 import { useHaftalikPlanlar } from "../hooks/useHaftalikPlanlar";
-import { ogrencilerinBlokSayilari } from "../lib/planVerisi";
+import { ogrencilerinBloklari, blokSayisi } from "../lib/planVerisi";
 import { GUN_KISA, DILIMLER, TURLER, ilerleme, sureMetni, saatAraligi, blokAltBilgi } from "../lib/calismaPlani";
 
 export default function TeacherDashboard({ userId, userName, role }) {
@@ -98,10 +98,11 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const { planlar: haftaPlanlari, yukle: planlariTazele } = useHaftalikPlanlar(students.map(s => s.id));
   // Program Kütüphanesi'nden plana aktarım olunca plan panosu yeniden okusun
   const [planSurumu, setPlanSurumu] = useState(0);
-  // Öğrenci başına TÜM zamanların plan blok sayısı: satırdaki ilerleme
-  // çubuğu ve durum rozeti bunu da sayıyor. (Başlıktaki 📅 rozeti yalnızca
-  // BU haftayı gösteriyor; ikisi farklı sorulara cevap veriyor.)
-  const [blokSayilari, setBlokSayilari] = useState({});
+  // Öğrenci başına TÜM zamanların plan blokları: satırdaki ilerleme çubuğu,
+  // durum rozeti ve yazdırılabilir haftalık program bunu kullanıyor.
+  // (Başlıktaki 📅 rozeti yalnızca BU haftayı gösteriyor; ikisi farklı
+  // sorulara cevap veriyor.)
+  const [ogrenciBloklari, setOgrenciBloklari] = useState({});
 
   const loadData = async () => {
     // Yalnızca bu öğretmene bağlı öğrenciler. teacher_students tablosu henüz
@@ -206,7 +207,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
     (profileData ?? []).forEach(p => { profMap[p.id] = p; });
 
     setStudents(studentData);
-    setBlokSayilari(await ogrencilerinBlokSayilari(studentIds));
+    setOgrenciBloklari(await ogrencilerinBloklari(studentIds));
     setTaskMap(grouped);
     setProfileMap(profMap);
     setRecentTests(testData ?? []);
@@ -428,10 +429,10 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const totalTasks = Object.values(taskMap).flat().length;
   const doneTasks  = Object.values(taskMap).flat().filter(t => t.is_done).length;
   // Bütün öğrencilerin plan blokları (tüm zamanlar)
-  const planToplam = Object.values(blokSayilari).reduce(
-    (a, b) => ({ toplam: a.toplam + b.toplam, yapilan: a.yapilan + b.yapilan }),
-    { toplam: 0, yapilan: 0 }
-  );
+  const planToplam = Object.values(ogrenciBloklari).reduce((a, liste) => {
+    const g = blokSayisi(liste);
+    return { toplam: a.toplam + g.toplam, yapilan: a.yapilan + g.yapilan };
+  }, { toplam: 0, yapilan: 0 });
 
 
   // Son testler kartı bir sekme içeriği olarak veriliyor; boşsa Bolum
@@ -521,7 +522,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
                   // İlerleme = görev + haftalık plan bloğu. Yalnızca göreve
                   // bakmak, işini plan üzerinden yapan öğrenciyi "Başlamadı"
                   // gösteriyordu — 26 bloğu biten öğrenci boş çubukla duruyordu.
-                  const blok    = blokSayilari[s.id] ?? { toplam: 0, yapilan: 0 };
+                  const blok    = blokSayisi(ogrenciBloklari[s.id] ?? []);
                   const done    = gDone + blok.yapilan;
                   const total   = gTotal + blok.toplam;
                   const pct     = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -932,6 +933,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
                             />
                             <HaftalikProgram
                               tasks={sTasks} programOgeleri={programMap[s.id] ?? []}
+                              planBloklari={ogrenciBloklari[s.id] ?? []}
                               ogrenciAdi={s.full_name} color={c} variant="buton"
                               baslik={`${s.full_name} — Haftalık Program`}
                             />

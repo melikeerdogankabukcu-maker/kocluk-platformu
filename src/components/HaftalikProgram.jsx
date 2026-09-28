@@ -10,10 +10,12 @@ import SectionTitle from "./SectionTitle";
 // ~300KB font gömmeyi gerektiriyor. Tarayıcının yazdırma motoru hem Türkçe'yi
 // doğru basıyor hem de "PDF olarak kaydet" seçeneğini zaten veriyor.
 //
-// İçerik yalnızca tasks tablosundan geliyor. Öğretmenin kendi yazdığı
-// programlar zaten göreve dönüştüğü için burada görünür; gömülü hazır
-// programların adımları (program_atamalari) DAHİL DEĞİL — onlar haftalık
-// hedef olarak işleyen ayrı bir yapı.
+// İçerikte üç kaynak var ve üçü de aynı gün kutusuna basılıyor:
+//   • görevler (tasks)
+//   • haftalık çalışma planı blokları (calisma_bloklari)
+//   • atanmış hazır programların adımları (program_atamalari)
+// Öğrencinin haftası bunların toplamı; yalnızca görevleri basan bir çıktı
+// (eski hâli) planla çalışan öğrenciye boş kâğıt veriyordu.
 
 const GUN_ADLARI = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
@@ -34,8 +36,21 @@ function haftaBasi(tarih = new Date()) {
 const kisaTarih = (d) =>
   d.toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 
+// Plan bloğunun tarihi: planın haftası + bloğun gün indeksi (0 = Pazartesi).
+// Blok kendi tarihini taşımıyor, plana bağlı.
+function blokTarihi(haftaBasiMetni, gun) {
+  if (!haftaBasiMetni) return null;
+  const [y, a, g] = String(haftaBasiMetni).split("-").map(Number);
+  if (!y || !a || !g) return null;
+  const d = new Date(y, a - 1, g + (Number(gun) || 0));
+  return gunAnahtari(d);
+}
+
+const DILIM_ADI = { sabah: "Sabah", ogle: "Öğleden sonra", aksam: "Akşam" };
+const saatKisa = (s) => (s ? String(s).slice(0, 5) : null);
+
 export default function HaftalikProgram({
-  tasks = [], programOgeleri = [], ogrenciAdi, color: c,
+  tasks = [], programOgeleri = [], planBloklari = [], ogrenciAdi, color: c,
   variant = "buton", baslik = "Haftalık Program",
 }) {
   const [acik, setAcik] = useState(false);
@@ -60,6 +75,26 @@ export default function HaftalikProgram({
         t.description].filter(Boolean).join(" · "),
       bitti: t.is_done,
       etiket: t.kaynak_program ?? null,
+      saat: saatKisa(t.due_time),
+    })),
+    // Haftalık çalışma planı blokları. Tarih planın haftasından türüyor;
+    // zaman dilimi (sabah/öğle/akşam) etiket olarak basılıyor ki kâğıtta
+    // günün hangi bölümü olduğu görünsün.
+    ...planBloklari.map(b => ({
+      id: `b-${b.id}`,
+      tarih: blokTarihi(b.hafta_basi, b.gun),
+      baslik: b.baslik?.trim() || b.konu?.trim() || b.ders?.trim() || "Çalışma",
+      alt: [
+        b.ders, b.ders && b.konu !== b.baslik ? b.konu : null,
+        b.baslangic_saati && b.bitis_saati
+          ? `${saatKisa(b.baslangic_saati)}–${saatKisa(b.bitis_saati)}`
+          : null,
+        b.sure_dk ? `${b.sure_dk} dk` : null,
+        b.aciklama,
+      ].filter(Boolean).join(" · "),
+      bitti: b.yapildi,
+      etiket: DILIM_ADI[b.dilim] ?? null,
+      saat: saatKisa(b.baslangic_saati),
     })),
     // Gömülü hazır programların adımları (program_atamalari). Bunlarda baslik
     // alanı yok — o alan sonradan eklendi ve yalnızca yeni satırlarda var —
@@ -72,6 +107,7 @@ export default function HaftalikProgram({
       bitti: o.tamamlandi,
       etiket: o.hafta ? `${o.hafta}. hafta` : null,
       oncelik: o.oncelik ?? null,
+      saat: null,
     })),
   ];
 
@@ -80,9 +116,13 @@ export default function HaftalikProgram({
     return {
       tarih: d,
       anahtar,
+      // Saati olan önce ve saatine göre; saatsizler alfabetik. Gün
+      // içindeki sıra kâğıtta okunur olmalı — plan bloklarının saati var.
       gorevler: ogeler
         .filter(o => o.tarih === anahtar)
-        .sort((a, b) => a.baslik.localeCompare(b.baslik, "tr")),
+        .sort((a, b) =>
+          (a.saat ?? "99:99").localeCompare(b.saat ?? "99:99") ||
+          a.baslik.localeCompare(b.baslik, "tr")),
     };
   });
 
