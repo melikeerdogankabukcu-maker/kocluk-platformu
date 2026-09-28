@@ -77,8 +77,9 @@ export function useCalismaPlani(studentId, pazartesi) {
 
   useEffect(() => { yukle(); }, [yukle]);
 
-  // Planı oluştur — kopyala=true ise en son planın blokları gelir.
-  // Tek işlem sunucuda (calisma_plani_olustur).
+  // Planı oluştur — kopyala=true ise en son plandan YAPILMAYAN bloklar
+  // gelir (yapılan iş geçen haftada kalır). Tek işlem sunucuda
+  // (calisma_plani_olustur).
   const olustur = async (kopyala = true) => {
     const { hata } = await calistir(
       supabase.rpc("calisma_plani_olustur", { p_student: studentId, p_hafta: hafta, p_kopyala: kopyala }),

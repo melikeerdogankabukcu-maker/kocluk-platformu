@@ -468,15 +468,16 @@ function BosPlan({ koc, color: c, buHafta, onOlustur }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: BOSLUK.s, padding: `${BOSLUK.s}px 0` }}>
       <div style={{ fontSize: YAZI.ikincil, color: RENK.metinIkincil, lineHeight: 1.55 }}>
-        Bu hafta için plan yok. Son planı kopyalarsanız blokları, işaretleri sıfırlanmış
-        olarak gelir; geçen hafta yapılmayanlar ayrıca işaretlenir. Önceki plan yoksa boş başlar.
+        Bu hafta için plan yok. Aktarırsanız son plandan yalnızca <b>yapılmayan</b> bloklar
+        gelir, hepsi “devreden” olarak işaretlenir. Biten işler geçen haftada kalır.
+        Geçen haftanın tamamı yapıldıysa (ya da önceki plan yoksa) hafta boş açılır.
       </div>
       <div style={{ display: "flex", gap: BOSLUK.s, flexWrap: "wrap" }}>
         <button onClick={() => calistir(true)} disabled={islemde} style={{
           flex: "1 1 200px", padding: "11px 0", borderRadius: KOSE.m, border: "none",
           background: c.bg, color: "#fff", fontSize: YAZI.govde, fontWeight: 700,
           cursor: islemde ? "default" : "pointer", opacity: islemde ? 0.7 : 1,
-        }}>{islemde ? "Hazırlanıyor..." : "↻ Son plandan kopyala"}</button>
+        }}>{islemde ? "Hazırlanıyor..." : "↻ Yapılmayanları aktar"}</button>
         <button onClick={() => calistir(false)} disabled={islemde} style={{
           flex: "1 1 140px", padding: "11px 0", borderRadius: KOSE.m,
           border: `1.5px dashed ${c.mid}`, background: "transparent",

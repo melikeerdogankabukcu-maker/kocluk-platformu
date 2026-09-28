@@ -68,8 +68,8 @@ export default function PlanSifirla({ bloklar, haftaMetni, color: c, onTemizle, 
             {islemde === "sil" ? "Siliniyor..." : "🗑 Planı sil (bloklarla birlikte)"}
           </button>
           <div style={{ fontSize: YAZI.kucuk, color: RENK.metinSilik, lineHeight: 1.5 }}>
-            Hafta boşalır; sonra son plandan kopyalayarak ya da programdan aktararak
-            yeniden kurabilirsiniz.
+            Hafta boşalır; sonra son plandan kalan işleri aktararak ya da programdan
+            aktararak yeniden kurabilirsiniz.
           </div>
         </div>
 
