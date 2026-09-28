@@ -41,6 +41,7 @@ import OdevOnerisi from "../components/OdevOnerisi";
 import PanelDuzen from "../components/PanelDuzen";
 import CalismaPlani from "../components/CalismaPlani";
 import { useHaftalikPlanlar } from "../hooks/useHaftalikPlanlar";
+import { ogrencilerinBlokSayilari } from "../lib/planVerisi";
 import { GUN_KISA, DILIMLER, TURLER, ilerleme, sureMetni, saatAraligi, blokAltBilgi } from "../lib/calismaPlani";
 
 export default function TeacherDashboard({ userId, userName, role }) {
@@ -97,6 +98,10 @@ export default function TeacherDashboard({ userId, userName, role }) {
   const { planlar: haftaPlanlari, yukle: planlariTazele } = useHaftalikPlanlar(students.map(s => s.id));
   // Program Kütüphanesi'nden plana aktarım olunca plan panosu yeniden okusun
   const [planSurumu, setPlanSurumu] = useState(0);
+  // Öğrenci başına TÜM zamanların plan blok sayısı: satırdaki ilerleme
+  // çubuğu ve durum rozeti bunu da sayıyor. (Başlıktaki 📅 rozeti yalnızca
+  // BU haftayı gösteriyor; ikisi farklı sorulara cevap veriyor.)
+  const [blokSayilari, setBlokSayilari] = useState({});
 
   const loadData = async () => {
     // Yalnızca bu öğretmene bağlı öğrenciler. teacher_students tablosu henüz
@@ -201,6 +206,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
     (profileData ?? []).forEach(p => { profMap[p.id] = p; });
 
     setStudents(studentData);
+    setBlokSayilari(await ogrencilerinBlokSayilari(studentIds));
     setTaskMap(grouped);
     setProfileMap(profMap);
     setRecentTests(testData ?? []);
@@ -421,6 +427,11 @@ export default function TeacherDashboard({ userId, userName, role }) {
 
   const totalTasks = Object.values(taskMap).flat().length;
   const doneTasks  = Object.values(taskMap).flat().filter(t => t.is_done).length;
+  // Bütün öğrencilerin plan blokları (tüm zamanlar)
+  const planToplam = Object.values(blokSayilari).reduce(
+    (a, b) => ({ toplam: a.toplam + b.toplam, yapilan: a.yapilan + b.yapilan }),
+    { toplam: 0, yapilan: 0 }
+  );
 
 
   // Son testler kartı bir sekme içeriği olarak veriliyor; boşsa Bolum
@@ -479,11 +490,17 @@ export default function TeacherDashboard({ userId, userName, role }) {
                   <AlertChip type="warn"    text={`${totalTasks - doneTasks} bekliyor`} />
                 </div>
               </div>
-              {/* Stats */}
-              <div style={{ display: "flex", gap: 10 }}>
+              {/* Stats — dar ekranda alt satıra sarıyor */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(104px, 1fr))", gap: 10 }}>
                 <StatCard label="Öğrenci"     value={students.length} sub="kayıtlı"   color={c.mid} />
                 <StatCard label="Atanan görev" value={totalTasks}      sub="toplam"    color={c.mid} />
                 <StatCard label="Tamamlanan"  value={doneTasks}        sub="görev"     color={c.mid} />
+                {/* Plan bloğu: görev sayıları planı hiç anlatmıyordu.
+                    Hiç plan yoksa kart çıkmıyor. */}
+                {planToplam.toplam > 0 && (
+                  <StatCard label="Plan bloğu" value={`${planToplam.yapilan}/${planToplam.toplam}`}
+                    sub="yapıldı" color={c.mid} />
+                )}
               </div>
 
         {/* Öğrenciler — panelin ana işi, geniş blokta */}
@@ -499,8 +516,14 @@ export default function TeacherDashboard({ userId, userName, role }) {
                   </div>
                 ) : students.map((s, i) => {
                   const sTasks  = taskMap[s.id] ?? [];
-                  const done    = sTasks.filter(t => t.is_done).length;
-                  const total   = sTasks.length;
+                  const gDone   = sTasks.filter(t => t.is_done).length;
+                  const gTotal  = sTasks.length;
+                  // İlerleme = görev + haftalık plan bloğu. Yalnızca göreve
+                  // bakmak, işini plan üzerinden yapan öğrenciyi "Başlamadı"
+                  // gösteriyordu — 26 bloğu biten öğrenci boş çubukla duruyordu.
+                  const blok    = blokSayilari[s.id] ?? { toplam: 0, yapilan: 0 };
+                  const done    = gDone + blok.yapilan;
+                  const total   = gTotal + blok.toplam;
                   const pct     = total > 0 ? Math.round((done / total) * 100) : 0;
                   const alertType = total > 0 && pct === 0 ? "danger" : pct < 50 && total > 0 ? "warn" : null;
                   const isOpen    = expandedStudent === s.id;
@@ -541,7 +564,13 @@ export default function TeacherDashboard({ userId, userName, role }) {
                                   </span>
                                 );
                               })()}
-                              <span style={{ fontSize: 11, color: "#888" }}>{done}/{total} görev</span>
+                              <span title={blok.toplam > 0
+                                  ? `${gDone}/${gTotal} görev · ${blok.yapilan}/${blok.toplam} plan bloğu`
+                                  : undefined}
+                                style={{ fontSize: 11, color: "#888", whiteSpace: "nowrap" }}>
+                                {gDone}/{gTotal} görev
+                                {blok.toplam > 0 && <> · {blok.yapilan}/{blok.toplam} blok</>}
+                              </span>
                               <span style={{ fontSize: 11, color: c.mid, fontWeight: 700 }}>{isOpen ? "▲" : "▼"}</span>
                             </div>
                           </div>
