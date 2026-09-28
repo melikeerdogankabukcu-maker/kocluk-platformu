@@ -16,6 +16,10 @@
 // Sayfa numarası: en fazla 4 hane (kitapta 4 haneli sayfa nadir ama var).
 const SAYI = /^\d{1,4}$/;
 
+// Kendisi numaralı olan başlıklar: "Test 3", "BÖLÜM 2", "Ünite 10".
+// Sayfa numarası olmadan bir işe yaramıyorlar (bkz. satirMetni).
+const BASLIK_NUMARASI = /^(?:test|b[öo]l[üu]m|[üu]n[iİ]te|konu)\s*\d{1,3}$/i;
+
 // Tesseract'ın blok ağacından (blok → paragraf → satır → kelime) düz bir
 // satır listesi. Satır kavramını kendimiz y'ye göre yeniden kurmuyoruz:
 // tesseract'ın satırları zaten harf yüksekliğini biliyor, bizim tahminimiz
@@ -64,6 +68,99 @@ export function numaraCoz(belirtec) {
   // Sondaki nokta/virgül de atılıyor ("25." → "25").
   const sade = t.replace(/\s+/g, "").replace(/[.,;:·•]+$/, "");
   return SAYI.test(sade) ? sade : null;
+}
+
+// ── SÜTUNLARI BUL ───────────────────────────────────────────────
+// Gerçek içindekiler sayfalarının çoğu İKİ SÜTUN: beş kitap fotoğrafı
+// ölçüldü, dördü iki sütunlu. Tek sütun varsayan okuma, sağ sütunun
+// başlığını sol sütunun numarası sanıyor ve satırların yarısını
+// kaybediyor.
+//
+// Sütunu bulmanın yolu SAYFA NUMARASI ŞERİTLERİ: numaralar sağa dayalı
+// dizildiği için sağ kenarları (x1) birkaç piksel içinde aynı. Şerit
+// bulununca sütunun sınırı da belli oluyor.
+//
+// ── "Test 1" TUZAĞI ─────────────────────────────────────────────
+// İçindekilerde başlıkların kendisi de numaralı: "Test 1", "BÖLÜM - 3".
+// Onlar da sağa dayalı bir şerit oluşturuyor ve nokta dolgusu
+// silindikten sonra ardlarında da geniş boşluk kalıyor — yani
+// "ardından boşluk gelen sayı" ölçütü onları ayıklamıyor (denendi,
+// sütunlar ikiye katlandı).
+//
+// Ayırt eden şey DEĞERİN BÜYÜKLÜĞÜ. Gerçek veriyle ölçüldü:
+//   sayfa şeritleri  → medyan 254, 286, 26, 75, 93
+//   başlık şeritleri → medyan 5, 2, 3, 5, 4
+// Sayfa numarası şeridinin medyanı 10'un altına düşmüyor; bir
+// içindekiler sayfası neredeyse hiç 10 sayfadan kısa olmuyor.
+const SERIT_GENISLIK = 0.02;   // şerit içi x1 yayılımı (sayfa genişliğine göre)
+const SERIT_BIRLESIM = 0.04;   // bu kadar yakın iki şerit aynı sütundur
+const EN_AZ_UYE      = 3;      // bir şerit en az bu kadar numara taşır
+const EN_AZ_MEDYAN   = 10;     // başlık numaralarını ayıklayan eşik
+
+export function sutunlariBul(satirlar, genislik) {
+  const sayilar = satirlar
+    .flatMap(s => s.kelimeler.filter(k => SAYI.test(k.metin)))
+    .sort((a, b) => a.x1 - b.x1);
+
+  // Sağ kenara göre sıkı kümeler
+  const seritler = [];
+  sayilar.forEach(k => {
+    const son = seritler[seritler.length - 1];
+    if (son && k.x1 - son.ilkX1 <= genislik * SERIT_GENISLIK) son.uyeler.push(k);
+    else seritler.push({ ilkX1: k.x1, uyeler: [k] });
+  });
+
+  // Yakın şeritleri birleştir: "100" üç haneli olduğu için "99"dan
+  // biraz daha geniş; aynı sütunun numaraları iki kümeye düşebiliyor.
+  const birlesik = [];
+  seritler.forEach(c => {
+    const son = birlesik[birlesik.length - 1];
+    if (son && c.ilkX1 - son.ilkX1 <= genislik * SERIT_BIRLESIM) son.uyeler.push(...c.uyeler);
+    else birlesik.push({ ilkX1: c.ilkX1, uyeler: [...c.uyeler] });
+  });
+
+  const gecerli = birlesik.filter(c => {
+    if (c.uyeler.length < EN_AZ_UYE) return false;
+    const degerler = c.uyeler.map(k => +k.metin).sort((a, b) => a - b);
+    return degerler[Math.floor(degerler.length / 2)] >= EN_AZ_MEDYAN;
+  });
+
+  // Şerit bulunamadıysa (numaralar okunamamış) tek sütun varsayılıyor:
+  // sayfanın sağ %22'si numara şeridi kabul ediliyor.
+  if (!gecerli.length) {
+    return [{ x0: 0, x1: genislik, sayiX: Math.round(genislik * 0.78) }];
+  }
+
+  const sutunlar = [];
+  gecerli.forEach((c, i) => {
+    const sol = i === 0 ? 0 : sutunlar[i - 1].x1;
+    const sag = Math.round(Math.max(...c.uyeler.map(u => u.x1)) + genislik * 0.01);
+    sutunlar.push({
+      x0: sol,
+      x1: i === gecerli.length - 1 ? Math.max(sag, genislik) : sag,
+      sayiX: Math.max(sol, Math.round(Math.min(...c.uyeler.map(u => u.x0)) - genislik * 0.015)),
+    });
+  });
+
+  return sutunlar;
+}
+
+// Satırları sütunlara böl. Tesseract iki sütunlu sayfada sol ve sağ
+// satırı TEK satır sayıyor (aynı y'deler); sütun sınırıyla ikiye
+// ayrılıyorlar. Sütun içinde y sırası korunuyor.
+export function sutunaAyir(satirlar, sutun) {
+  return satirlar
+    .map(s => {
+      const kelimeler = s.kelimeler.filter(k => {
+        const orta = (k.x0 + k.x1) / 2;
+        return orta >= sutun.x0 && orta < sutun.x1;
+      });
+      if (!kelimeler.length) return null;
+      const y0 = Math.min(...kelimeler.map(k => k.y0));
+      const y1 = Math.max(...kelimeler.map(k => k.y1));
+      return { y0, y1, orta: (y0 + y1) / 2, yukseklik: y1 - y0, kelimeler };
+    })
+    .filter(Boolean);
 }
 
 // Sayı sütunu nerede başlıyor?
@@ -151,6 +248,19 @@ export function satirMetni(satir, numara, sutunX) {
   const sutunda = son && son.x0 >= sutunX;
   const kurtarilan = sutunda ? numaraCoz(son.metin) : null;
   if (kurtarilan) return baslik ? `${baslik} ${kurtarilan}` : kurtarilan;
+
+  // ── SAYFASIZ "Test 3" SATIRI YAZILMIYOR ───────────────────────
+  // İçindekilerde başlıklar numaralı: "Test 3", "BÖLÜM 2". Bu satırın
+  // sayfa numarası okunamadıysa metne "Test 3" diye yazmak, ayrıştırıcının
+  // başlığın kendi numarasını SAYFA sanmasına yol açıyor: koç "Test" adlı
+  // bir bölüm ve 3. sayfa görüyor. Ölçüldü: iki kitapta 12 yanlış sayfa
+  // numarasının 7'si bu satırlardan geliyordu.
+  //
+  // Numarası okunamamış böyle bir satır hiçbir bilgi taşımıyor (başlığın
+  // kendisi "Test 3"); atlanıyor. Koç metin kutusunda eksik satırı
+  // görüp ekleyebiliyor — yanlış sayfaya gönderilen bir ödevi ise
+  // fark etmesinin yolu yok.
+  if (!numara && BASLIK_NUMARASI.test(baslik)) return "";
 
   // Numaraya çevrilemeyen KISA belirteç, sayı sütununda duran OCR
   // gürültüsü:

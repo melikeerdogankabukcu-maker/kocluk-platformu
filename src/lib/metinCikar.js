@@ -1,4 +1,5 @@
 import { satirlariAl, sayiSutunuBaslangici, numaralariEsle, satirlariMetne } from "./ocrSatir";
+import { ikiliyeCevir, sayfaKutusu, HEDEF_GENISLIK } from "./goruntuIsle";
 
 // İçindekiler sayfasını metne çevirme: PDF ve fotoğraf (OCR).
 //
@@ -67,233 +68,64 @@ export async function pdfMetni(dosya, { enFazlaSayfa = 12 } = {}) {
 }
 
 // ── GÖRSEL ÖN İŞLEME ────────────────────────────────────────────
-// Ham telefon fotoğrafı doğrudan OCR'a verildiğinde sonuç vasat
-// çıkıyordu. İki nedeni var ve ikisi de düzeltilebilir:
-//
-// 1) ÇÖZÜNÜRLÜK. Tesseract ~300 DPI için ayarlı. İçindekiler sayfasının
-//    uzaktan çekilmiş fotoğrafında harfler 10-12 piksel yüksekliğinde
-//    kalıyor; bu boyutta "ı/i", "rn/m", "5/S" ayırt edilemiyor. Görsel
-//    büyütülüyor.
-//
-// 2) AYDINLATMA. Sayfanın bir yanına gölge düşüyor. Tesseract kendi
-//    içinde TEK bir eşik değeriyle siyah-beyaza indiriyor; gölgeli
-//    yarıda bütün metin siyaha, aydınlık yarıda bir kısmı beyaza
-//    gidiyor. Burada YEREL eşikleme yapılıyor: her pikselin eşiği
-//    kendi çevresinin ortalamasından hesaplanıyor, böylece gölge
-//    sınırın kendisi kayıyor ve iki yarı da okunabilir kalıyor.
-//    (Bradley–Roth yöntemi; integral görüntüyle tek geçişte.)
-const HEDEF_GENISLIK = 1800;
-
-// ── EĞİKLİK (SKEW) ──────────────────────────────────────────────
-// Elde tutulan telefonla çekilen sayfa hep birkaç derece eğik oluyor.
-// Tesseract satırları yatay varsayıyor; 2–3 derecelik bir eğiklikte bile
-// sayfanın sağ ucundaki numara, solundaki başlığın satırından taşıyor ve
-// ikisi farklı satır sayılıyor. İçindekiler sayfasında bu ölümcül:
-// başlık numarasız, numara başlıksız kalıyor, satır tamamen kayboluyor.
-//
-// Açı, YATAY İZDÜŞÜM PROFİLİNDEN bulunuyor: görüntü doğru açıyla
-// düzeltildiğinde metin satırları üst üste biner, satır aralarındaki
-// boşluklar boşalır ve satır başına düşen koyu piksel sayısının
-// değişkenliği EN YÜKSEK olur. Eğikken her satır birkaç satıra yayılır
-// ve profil düzleşir. Denenen açılar arasında değişkenliği en büyük
-// olan doğru açıdır.
-const ACI_TARAMA = 6;        // ±6 derece
-const ACI_ADIM   = 0.4;
-
-function egiklikBul(ikili, g, y) {
-  // Tarama küçültülmüş kopyada: tam çözünürlükte her açı için tüm
-  // pikselleri gezmek saniyeler alırdı, oysa açı için kabaca bir
-  // görüntü yeterli.
-  const olcek = Math.min(1, 900 / g);
-  const kg = Math.max(1, Math.round(g * olcek));
-  const ky = Math.max(1, Math.round(y * olcek));
-  const kucuk = new Uint8Array(kg * ky);
-  for (let j = 0; j < ky; j++) {
-    const kaynakJ = Math.min(y - 1, Math.round(j / olcek));
-    for (let i = 0; i < kg; i++) {
-      const kaynakI = Math.min(g - 1, Math.round(i / olcek));
-      kucuk[j * kg + i] = ikili[kaynakJ * g + kaynakI];
-    }
-  }
-
-  let enIyiAci = 0, enIyiPuan = -1;
-  const profil = new Float64Array(ky);
-
-  for (let aci = -ACI_TARAMA; aci <= ACI_TARAMA; aci += ACI_ADIM) {
-    profil.fill(0);
-    const tan = Math.tan((aci * Math.PI) / 180);
-    for (let i = 0; i < kg; i++) {
-      // Döndürmek yerine kaydırma (shear): küçük açılarda ikisi aynı
-      // sonucu veriyor ve kaydırma tek toplama işlemi.
-      const kaydir = Math.round((i - kg / 2) * tan);
-      for (let j = 0; j < ky; j++) {
-        const hedef = j + kaydir;
-        if (hedef < 0 || hedef >= ky) continue;
-        profil[hedef] += kucuk[j * kg + i];
-      }
-    }
-    // Komşu satırlar arasındaki farkın karesi: keskin satır/boşluk
-    // geçişi yüksek puan verir.
-    let puan = 0;
-    for (let j = 1; j < ky; j++) {
-      const d = profil[j] - profil[j - 1];
-      puan += d * d;
-    }
-    if (puan > enIyiPuan) { enIyiPuan = puan; enIyiAci = aci; }
-  }
-
-  return enIyiAci;
-}
-
-// ── NOKTA DOLGUSUNU SİL ─────────────────────────────────────────
-// İçindekiler sayfasındaki "......." dolgusu OCR'ın en büyük düşmanı.
-// Tesseract bu noktaları nokta olarak görmüyor, HARFE çeviriyor; üstelik
-// ürettiği harf yığını sayfa numarasının bağlamını da bozuyor ve
-// numaranın kendisi harfe dönüyor ("25" → "ZD", "35" → "ASD").
-//
-// Gerçek bir kitap sayfasıyla ölçüldü: dolgu silinmeden okuma güveni
-// %25 ve altı satırın altısı da bozuk; silindikten sonra güven %95 ve
-// altı satırın altısı da başlığıyla, numarasıyla eksiksiz.
-//
-// ── YALNIZCA DİZİ HALİNDEKİLER SİLİNİYOR ────────────────────────
-// Bir noktayı "dolgu" yapan şey küçük olması değil, YAN YANA DİZİLMESİ.
-// Tek başına duran küçük işaretlere dokunulmuyor; bu sayede "02."
-// içindeki nokta, "Kütle - Hacim" ile "Madde Özellikleri - Karma"
-// içindeki tireler ve "Adesyon, Kohezyon," virgülleri yerinde kalıyor.
-// Türkçenin noktalı harfleri de güvende: "i" harfinin noktası, gövdesi
-// aynı sütunlarda olduğu için tek bir yüksek kutu sayılıyor, küçük
-// kare bir leke değil.
-const DIZI_ESIGI = 4;          // en az bu kadar ardışık nokta
-const NOKTA_ORANI = 0.38;      // satır yüksekliğine göre en büyük nokta
-
-function noktaDolgusunuSil(ikili, g, y) {
-  // 1) Satır bantları — yatay izdüşümde mürekkepli aralıklar
-  const bantlar = [];
-  let bas = -1;
-  for (let j = 0; j <= y; j++) {
-    let dolu = false;
-    if (j < y) {
-      let s = 0;
-      for (let i = 0; i < g; i++) { s += ikili[j * g + i]; if (s > g * 0.002) { dolu = true; break; } }
-    }
-    if (dolu && bas < 0) bas = j;
-    if (!dolu && bas >= 0) { if (j - bas >= 6) bantlar.push([bas, j - 1]); bas = -1; }
-  }
-
-  let silinen = 0;
-  for (const [b0, b1] of bantlar) {
-    const esik = (b1 - b0 + 1) * NOKTA_ORANI;
-
-    // 2) Bant içindeki sütun koşuları (ardışık mürekkepli sütunlar)
-    const kosular = [];
-    let k0 = -1;
-    for (let i = 0; i <= g; i++) {
-      let dolu = false;
-      if (i < g) for (let j = b0; j <= b1; j++) if (ikili[j * g + i]) { dolu = true; break; }
-      if (dolu && k0 < 0) k0 = i;
-      if (!dolu && k0 >= 0) { kosular.push([k0, i - 1]); k0 = -1; }
-    }
-
-    // 3) Küçük ve kareye yakın koşular nokta adayı
-    const adaylar = kosular.map(([x0, x1]) => {
-      let y0 = b1, y1 = b0;
-      for (let i = x0; i <= x1; i++)
-        for (let j = b0; j <= b1; j++)
-          if (ikili[j * g + i]) { if (j < y0) y0 = j; if (j > y1) y1 = j; }
-      const w = x1 - x0 + 1, h = y1 - y0 + 1;
-      const oran = w / h;
-      return { x0, x1, y0, y1, nokta: w <= esik && h <= esik && oran >= 0.45 && oran <= 2.2 };
-    });
-
-    // 4) Ardışık dizileri sil
-    let i = 0;
-    while (i < adaylar.length) {
-      if (!adaylar[i].nokta) { i++; continue; }
-      let son = i;
-      while (son + 1 < adaylar.length && adaylar[son + 1].nokta) son++;
-      if (son - i + 1 >= DIZI_ESIGI) {
-        for (let k = i; k <= son; k++) {
-          const a = adaylar[k];
-          for (let x = a.x0; x <= a.x1; x++)
-            for (let j = a.y0; j <= a.y1; j++) ikili[j * g + x] = 0;
-          silinen++;
-        }
-      }
-      i = son + 1;
-    }
-  }
-  return silinen;
-}
+// Piksel matematiği (yerel eşikleme, eğiklik, nokta dolgusu silme)
+// goruntuIsle.js'de ve TARAYICIDAN BAĞIMSIZ: aynı kod Node'da gerçek
+// kitap fotoğraflarıyla çalıştırılıp ölçülebiliyor. Burada kalan iş
+// tarayıcıya özgü olan: dosyayı çözmek, büyütmek, döndürmek.
+// Sayfa aramak için küçük bir kopya yeter: karar blok ortalamalarından
+// veriliyor, tam çözünürlükte çalışmak boşa iş.
+const TARAMA_GENISLIK = 600;
 
 async function gorseliHazirla(dosya) {
   // Tarayıcı API'leri: bu yol yalnızca istemcide çalışıyor.
   const bitmap = await createImageBitmap(dosya);
 
+  // ── 1) SAYFAYI BUL ────────────────────────────────────────────
+  // Kare sayfadan geniş: masa, ekran kenarı, gölge de içinde. Bunlar
+  // satır bantlarını ve yerel eşiği bozuyor (ayrıntı goruntuIsle.js'de).
+  // Önce sayfanın sınırları bulunuyor, işlem onun içinde yapılıyor.
+  let kaynak = { x: 0, y: 0, genislik: bitmap.width, yukseklik: bitmap.height };
+  try {
+    const tOlcek = Math.min(1, TARAMA_GENISLIK / bitmap.width);
+    const tg = Math.max(1, Math.round(bitmap.width * tOlcek));
+    const ty = Math.max(1, Math.round(bitmap.height * tOlcek));
+    const tarama = document.createElement("canvas");
+    tarama.width = tg; tarama.height = ty;
+    const tctx = tarama.getContext("2d", { willReadFrequently: true });
+    tctx.drawImage(bitmap, 0, 0, tg, ty);
+    const kucuk = tctx.getImageData(0, 0, tg, ty);
+    const kutu = sayfaKutusu({ data: kucuk.data, genislik: tg, yukseklik: ty });
+    if (kutu.kirpildi) {
+      kaynak = {
+        x: Math.round(kutu.x / tOlcek),
+        y: Math.round(kutu.y / tOlcek),
+        genislik: Math.round(kutu.genislik / tOlcek),
+        yukseklik: Math.round(kutu.yukseklik / tOlcek),
+      };
+    }
+  } catch {
+    // Sayfa bulunamadıysa tüm kareyle devam: eski davranış.
+  }
+
+  // ── 2) BÜYÜT ──────────────────────────────────────────────────
   // En fazla 3 kat: daha fazlası ayrıntı katmıyor, yalnızca OCR'ı
-  // yavaşlatıyor ve belleği şişiriyor.
-  const olcek = Math.max(1, Math.min(3, HEDEF_GENISLIK / bitmap.width));
-  const g = Math.round(bitmap.width * olcek);
-  const y = Math.round(bitmap.height * olcek);
+  // yavaşlatıyor ve belleği şişiriyor. Ölçekleme tuvale bırakılıyor —
+  // tarayıcının çift doğrusal süzgeci hem hızlı hem iyi.
+  const olcek = Math.max(1, Math.min(3, HEDEF_GENISLIK / kaynak.genislik));
+  const g = Math.round(kaynak.genislik * olcek);
+  const y = Math.round(kaynak.yukseklik * olcek);
 
   const tuval = document.createElement("canvas");
   tuval.width = g; tuval.height = y;
   const ctx = tuval.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, 0, 0, g, y);
+  // Kaynaktan KIRPARAK çiziyor: ayrı bir kırpma adımı gerekmiyor.
+  ctx.drawImage(bitmap, kaynak.x, kaynak.y, kaynak.genislik, kaynak.yukseklik, 0, 0, g, y);
   bitmap.close?.();
 
   const gorsel = ctx.getImageData(0, 0, g, y);
-  const p = gorsel.data;
-
-  // Gri tonlama + integral görüntü (her noktada sol-üst dikdörtgenin
-  // toplamı). Integral sayesinde pencere ortalaması pencere boyutundan
-  // bağımsız, sabit maliyetle bulunuyor.
-  const gri = new Uint8Array(g * y);
-  const integral = new Float64Array((g + 1) * (y + 1));
-  for (let j = 0; j < y; j++) {
-    let satirToplam = 0;
-    for (let i = 0; i < g; i++) {
-      const k = (j * g + i) * 4;
-      const v = (p[k] * 0.299 + p[k + 1] * 0.587 + p[k + 2] * 0.114) | 0;
-      gri[j * g + i] = v;
-      satirToplam += v;
-      integral[(j + 1) * (g + 1) + (i + 1)] = integral[j * (g + 1) + (i + 1)] + satirToplam;
-    }
-  }
-
-  // Pencere genişliğin ~1/16'sı; metin satırından belirgin biçimde
-  // büyük olmalı ki harfin kendi karanlığı eşiği aşağı çekmesin.
-  const yari = Math.max(8, Math.round(g / 32));
-  const T = 0.15;                       // ortalamanın %15 altı → siyah
-
-  const ikili = new Uint8Array(g * y);      // 1 = koyu (metin)
-  for (let j = 0; j < y; j++) {
-    const j1 = Math.max(j - yari, 0), j2 = Math.min(j + yari, y - 1);
-    for (let i = 0; i < g; i++) {
-      const i1 = Math.max(i - yari, 0), i2 = Math.min(i + yari, g - 1);
-      const alan = (i2 - i1 + 1) * (j2 - j1 + 1);
-      const toplam =
-        integral[(j2 + 1) * (g + 1) + (i2 + 1)]
-        - integral[j1 * (g + 1) + (i2 + 1)]
-        - integral[(j2 + 1) * (g + 1) + i1]
-        + integral[j1 * (g + 1) + i1];
-      ikili[j * g + i] = gri[j * g + i] * alan < toplam * (1 - T) ? 1 : 0;
-    }
-  }
-
-  // Eğiklik AÇISI nokta silmeden ÖNCE ölçülüyor: nokta dolguları tam
-  // satır çizgisi üzerinde duruyor ve izdüşüm profilini güçlendiriyor.
-  const aci = egiklikBul(ikili, g, y);
-
-  // Nokta dolgusunu sil, sonra pikselleri yaz.
-  noktaDolgusunuSil(ikili, g, y);
-
-  for (let n = 0; n < g * y; n++) {
-    const k = n * 4, v = ikili[n] ? 0 : 255;
-    p[k] = p[k + 1] = p[k + 2] = v;
-    p[k + 3] = 255;
-  }
+  const { aci } = ikiliyeCevir({ data: gorsel.data, genislik: g, yukseklik: y });
   ctx.putImageData(gorsel, 0, 0);
 
   // Eğiklik düzeltme. Küçük açılarda dokunmuyoruz: yeniden örnekleme
@@ -313,9 +145,7 @@ async function gorseliHazirla(dosya) {
   dctx.fillRect(0, 0, g, y);
   dctx.translate(g / 2, y / 2);
   // İŞARET: egiklikBul zaten DÜZELTME açısını döndürüyor (sayfa +2°
-  // eğikse -2° veriyor), olduğu gibi uygulanıyor. Bir kez daha
-  // negatiflemek eğikliği düzeltmek yerine ikiye katlardı — sınamada
-  // yakalandı, arayüzden "hâlâ kötü"den başka bir belirti vermezdi.
+  // eğikse -2° veriyor), olduğu gibi uygulanıyor.
   dctx.rotate((aci * Math.PI) / 180);
   dctx.drawImage(tuval, -g / 2, -y / 2);
 
@@ -399,7 +229,7 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir } = {}) {
 
       const sutunX = sayiSutunuBaslangici(satirlar, olcu.genislik);
       const genislik = Math.max(1, olcu.genislik - sutunX);
-      let sayiKelimeleri = [];
+      let sayiKelimeleri;
       try {
         await worker.setParameters({
           tessedit_char_whitelist: RAKAMLAR,
