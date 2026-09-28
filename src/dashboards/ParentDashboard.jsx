@@ -5,6 +5,7 @@ import { branslariEkle, kocEtiketi } from "../lib/branslar";
 import { COLORS } from "../lib/theme";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { computeTopicProgress } from "../lib/progressHelpers";
+import { ogrencininBloklari } from "../lib/planVerisi";
 import { fmtTime, lessonStatusStyle, lessonTypeLabel } from "../lib/lessonHelpers";
 import { useAnaliz } from "../hooks/useAnaliz";
 import { useLessons } from "../hooks/useLessons";
@@ -31,6 +32,7 @@ export default function ParentDashboard({ userId, userName }) {
   const c = COLORS.parent;
   const [child, setChild] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [cocukBloklari, setCocukBloklari] = useState([]);
   const [loading, setLoading] = useState(true);
   // Mesajlaşma kişi listesi. Aşağıdaki effect içinde doldurulduğu için
   // tanımı effect'ten ÖNCE olmak zorunda — sonra tanımlansaydı setOgretmenler
@@ -63,6 +65,9 @@ export default function ParentDashboard({ userId, userName }) {
 
       setChild(studentData);
       setTasks(taskData ?? []);
+      // Çocuğun haftalık plan blokları: konu ilerlemesi görevlerle birlikte
+      // bunlardan hesaplanıyor.
+      setCocukBloklari((await ogrencininBloklari(studentId)).bloklar);
       setCocukProfil(profData ?? null);
 
       const ogrIdleri = (bagData ?? []).map(b => b.teacher_id);
@@ -205,7 +210,7 @@ export default function ParentDashboard({ userId, userName }) {
   const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
   // Konu ilerlemesi: görevlerden otomatik hesaplanır (elle giriş kaldırıldı)
-  const progressList = computeTopicProgress(tasks);
+  const progressList = computeTopicProgress(tasks, cocukBloklari);
 
   // Yazışılabilecek kişiler: çocuk ve koçları. Çocuk EN ÜSTTE — velinin
   // en doğal muhatabı o. Buraya kadar geldiysek child zaten dolu.

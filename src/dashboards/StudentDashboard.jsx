@@ -6,7 +6,9 @@ import { odevDosyalari, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../
 import { COLORS } from "../lib/theme";
 import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
-import { computeTopicProgress } from "../lib/progressHelpers";
+import { computeTopicProgress, planOzeti } from "../lib/progressHelpers";
+import { ogrencininBloklari } from "../lib/planVerisi";
+import { sureMetni } from "../lib/calismaPlani";
 import { testOzeti, testOzetMetni } from "../lib/testHelpers";
 import { fmtTime } from "../lib/lessonHelpers";
 import { useAnaliz } from "../hooks/useAnaliz";
@@ -43,6 +45,8 @@ export default function StudentDashboard({ userId, userName }) {
   const { sinavTurleri, examSubjectsOf, topicsOf, dersinTuru } = useTopics();
 
   const [tasks,        setTasks]        = useState([]);
+  // Haftalık plan blokları: konu ilerlemesi ve özet kartları için.
+  const [planBloklari, setPlanBloklari] = useState({ bloklar: [], buHafta: [] });
   const [testSessions, setTestSessions] = useState([]);
   const [examResults,  setExamResults]  = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -151,6 +155,7 @@ export default function StudentDashboard({ userId, userName }) {
       ["gorevler", "testler", "sinavlar", "profil",
        "bagli ogretmenler", "veli baglantisi"]);
     setTasks(t.data ?? []);
+    setPlanBloklari(await ogrencininBloklari(userId));
     setTestSessions(ts.data ?? []);
     setExamResults(er.data ?? []);
     // Bağlı öğretmenler; tablo yoksa (migration çalışmadıysa) hepsine düşülür
@@ -371,8 +376,9 @@ export default function StudentDashboard({ userId, userName }) {
     </>
   );
 
-  // Konu ilerlemesi: görevlerden otomatik hesaplanır (elle giriş kaldırıldı)
-  const progressList = computeTopicProgress(tasks);
+  // Konu ilerlemesi: görevler + haftalık plan blokları (elle giriş yok)
+  const progressList = computeTopicProgress(tasks, planBloklari.bloklar);
+  const haftaPlani = planOzeti(planBloklari.buHafta);
 
   // Çözülen testler takvimde kayıt günlerinde görünür
   const testsForCalendar = testSessions.map(t => ({ ...t, date: (t.created_at ?? "").split("T")[0] }));
@@ -926,10 +932,20 @@ export default function StudentDashboard({ userId, userName }) {
                   girişte görülen ama sıranın önüne geçmeyen bir yer. */}
               <HaftaninSozu color={c} />
 
-              {/* İstatistikler */}
-              <div style={{ display: "flex", gap: 10 }}>
+              {/* İstatistikler — dar ekranda alt satıra sarıyor */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(104px, 1fr))", gap: 10 }}>
                 <StatCard label="Bu hafta soru" value={totalQuestionsWk || "—"} sub="çözüldü"    color={c.mid} />
                 <StatCard label="Doğruluk"      value={accuracyWk != null ? `%${accuracyWk}` : "—"} sub="bu hafta" color={c.mid} />
+                {/* Plan uyumu: plan yoksa "—" yazıyor. "%0" yazmak,
+                    yapılmamış bir iş ile hiç verilmemiş bir haftayı aynı
+                    gösterirdi. */}
+                <StatCard label="Plan uyumu"
+                  value={haftaPlani.oran != null ? `%${haftaPlani.oran}` : "—"}
+                  sub={haftaPlani.toplam ? `${haftaPlani.yapilan}/${haftaPlani.toplam} blok` : "bu hafta plan yok"}
+                  color={c.mid} />
+                <StatCard label="Çalışma süresi"
+                  value={haftaPlani.dakika ? sureMetni(haftaPlani.dakika) : "—"}
+                  sub="bu hafta" color={c.mid} />
                 <StatCard label="Sınav kaydı"   value={examResults.length || "—"} sub="toplam"   color={c.mid} />
               </div>
 
@@ -1320,6 +1336,21 @@ export default function StudentDashboard({ userId, userName }) {
                           </div>
                           <div style={{ fontSize: 12, color: c.text, marginTop: 4, fontWeight: 600 }}>
                             {analiz.gorev_istatistik.tamamlanan}/{analiz.gorev_istatistik.toplam} görev · %{analiz.gorev_istatistik.oran}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Haftalık plan — görevden ayrı bir çalışma kaydı */}
+                      {analiz.plan_istatistik?.oran != null && (
+                        <div style={{ marginTop: 8, padding: "10px 14px", background: "#fafaf8", borderRadius: 10 }}>
+                          <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>Haftalık plan tamamlanma oranı</div>
+                          <div style={{ height: 6, borderRadius: 99, background: "#f0ede8", overflow: "hidden" }}>
+                            <div style={{ width: `${analiz.plan_istatistik.oran}%`, height: "100%", borderRadius: 99, background: c.mid, transition: "width .6s ease" }} />
+                          </div>
+                          <div style={{ fontSize: 12, color: c.text, marginTop: 4, fontWeight: 600 }}>
+                            {analiz.plan_istatistik.yapilan}/{analiz.plan_istatistik.toplam} blok · %{analiz.plan_istatistik.oran}
+                            {analiz.plan_istatistik.calisilan_dk > 0 &&
+                              ` · ${sureMetni(analiz.plan_istatistik.calisilan_dk)} çalışıldı`}
                           </div>
                         </div>
                       )}

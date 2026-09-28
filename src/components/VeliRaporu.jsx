@@ -237,6 +237,13 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
                   `${analiz.gorev_istatistik?.tamamlanan ?? 0}/${analiz.gorev_istatistik?.toplam ?? 0}`)}
                 {analiz.odev_istatistik?.oran != null &&
                   kutu("Ödev", `%${analiz.odev_istatistik.oran}`, `${analiz.odev_istatistik.teslim_edilen} teslim`)}
+                {/* Haftalık plan — oran yoksa (plan hiç verilmemişse) kutu
+                    da çıkmıyor; "%0" yazmak yanlış olurdu. */}
+                {analiz.plan_istatistik?.oran != null &&
+                  kutu("Plan", `%${analiz.plan_istatistik.oran}`,
+                    `${analiz.plan_istatistik.yapilan}/${analiz.plan_istatistik.toplam} blok`)}
+                {analiz.plan_istatistik?.calisilan_dk > 0 &&
+                  kutu("Çalışma", `${Math.round(analiz.plan_istatistik.calisilan_dk / 60)} sa`, "bildirilen süre")}
                 {kutu("Ders", analiz.ders_istatistik?.tamamlanan ?? 0, "tamamlandı")}
                 {analiz.haftalik_istatistik?.soru_sayisi > 0 &&
                   kutu("Bu hafta", analiz.haftalik_istatistik.soru_sayisi, "soru")}
