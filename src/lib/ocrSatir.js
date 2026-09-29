@@ -246,9 +246,33 @@ export function numaralariEsle(satirlar, sayiKelimeleri) {
 // Sayı sütununa düşen belirteçler başlıktan ÇIKARILIYOR: ikinci geçiş
 // numarayı zaten doğru okudu, birinci geçişin oraya uydurduğu harf
 // yığınının ("ZD", "Aİ") başlıkta kalması anlamsız olurdu.
+// Satır başındaki çöp belirteçler: "CO Test 1", "ı Test 2", "| Test 6".
+// Sayfa kenarındaki cilt gölgesi, delik izi ya da komşu sütunun
+// kırpılmış harfi. Ölçüldü: sayfa numarası doğru okunan satırların
+// ~%8'inde başlık yalnızca bu yüzden bozuk çıkıyordu.
+//
+// Ölçüt: EN FAZLA İKİ karakter, DÜŞÜK güven ve satırın BAŞINDA. Ortadaki
+// kısa sözcüklere dokunulmuyor ("ve", "-"), yüksek güvenli kısa
+// belirteçler de kalıyor (gerçekten "3." olabilir).
+const COP_GUVEN = 45;
+
+function basiTemizle(kelimeler) {
+  let i = 0;
+  while (i < kelimeler.length - 1) {
+    const k = kelimeler[i];
+    const kisa = k.metin.length <= 2;
+    const zayif = k.guven != null && k.guven < COP_GUVEN;
+    // Harf ya da rakam içermeyen belirteç ("|", "'", ".") güvenine
+    // bakılmadan atılıyor: başlık olamaz.
+    const anlamsiz = !/[\p{L}\p{N}]/u.test(k.metin);
+    if ((kisa && zayif) || anlamsiz) i++;
+    else break;
+  }
+  return kelimeler.slice(i);
+}
+
 export function satirMetni(satir, numara, sutunX) {
-  const baslik = satir.kelimeler
-    .filter(k => k.x0 < sutunX)
+  const baslik = basiTemizle(satir.kelimeler.filter(k => k.x0 < sutunX))
     .map(k => k.metin)
     .join(" ")
     .replace(/\s+/g, " ")

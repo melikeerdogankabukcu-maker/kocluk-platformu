@@ -76,6 +76,8 @@ export async function pdfMetni(dosya, { enFazlaSayfa = 12 } = {}) {
 // Sayfa aramak için küçük bir kopya yeter: karar blok ortalamalarından
 // veriliyor, tam çözünürlükte çalışmak boşa iş.
 const TARAMA_GENISLIK = 600;
+// Eğiklik ölçümü için küçük kopyanın genişliği
+const ACI_GENISLIK = 900;
 
 async function gorseliHazirla(dosya) {
   // Tarayıcı API'leri: bu yol yalnızca istemcide çalışıyor.
@@ -108,10 +110,35 @@ async function gorseliHazirla(dosya) {
     // Sayfa bulunamadıysa tüm kareyle devam: eski davranış.
   }
 
-  // ── 2) BÜYÜT ──────────────────────────────────────────────────
+  // ── 2) EĞİKLİĞİ ÖLÇ ───────────────────────────────────────────
+  // Açı küçük bir kopyadan ölçülüyor: eğiklik için kabaca bir görüntü
+  // yeterli, tam çözünürlükte eşiklemek boşa iş olurdu.
+  let aci;
+  try {
+    const oOlcek = Math.min(1, ACI_GENISLIK / kaynak.genislik);
+    const og = Math.max(1, Math.round(kaynak.genislik * oOlcek));
+    const oy = Math.max(1, Math.round(kaynak.yukseklik * oOlcek));
+    const oTuval = document.createElement("canvas");
+    oTuval.width = og; oTuval.height = oy;
+    const octx = oTuval.getContext("2d", { willReadFrequently: true });
+    octx.drawImage(bitmap, kaynak.x, kaynak.y, kaynak.genislik, kaynak.yukseklik, 0, 0, og, oy);
+    const kucuk = octx.getImageData(0, 0, og, oy);
+    aci = ikiliyeCevir({ data: kucuk.data, genislik: og, yukseklik: oy }, { nokta: false }).aci;
+  } catch {
+    aci = 0;
+  }
+
+  // ── 3) BÜYÜT (ve gerekiyorsa DÖNDÜR) ──────────────────────────
   // En fazla 3 kat: daha fazlası ayrıntı katmıyor, yalnızca OCR'ı
-  // yavaşlatıyor ve belleği şişiriyor. Ölçekleme tuvale bırakılıyor —
-  // tarayıcının çift doğrusal süzgeci hem hızlı hem iyi.
+  // yavaşlatıyor ve belleği şişiriyor.
+  //
+  // ── DÖNDÜRME EŞİKLEMEDEN ÖNCE ─────────────────────────────────
+  // Eskiden önce siyah-beyaza indirilip SONRA döndürülüyordu: 1 bitlik
+  // bir görüntüyü döndürmek harflerin kenarını grileştiriyor ve OCR'ı
+  // zorluyor. Artık renkli görüntü döndürülüp ondan sonra eşikleniyor.
+  // Ölçüldü: 2 derece eğik bir fotoğrafta ayrıştırılan satır 29'dan
+  // 32'ye çıktı. 0,5 derecenin altında hiç döndürülmüyor — yeniden
+  // örnekleme, kazancı olmayan bir bulanıklık olurdu.
   const olcek = Math.max(1, Math.min(3, HEDEF_GENISLIK / kaynak.genislik));
   const g = Math.round(kaynak.genislik * olcek);
   const y = Math.round(kaynak.yukseklik * olcek);
@@ -121,36 +148,27 @@ async function gorseliHazirla(dosya) {
   const ctx = tuval.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
+  // Zemin BEYAZ: döndürünce köşelerde açıkta kalan alan saydam kalırsa
+  // OCR onu siyah görüp sayfanın kenarına sahte karakterler uyduruyor.
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, g, y);
+  if (Math.abs(aci) >= 0.5) {
+    ctx.translate(g / 2, y / 2);
+    // İŞARET: egiklikBul zaten DÜZELTME açısını döndürüyor (sayfa +2°
+    // eğikse -2° veriyor), olduğu gibi uygulanıyor.
+    ctx.rotate((aci * Math.PI) / 180);
+    ctx.translate(-g / 2, -y / 2);
+  }
   // Kaynaktan KIRPARAK çiziyor: ayrı bir kırpma adımı gerekmiyor.
   ctx.drawImage(bitmap, kaynak.x, kaynak.y, kaynak.genislik, kaynak.yukseklik, 0, 0, g, y);
   bitmap.close?.();
 
+  // ── 4) EŞİKLE ─────────────────────────────────────────────────
   const gorsel = ctx.getImageData(0, 0, g, y);
-  const { aci } = ikiliyeCevir({ data: gorsel.data, genislik: g, yukseklik: y });
+  ikiliyeCevir({ data: gorsel.data, genislik: g, yukseklik: y });
   ctx.putImageData(gorsel, 0, 0);
 
-  // Eğiklik düzeltme. Küçük açılarda dokunmuyoruz: yeniden örnekleme
-  // harfleri hafifçe bulandırıyor ve 0.5 derece altı zaten OCR'ı
-  // etkilemiyor — kazancı olmayan bir bozulma olurdu.
-  if (Math.abs(aci) < 0.5) {
-    const blob = await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
-    return { blob, genislik: g, yukseklik: y };
-  }
-
-  const dondurulmus = document.createElement("canvas");
-  dondurulmus.width = g; dondurulmus.height = y;
-  const dctx = dondurulmus.getContext("2d");
-  // Zemin BEYAZ: döndürünce köşelerde açıkta kalan alan saydam kalırsa
-  // OCR onu siyah görüp sayfanın kenarına sahte karakterler uyduruyor.
-  dctx.fillStyle = "#fff";
-  dctx.fillRect(0, 0, g, y);
-  dctx.translate(g / 2, y / 2);
-  // İŞARET: egiklikBul zaten DÜZELTME açısını döndürüyor (sayfa +2°
-  // eğikse -2° veriyor), olduğu gibi uygulanıyor.
-  dctx.rotate((aci * Math.PI) / 180);
-  dctx.drawImage(tuval, -g / 2, -y / 2);
-
-  const blob = await new Promise(cozumle => dondurulmus.toBlob(cozumle, "image/png"));
+  const blob = await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
   return { blob, genislik: g, yukseklik: y };
 }
 

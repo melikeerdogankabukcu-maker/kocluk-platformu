@@ -398,6 +398,40 @@ export function ikiliyeCevir({ data, genislik: g, yukseklik: y }, { nokta = true
 
 export { HEDEF_GENISLIK, satirBantlari };
 
+// Görüntüyü açıyla döndür — SAF, zemin BEYAZ.
+//
+// Tarayıcıda bu iş tuvale bırakılıyor; burada Node ölçümü aynı adımları
+// izlesin diye var. Çift doğrusal örnekleme: 1 bitlik (siyah-beyaz) bir
+// görüntüyü döndürmek gri kenarlar üretir, o yüzden döndürme
+// EŞİKLEMEDEN ÖNCE yapılmalı — sıra bozulursa harflerin kenarı grileşip
+// OCR'ı zorluyor.
+export function dondur({ data, genislik: g, yukseklik: y }, aci) {
+  if (!aci) return { data, genislik: g, yukseklik: y };
+  const r = (aci * Math.PI) / 180;
+  const cos = Math.cos(r), sin = Math.sin(r);
+  const cikti = new Uint8ClampedArray(g * y * 4).fill(255);
+  const mx = g / 2, my = y / 2;
+  for (let j = 0; j < y; j++) {
+    for (let i = 0; i < g; i++) {
+      // Hedeften kaynağa ters dönüşüm
+      const dx = i - mx, dy = j - my;
+      const sx = mx + dx * cos + dy * sin;
+      const sy = my - dx * sin + dy * cos;
+      if (sx < 0 || sy < 0 || sx >= g - 1 || sy >= y - 1) continue;
+      const i0 = Math.floor(sx), j0 = Math.floor(sy);
+      const fx = sx - i0, fy = sy - j0;
+      for (let c = 0; c < 3; c++) {
+        const a = data[(j0 * g + i0) * 4 + c], b = data[(j0 * g + i0 + 1) * 4 + c];
+        const d = data[((j0 + 1) * g + i0) * 4 + c], e = data[((j0 + 1) * g + i0 + 1) * 4 + c];
+        cikti[(j * g + i) * 4 + c] =
+          a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + d * (1 - fx) * fy + e * fx * fy;
+      }
+      cikti[(j * g + i) * 4 + 3] = 255;
+    }
+  }
+  return { data: cikti, genislik: g, yukseklik: y };
+}
+
 // Çift doğrusal büyütme — SAF. Tarayıcıda bu iş tuvale bırakılıyor
 // (daha hızlı); burada yalnızca Node'daki ölçüm aynı boyutlarla
 // çalışsın diye var. İkisinin süzgeci birebir aynı değil, ama ölçümde
