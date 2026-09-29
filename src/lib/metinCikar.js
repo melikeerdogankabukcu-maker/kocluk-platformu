@@ -1,7 +1,7 @@
 import { satirlariAl, sayiKelimeleri, seritleriBul, tekSutun, sutunaAyir,
-  numaralariEsle, satirlariMetne, olukBul } from "./ocrSatir";
+  numaralariEsle, satirlariMetne } from "./ocrSatir";
 import { ikiliyeCevir, sayfaKutusu, perspektifDuzelt, dortgenOlcusu, dikdortgenMi,
-  HEDEF_GENISLIK } from "./goruntuIsle";
+  metinBolgeleri, sutunAraliklari, HEDEF_GENISLIK } from "./goruntuIsle";
 
 // İçindekiler sayfasını metne çevirme: PDF ve fotoğraf (OCR).
 //
@@ -75,20 +75,46 @@ export async function pdfMetni(dosya, { enFazlaSayfa = 12 } = {}) {
 // kitap fotoğraflarıyla çalıştırılıp ölçülebiliyor. Burada kalan iş
 // tarayıcıya özgü olan: dosyayı çözmek, büyütmek, döndürmek.
 
-// ── GÖRÜNTÜ İKİ KEZ KURULABİLİR OLMALI ──────────────────────────
-// Nokta dolgusunu sütun sütun silmek gerekiyor (iki sütunlu sayfada
-// satır bantları yoksa dolgu hiç silinmiyor, bkz. goruntuIsle.js) ama
-// sütunların nerede olduğu ancak İLK OKUMADAN SONRA belli oluyor.
-// Bu yüzden renkli kopya saklanıyor: sütunlar belli olunca görüntü
-// aynı tuvalde yeniden eşikleniyor.
+// ── EŞİKLE, SÜTUNLARI BUL, GEREKİRSE YENİDEN EŞİKLE ─────────────
+// Nokta dolgusu sütun sütun silinmek zorunda: iki sütunun satırları
+// hizasız olduğu için sayfanın tamamına bakınca satır bantları
+// çöküyor ve dolgu hiç silinmiyor (bkz. goruntuIsle.js). Sütunların
+// nerede olduğu METİN BÖLGELERİNDEN, yani OCR'dan önce, geometriyle
+// bulunuyor — okumaya gerek yok.
+//
+// Bulunursa görüntü aynı tuvalde bir kez daha eşikleniyor: dolgu bu
+// kez hem tüm sayfada hem her sütunda ayrı taranıyor. Ölçüldü (iki
+// sütunlu gerçek fotoğraf): silinen nokta 0 → 3167, OCR güveni
+// 42 → 66.
 async function ikiliBlob(tuval, ctx, renkli, g, y) {
-  const kur = async (sutunlar) => {
+  const esikle = (sutunlar) => {
     const veri = new ImageData(new Uint8ClampedArray(renkli), g, y);
     ikiliyeCevir({ data: veri.data, genislik: g, yukseklik: y }, sutunlar ? { sutunlar } : {});
-    ctx.putImageData(veri, 0, 0);
-    return await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
+    return veri;
   };
-  return { blob: await kur(null), genislik: g, yukseklik: y, sutunlariUygula: kur };
+
+  let veri = esikle(null);
+  let okumaKutulari = null;
+  try {
+    const ikili = new Uint8Array(g * y);
+    for (let n = 0; n < g * y; n++) ikili[n] = veri.data[n * 4] < 128 ? 1 : 0;
+    const ayirma = sutunAraliklari(metinBolgeleri(ikili, g, y), g);
+    if (ayirma) {
+      okumaKutulari = ayirma.kutular;
+      // Tüm sayfa DA taranıyor: sütun bölmeleri dışında kalan lekeler
+      // (çerçeve gürültüsü) ancak bu geçişte temizleniyor. Ölçüldü,
+      // yalnız sütunlara bakmak bir fotoğrafta silinen noktayı
+      // 3103'ten 1596'ya düşürüp güveni 63'ten 49'a indirmişti.
+      veri = esikle([[0, g], ...ayirma.araliklar]);
+    }
+  } catch {
+    // Bölge bulunamadıysa tek parça devam: eski davranış.
+    okumaKutulari = null;
+  }
+
+  ctx.putImageData(veri, 0, 0);
+  const blob = await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
+  return { blob, genislik: g, yukseklik: y, okumaKutulari };
 }
 
 // Kullanıcının seçtiği dörtgeni dikdörtgene açar ve eşikler.
@@ -323,9 +349,11 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
     // Kelime kutuları da isteniyor (blocks): satırı ve sayı sütununu
     // kutulardan kuruyoruz. Yalnızca "text" isteseydik elimizde düz metin
     // olurdu ve numaranın sayfanın neresinde durduğunu bilemezdik.
-    const oku = async (girdi, kip) => {
+    // bolge verilirse yalnızca o dikdörtgen okunuyor; kelime kutuları
+    // sayfa koordinatına çevrilebilsin diye kaydırma da dönüyor.
+    const oku = async (girdi, kip, bolge = null) => {
       await worker.setParameters({ tessedit_pageseg_mode: kip });
-      const { data } = await worker.recognize(girdi, {}, { text: true, blocks: true });
+      const { data } = await worker.recognize(girdi, bolge ? { rectangle: bolge } : {}, { text: true, blocks: true });
       const metin = data?.text ?? "";
       return {
         metin, bloklar: data?.blocks ?? null,
@@ -335,8 +363,15 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
     };
 
     // Rakam alfabesiyle okuma. Bölge verilirse yalnızca o dikdörtgen,
-    // verilmezse tüm sayfa. Kutular sayfa koordinatına çevrilerek
-    // dönüyor ki birinci geçişle karşılaştırılabilsinler.
+    // verilmezse tüm sayfa.
+    //
+    // ── KUTULAR ZATEN SAYFA KOORDİNATINDA ─────────────────────
+    // Burada eskiden bölgenin sol kenarı kadar kaydırma ekleniyordu.
+    // YANLIŞTI: tesseract, rectangle ile okurken de kutuları SAYFA
+    // koordinatında döndürüyor. Ölçüldü — tam sayfada x=947'de okunan
+    // "230", left=300 ile okunduğunda yine x=947 veriyor. Kaydırma
+    // numaraları sağa itiyor, şerit sınırının dışına düşürüyor ve
+    // sessizce eliyordu.
     const rakamGecisi = async (girdi, bolge) => {
       try {
         await worker.setParameters({
@@ -345,10 +380,7 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
         });
         const secenek = bolge ? { rectangle: bolge } : {};
         const { data } = await worker.recognize(girdi, secenek, { text: true, blocks: true });
-        const kaydir = bolge?.left ?? 0;
-        return satirlariAl(data?.blocks)
-          .flatMap(st => st.kelimeler)
-          .map(k => ({ ...k, x0: k.x0 + kaydir, x1: k.x1 + kaydir }));
+        return satirlariAl(data?.blocks).flatMap(st => st.kelimeler);
       } catch {
         // Kırpma ya da okuma başarısızsa numarasız devam: satırlar yine
         // kuruluyor, yalnızca numaralar eksik kalıyor.
@@ -359,12 +391,22 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
     };
 
     // Sayfayı sütunlara ayır, numaraları rakam geçişiyle oku, metni kur.
-    const sayfayiKur = async (girdi, sonuc, olcu) => {
+    const sayfayiKur = async (girdi, sonuc, olcu, bolge = null) => {
       const satirlar = satirlariAl(sonuc.bloklar);
       if (!satirlar.length || !olcu) return sonuc.metin;
 
+      // Bölge okunduysa şeritler o bölgenin içinde aranıyor: komşu
+      // sütunun numara şeridi bu satırlara bağlanmamalı.
+      const sinirX0 = bolge ? bolge.left : 0;
+      const sinirX1 = bolge ? bolge.left + bolge.width : olcu.genislik;
+      // Şerit bölgenin dışına taşarsa komşu sütunun numaraları bu
+      // satırlara bağlanıyor: ölçümde sağ sütunun 301, 325, 339
+      // numaraları soldaki başlıklara yapışmıştı.
+      const icinde = (s) => s.sayiX >= sinirX0 && s.sayiX < sinirX1;
+      const kirp = (s) => ({ ...s, x0: Math.max(s.x0, sinirX0), x1: Math.min(s.x1, sinirX1) });
+
       // 1) Sütunlar birinci geçişin sayılarından.
-      let sutunlar = seritleriBul(sayiKelimeleri(satirlar), olcu.genislik);
+      let sutunlar = seritleriBul(sayiKelimeleri(satirlar), olcu.genislik).filter(icinde).map(kirp);
 
       // 2) Bulunamadıysa: numaralar birinci geçişte hiç temiz okunmamış
       //    demektir (beş kitaptan ikisinde böyle oldu — sayfa numarası
@@ -375,12 +417,16 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
       let tumSayilar = null;
       if (!sutunlar.length) {
         ilerleme?.({ asama: "sayfa numaralari", yuzde: null });
-        tumSayilar = await rakamGecisi(girdi, null);
-        sutunlar = seritleriBul(tumSayilar, olcu.genislik);
+        tumSayilar = await rakamGecisi(girdi, bolge);
+        sutunlar = seritleriBul(tumSayilar, olcu.genislik).filter(icinde).map(kirp);
       }
 
       // 3) Hâlâ yoksa tek sütun varsayımı.
-      if (!sutunlar.length) sutunlar = tekSutun(olcu.genislik);
+      if (!sutunlar.length) {
+        sutunlar = bolge
+          ? [{ x0: sinirX0, x1: sinirX1, sayiX: Math.round(sinirX0 + (sinirX1 - sinirX0) * 0.78) }]
+          : tekSutun(olcu.genislik);
+      }
 
       const parcalar = [];
       for (const sutun of sutunlar) {
@@ -411,11 +457,11 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
 
     for (let i = 0; i < liste.length; i++) {
       ilerleme?.({ asama: "hazirlik", yuzde: null, sira: i + 1, toplam: liste.length });
-      let girdi, olcu = null, hazirla = null;
+      let girdi, olcu = null, okumaKutulari = null;
       try {
         const hazir = await gorseliHazirla(liste[i], kutular?.[i] ?? null);
         girdi = hazir.blob;
-        hazirla = hazir;
+        okumaKutulari = hazir.okumaKutulari ?? null;
         olcu = { genislik: hazir.genislik, yukseklik: hazir.yukseklik };
       } catch {
         // Ön işleme başarısızsa (bozuk görsel, eski tarayıcı) ham
@@ -432,31 +478,37 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
         if (yedek.puan > sonuc.puan) sonuc = yedek;
       }
 
-      // ── İKİ SÜTUNLU SAYFA: DOLGUYU SÜTUN SÜTUN SİL ────────────
-      // Oluk ancak kelime kutuları elde olunca bulunabiliyor, yani ilk
-      // okumadan sonra. Bulunursa görüntü yeniden eşikleniyor: bu kez
-      // nokta dolgusu hem tüm sayfada hem her sütunda ayrı taranıyor.
-      // Ölçüldü (iki sütunlu gerçek fotoğraf): silinen nokta 0 → 3179,
-      // OCR güveni 42 → 65, doğru sayfa numarası 11 → 17.
-      const oluk = olcu && hazirla?.sutunlariUygula
-        ? olukBul(satirlariAl(sonuc.bloklar), olcu.genislik) : null;
-      if (oluk != null) {
-        try {
-          ilerleme?.({ asama: "sutunlar", yuzde: null, sira: i + 1, toplam: liste.length });
-          const yeniGirdi = await hazirla.sutunlariUygula(
-            [[0, olcu.genislik], [0, oluk], [oluk, olcu.genislik]]);
-          const yeni = await oku(yeniGirdi, KIP_BIRINCIL);
-          // Ölçüt karar versin: yeniden kurulan görüntü daha kötü
-          // okunuyorsa (beklenmedik düzen) eskisiyle devam.
-          if (!degerlendir || yeni.puan >= sonuc.puan) { sonuc = yeni; girdi = yeniGirdi; }
-        } catch {
-          // Yeniden kurma başarısızsa ilk görüntüyle devam.
-        }
-      }
-
       // Sayfa numaralarını rakam geçişiyle düzelt
       ilerleme?.({ asama: "sayfa numaralari", yuzde: null, sira: i + 1, toplam: liste.length });
-      const metin = await sayfayiKur(girdi, sonuc, olcu);
+      let metin = await sayfayiKur(girdi, sonuc, olcu);
+
+      // ── SÜTUNLARI AYRI OKUMAK HER ZAMAN DOĞRU DEĞİL ───────────
+      // İki sütunlu sayfa tek blok okununca soldaki satırla sağdaki
+      // tek satıra yapışıyor ve numaralar yanlış başlığa bağlanıyor.
+      // Ama sütunları ayrı okumak da bedava değil: dar dikdörtgende
+      // tesseract satır düzenini başka kuruyor ve bazı kitaplarda
+      // DAHA KÖTÜ okuyor. Gerçek iki fotoğrafta ölçüldü (okuma puanı):
+      //   fotoğraf A  tek parça 11 · sütun sütun 15
+      //   fotoğraf B  tek parça 15 · sütun sütun  8
+      // Yani seçim tahmine bırakılamaz: ikisi de kuruluyor, ölçüt
+      // hangisinin sayfa numaraları tutarlıysa onu seçiyor.
+      if (olcu && okumaKutulari?.length > 1) {
+        try {
+          ilerleme?.({ asama: "sutunlar", yuzde: null, sira: i + 1, toplam: liste.length });
+          const sutunParcalari = [];
+          for (const [x0, x1] of okumaKutulari) {
+            const bolge = { left: x0, top: 0, width: Math.max(1, x1 - x0), height: olcu.yukseklik };
+            const sutunSonuc = await oku(girdi, KIP_BIRINCIL, bolge);
+            sutunParcalari.push(await sayfayiKur(girdi, sutunSonuc, olcu, bolge));
+          }
+          const sutunMetni = sutunParcalari.filter(Boolean).join("\n");
+          if (sutunMetni && (!degerlendir || degerlendir(sutunMetni) > degerlendir(metin))) {
+            metin = sutunMetni;
+          }
+        } catch {
+          // Sütun okuması başarısızsa tek parça okuma kalıyor.
+        }
+      }
 
       if (metin) parcalar.push(metin);
       if (typeof sonuc.guven === "number") { guvenToplam += sonuc.guven; guvenSayi += 1; }

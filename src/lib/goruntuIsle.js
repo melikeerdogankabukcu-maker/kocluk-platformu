@@ -594,6 +594,161 @@ export function ikiliyeCevir({ data, genislik: g, yukseklik: y },
   return { data: p, genislik: g, yukseklik: y, aci, silinenNokta, silinenCubuk };
 }
 
+// ── METİN BÖLGELERİNİ BUL (SAYFA AYRIŞTIRMA) ────────────────────
+// Sayfanın neresinde metin olduğunu OCR'dan ÖNCE bilmek iki şeyi
+// çözüyor:
+//   1) İki sütunlu sayfada sütunlar belli oluyor. Nokta dolgusu
+//      sütun sütun silinebiliyor — sayfanın tamamına bakınca satır
+//      bantları çöküyor ve dolgu hiç silinmiyor (bkz. noktaDolgusunuSil).
+//   2) Kitap kenarındaki gölge, leke ve komşu sayfa okuma
+//      dikdörtgeninin dışında kalıyor.
+//
+// Yöntem RLSA (koşu uzunluğu düzleştirme): önce satır içindeki küçük
+// boşluklar yatay doldurulup harfler satır çubuğuna çevriliyor, sonra
+// çubuklar dikey birleştirilip paragraf/sütun blokları çıkıyor.
+//
+// DENENDİ VE ELENDİ: yatay ile dikey düzleştirmeyi AYRI yapıp
+// kesiştirmek (klasik RLSA tarifi). Özgün görüntüde bir sütunun aynı
+// x'inde iki satır arasında çoğu zaman hiç mürekkep olmadığı için
+// bağlantı kopuyor: gerçek fotoğrafta 4863 küçük parça çıktı, tek bir
+// blok kurulamadı. Dikey düzleştirme YATAY SONUCUN üzerinde yapılınca
+// bloklar düzgün çıkıyor.
+const BOLGE_YATAY   = 0.02;    // sayfa genişliğine göre kapatılan yatay boşluk
+const BOLGE_DIKEY   = 0.015;   // yüksekliğe göre dikey boşluk
+// Süzgeç BİLEREK SIKI. Gevşetmek ölçümde yıkıcı çıktı: eşik %3'e
+// inince paragraf parçaları sütun sanıldı, iki sütunlu bir sayfa
+// yanlış yerden bölündü ve ayrıştırılan satır 55'ten 0'a düştü.
+// Bölge bulunamazsa sayfa tek parça okunuyor — eski davranış.
+const BOLGE_EN_AZ_GENISLIK  = 0.12;
+const BOLGE_EN_AZ_YUKSEKLIK = 0.10;
+const BOLGE_EN_AZ_YOGUNLUK  = 0.02;
+
+// Blok geometrisi için tam çözünürlük gerekmiyor: karar sütun
+// genişliğinden veriliyor, harfin kendisinden değil. Küçük kopyada
+// çalışmak telefonda önemli — 2400x3200 bir sayfa için burada birkaç
+// tane 7,7 milyonluk dizi ayrılırdı.
+// 1200 ölçüldü: 600'e indirince bölme noktası birkaç piksel kayıyor
+// ve doğru sayfa numarası 110'dan 107'ye düşüyor.
+const BOLGE_TARAMA = 1200;
+
+export function metinBolgeleri(tamIkili, tamG, tamY) {
+  const k = Math.max(1, Math.round(tamG / BOLGE_TARAMA));
+  const g = Math.max(1, Math.floor(tamG / k));
+  const y = Math.max(1, Math.floor(tamY / k));
+  let ikili = tamIkili;
+  if (k > 1) {
+    // Küçültürken mürekkep KORUNUYOR (VEYA havuzlama): ortalama
+    // alsaydık ince satırlar kaybolurdu.
+    ikili = new Uint8Array(g * y);
+    for (let j = 0; j < tamY; j++) {
+      const hj = (j / k) | 0;
+      if (hj >= y) break;
+      for (let i = 0; i < tamG; i++) {
+        if (!tamIkili[j * tamG + i]) continue;
+        const hi = (i / k) | 0;
+        if (hi < g) ikili[hj * g + hi] = 1;
+      }
+    }
+  }
+
+  const Gh = Math.max(4, Math.round(g * BOLGE_YATAY));
+  const Gv = Math.max(4, Math.round(y * BOLGE_DIKEY));
+
+  const yat = new Uint8Array(g * y);
+  for (let j = 0; j < y; j++) {
+    let son = -1;
+    for (let i = 0; i < g; i++) {
+      if (!ikili[j * g + i]) continue;
+      if (son >= 0 && i - son <= Gh) for (let x = son; x <= i; x++) yat[j * g + x] = 1;
+      yat[j * g + i] = 1;
+      son = i;
+    }
+  }
+  const birlesik = new Uint8Array(g * y);
+  for (let i = 0; i < g; i++) {
+    let son = -1;
+    for (let j = 0; j < y; j++) {
+      if (!yat[j * g + i]) continue;
+      if (son >= 0 && j - son <= Gv) for (let k = son; k <= j; k++) birlesik[k * g + i] = 1;
+      birlesik[j * g + i] = 1;
+      son = j;
+    }
+  }
+
+  // Bağlantılı kümeler (4 komşu, yığınla tarama)
+  const etiket = new Int32Array(g * y).fill(-1);
+  const yigin = new Int32Array(g * y);
+  const kutular = [];
+  for (let bas = 0; bas < birlesik.length; bas++) {
+    if (!birlesik[bas] || etiket[bas] >= 0) continue;
+    let uc = 0; yigin[uc++] = bas; etiket[bas] = bas;
+    let x0 = g, x1 = -1, y0 = y, y1 = -1, murekkep = 0;
+    while (uc) {
+      const n = yigin[--uc];
+      const i = n % g, j = (n - i) / g;
+      if (ikili[n]) murekkep++;
+      if (i < x0) x0 = i; if (i > x1) x1 = i;
+      if (j < y0) y0 = j; if (j > y1) y1 = j;
+      const komsu = [i > 0 ? n - 1 : -1, i < g - 1 ? n + 1 : -1,
+                     j > 0 ? n - g : -1, j < y - 1 ? n + g : -1];
+      for (const k of komsu) if (k >= 0 && birlesik[k] && etiket[k] < 0) { etiket[k] = bas; yigin[uc++] = k; }
+    }
+    const genislik = x1 - x0 + 1, yukseklik = y1 - y0 + 1;
+    kutular.push({ x0, x1, y0, y1, genislik, yukseklik,
+      yogunluk: murekkep / Math.max(1, genislik * yukseklik) });
+  }
+
+  return kutular
+    .filter(b => b.genislik >= g * BOLGE_EN_AZ_GENISLIK &&
+                 b.yukseklik >= y * BOLGE_EN_AZ_YUKSEKLIK &&
+                 b.yogunluk >= BOLGE_EN_AZ_YOGUNLUK)
+    // Kutular özgün ölçeğe geri çevriliyor: çağıran tam çözünürlükte
+    // çalışıyor ve küçültmeyi bilmek zorunda değil.
+    .map(b => ({
+      x0: b.x0 * k, x1: Math.min(tamG - 1, (b.x1 + 1) * k - 1),
+      y0: b.y0 * k, y1: Math.min(tamY - 1, (b.y1 + 1) * k - 1),
+      genislik: b.genislik * k, yukseklik: b.yukseklik * k,
+      yogunluk: b.yogunluk,
+    }));
+}
+
+// Blokları x'te örtüşenleri birleştirerek SÜTUNLARA topluyor.
+// Döndürdüğü iki liste ayrı işler için:
+//   araliklar — sayfayı baştan sona kaplayan bölmeler; nokta dolgusu
+//     bunlara göre siliniyor, böylece iki sütunun arasında kalan
+//     hiçbir piksel taramanın dışında kalmıyor.
+//   kutular   — sütunun KENDİ genişliği; OCR dikdörtgeni bu. Sayfanın
+//     yarısını vermek kenardaki gölgeyi de okumaya sokuyordu: gerçek
+//     fotoğrafta güven 52/44 iken dar dikdörtgenle 57/59 oldu.
+// Tek sütun çıkarsa null: bölmeye gerek yok.
+export function sutunAraliklari(bolgeler, g) {
+  if (!bolgeler?.length) return null;
+  const gruplar = [];
+  for (const b of [...bolgeler].sort((a, c) => a.x0 - c.x0)) {
+    const son = gruplar[gruplar.length - 1];
+    const ortusme = son ? Math.min(son.x1, b.x1) - Math.max(son.x0, b.x0) : -1;
+    if (son && ortusme > Math.min(son.x1 - son.x0, b.x1 - b.x0) * 0.5) {
+      son.x0 = Math.min(son.x0, b.x0); son.x1 = Math.max(son.x1, b.x1);
+    } else gruplar.push({ x0: b.x0, x1: b.x1 });
+  }
+  if (gruplar.length < 2) return null;
+
+  const araliklar = [];
+  let bas = 0;
+  for (let i = 0; i < gruplar.length - 1; i++) {
+    const orta = Math.round((gruplar[i].x1 + gruplar[i + 1].x0) / 2);
+    araliklar.push([bas, orta]); bas = orta;
+  }
+  araliklar.push([bas, g]);
+
+  const pay = Math.round(g * 0.01);
+  const kutular = gruplar.map((k, i) => [
+    Math.max(araliklar[i][0], k.x0 - pay),
+    Math.min(araliklar[i][1], k.x1 + pay),
+  ]);
+  return { araliklar, kutular };
+}
+
 export { HEDEF_GENISLIK, satirBantlari };
 
 // Görüntüyü açıyla döndür — SAF, zemin BEYAZ.
