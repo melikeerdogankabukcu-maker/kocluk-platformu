@@ -1,4 +1,5 @@
-import { satirlariAl, sayiSutunuBaslangici, numaralariEsle, satirlariMetne } from "./ocrSatir";
+import { satirlariAl, sayiKelimeleri, seritleriBul, tekSutun, sutunaAyir,
+  numaralariEsle, satirlariMetne } from "./ocrSatir";
 import { ikiliyeCevir, sayfaKutusu, HEDEF_GENISLIK } from "./goruntuIsle";
 
 // İçindekiler sayfasını metne çevirme: PDF ve fotoğraf (OCR).
@@ -220,47 +221,78 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir } = {}) {
       };
     };
 
-    // Sayı sütununu rakam alfabesiyle oku, satırlara eşle, metni yeniden kur.
-    // Kutu gelmediyse (eski çekirdek) birinci geçişin metni olduğu gibi
-    // kullanılıyor — kazanç kaybedilir ama akış bozulmaz.
-    const numaralariTazele = async (girdi, sonuc, olcu) => {
-      const satirlar = satirlariAl(sonuc.bloklar);
-      if (!satirlar.length || !olcu) return sonuc.metin;
-
-      const sutunX = sayiSutunuBaslangici(satirlar, olcu.genislik);
-      const genislik = Math.max(1, olcu.genislik - sutunX);
-      let sayiKelimeleri;
+    // Rakam alfabesiyle okuma. Bölge verilirse yalnızca o dikdörtgen,
+    // verilmezse tüm sayfa. Kutular sayfa koordinatına çevrilerek
+    // dönüyor ki birinci geçişle karşılaştırılabilsinler.
+    const rakamGecisi = async (girdi, bolge) => {
       try {
         await worker.setParameters({
           tessedit_char_whitelist: RAKAMLAR,
           tessedit_pageseg_mode: "6",
         });
-        const { data } = await worker.recognize(
-          girdi,
-          { rectangle: { left: sutunX, top: 0, width: genislik, height: olcu.yukseklik } },
-          { text: true, blocks: true }
-        );
-        // Kırpılmış bölgenin kutuları kendi köşesine göre geliyor;
-        // birinci geçişle karşılaştırılabilmesi için sola kaydırma
-        // geri ekleniyor.
-        sayiKelimeleri = satirlariAl(data?.blocks)
+        const secenek = bolge ? { rectangle: bolge } : {};
+        const { data } = await worker.recognize(girdi, secenek, { text: true, blocks: true });
+        const kaydir = bolge?.left ?? 0;
+        return satirlariAl(data?.blocks)
           .flatMap(st => st.kelimeler)
-          .map(k => ({ ...k, x0: k.x0 + sutunX, x1: k.x1 + sutunX }));
+          .map(k => ({ ...k, x0: k.x0 + kaydir, x1: k.x1 + kaydir }));
       } catch {
-        // Kırpma başarısızsa numarasız devam: satırlar yine kurulacak,
-        // son belirteç harf–rakam tablosundan geçirilecek.
-        sayiKelimeleri = [];
+        // Kırpma ya da okuma başarısızsa numarasız devam: satırlar yine
+        // kuruluyor, yalnızca numaralar eksik kalıyor.
+        return [];
       } finally {
         await worker.setParameters({ tessedit_char_whitelist: "" });
       }
+    };
 
-      const eslesme = numaralariEsle(satirlar, sayiKelimeleri);
-      const yeni = satirlariMetne(satirlar, eslesme, sutunX);
+    // Sayfayı sütunlara ayır, numaraları rakam geçişiyle oku, metni kur.
+    const sayfayiKur = async (girdi, sonuc, olcu) => {
+      const satirlar = satirlariAl(sonuc.bloklar);
+      if (!satirlar.length || !olcu) return sonuc.metin;
 
-      // Ölçüt yine ayrıştırılabilir satır sayısı: yeniden kurulan metin
+      // 1) Sütunlar birinci geçişin sayılarından.
+      let sutunlar = seritleriBul(sayiKelimeleri(satirlar), olcu.genislik);
+
+      // 2) Bulunamadıysa: numaralar birinci geçişte hiç temiz okunmamış
+      //    demektir (beş kitaptan ikisinde böyle oldu — sayfa numarası
+      //    sütunu tamamen harfe dönmüştü). Tüm sayfa rakam alfabesiyle
+      //    bir kez okunuyor ve şeritler ONUN sayılarından çıkarılıyor.
+      //    Rakam geçişi aynı yeri "230" diye okuyabiliyor, çünkü "Z"
+      //    diye bir seçeneği yok.
+      let tumSayilar = null;
+      if (!sutunlar.length) {
+        ilerleme?.({ asama: "sayfa numaralari", yuzde: null });
+        tumSayilar = await rakamGecisi(girdi, null);
+        sutunlar = seritleriBul(tumSayilar, olcu.genislik);
+      }
+
+      // 3) Hâlâ yoksa tek sütun varsayımı.
+      if (!sutunlar.length) sutunlar = tekSutun(olcu.genislik);
+
+      const parcalar = [];
+      for (const sutun of sutunlar) {
+        const sutunSatirlari = sutunaAyir(satirlar, sutun);
+        if (!sutunSatirlari.length) continue;
+
+        // Tüm sayfa zaten rakamla okunduysa yeniden okumuyoruz; yalnızca
+        // bu sütunun şeridine düşenleri süzüyoruz.
+        const sayilar = tumSayilar
+          ? tumSayilar.filter(k => k.x0 >= sutun.sayiX && k.x0 < sutun.x1)
+          : await rakamGecisi(girdi, {
+              left: sutun.sayiX, top: 0,
+              width: Math.max(1, sutun.x1 - sutun.sayiX), height: olcu.yukseklik,
+            });
+
+        parcalar.push(satirlariMetne(sutunSatirlari, numaralariEsle(sutunSatirlari, sayilar), sutun.sayiX));
+      }
+
+      const yeni = parcalar.filter(Boolean).join("\n");
+      if (!yeni) return sonuc.metin;
+
+      // Ölçüt ayrıştırılabilir satır sayısı: yeniden kurulan metin
       // birinci geçişten KÖTÜ çıkarsa (beklenmedik bir düzen) eskisi
       // kalıyor.
-      if (!degerlendir) return yeni || sonuc.metin;
+      if (!degerlendir) return yeni;
       return degerlendir(yeni) >= degerlendir(sonuc.metin) ? yeni : sonuc.metin;
     };
 
@@ -288,7 +320,7 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir } = {}) {
 
       // Sayfa numaralarını rakam geçişiyle düzelt
       ilerleme?.({ asama: "sayfa numaralari", yuzde: null, sira: i + 1, toplam: liste.length });
-      const metin = await numaralariTazele(girdi, sonuc, olcu);
+      const metin = await sayfayiKur(girdi, sonuc, olcu);
 
       if (metin) parcalar.push(metin);
       if (typeof sonuc.guven === "number") { guvenToplam += sonuc.guven; guvenSayi += 1; }

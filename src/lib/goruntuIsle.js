@@ -208,6 +208,7 @@ function noktaDolgusunuSil(ikili, g, y) {
 const BLOK = 24;              // örnekleme bloğu (piksel)
 const EN_AZ_ALAN = 0.15;      // bundan küçük bir "sayfa" güvenilmez
 const EN_COK_ALAN = 0.985;    // neredeyse tüm kare: kırpacak bir şey yok
+const KENAR_PAYI = 0.10;      // bir kenardan kesilebilecek en çok oran
 
 export function sayfaKutusu({ data, genislik: g, yukseklik: y }) {
   const bg = Math.max(1, Math.floor(g / BLOK));
@@ -254,8 +255,17 @@ export function sayfaKutusu({ data, genislik: g, yukseklik: y }) {
   const parlak = new Uint8Array(bg * by);
   for (let n = 0; n < ort.length; n++) parlak[n] = ort[n] > enIyiEsik ? 1 : 0;
 
+  // ── TEK KÜME DEĞİL, BÜYÜK KÜMELERİN BİRLEŞİMİ ────────────────
+  // Sayfanın ortasından geçen bir gölge (cilt payı, sayfa kıvrımı)
+  // parlak bölgeyi ikiye bölebiliyor. Yalnızca en büyük kümeyi almak
+  // o zaman sayfanın bir yarısını atıyor: gerçek bir fotoğrafta
+  // sayfanın sağ %16'sı kesildi ve sağ sütunun bütün sayfa numaraları
+  // kayboldu. Bu yüzden KÜÇÜK OLMAYAN her parlak küme hesaba katılıyor
+  // ve kutu hepsini kapsıyor. Fazladan alan almak (masanın parlak bir
+  // köşesi) yalnızca kazancı azaltır; eksik almak veriyi yok ediyor.
+  const KUCUK_KUME = 0.08;              // toplam bloğa oranla
   const etiket = new Int32Array(bg * by).fill(-1);
-  let enIyi = null;
+  const kumeler = [];
   for (let bas = 0; bas < parlak.length; bas++) {
     if (!parlak[bas] || etiket[bas] >= 0) continue;
     const yigin = [bas];
@@ -273,10 +283,21 @@ export function sayfaKutusu({ data, genislik: g, yukseklik: y }) {
         if (k >= 0 && parlak[k] && etiket[k] < 0) { etiket[k] = bas; yigin.push(k); }
       });
     }
-    if (!enIyi || adet > enIyi.adet) enIyi = { adet, i0, i1, j0, j1 };
+    kumeler.push({ adet, i0, i1, j0, j1 });
   }
 
-  const oran = enIyi ? enIyi.adet / (bg * by) : 0;
+  const esikAdet = bg * by * KUCUK_KUME;
+  const buyuk = kumeler.filter(k => k.adet >= esikAdet);
+  const secilen = buyuk.length ? buyuk : (kumeler.length ? [kumeler.reduce((a, b) => (b.adet > a.adet ? b : a))] : []);
+  const enIyi = secilen.length ? {
+    adet: secilen.reduce((t, k) => t + k.adet, 0),
+    i0: Math.min(...secilen.map(k => k.i0)),
+    i1: Math.max(...secilen.map(k => k.i1)),
+    j0: Math.min(...secilen.map(k => k.j0)),
+    j1: Math.max(...secilen.map(k => k.j1)),
+  } : null;
+
+  const oran = enIyi ? ((enIyi.i1 - enIyi.i0 + 1) * (enIyi.j1 - enIyi.j0 + 1)) / (bg * by) : 0;
   if (!enIyi || oran < EN_AZ_ALAN || oran > EN_COK_ALAN) {
     // Sayfa ayırt edilemedi: kırpmıyoruz. Yanlış kırpmak, hiç
     // kırpmamaktan kötü — sayfanın yarısını atabilirdi.
@@ -285,11 +306,23 @@ export function sayfaKutusu({ data, genislik: g, yukseklik: y }) {
 
   // Blok sınırlarını piksele çevir, bir blok pay bırak (kâğıdın kenarı
   // blok ortasına düşebiliyor).
-  const x = Math.max(0, (enIyi.i0 - 1) * BLOK);
-  const yy = Math.max(0, (enIyi.j0 - 1) * BLOK);
-  const x2 = Math.min(g, (enIyi.i1 + 2) * BLOK);
-  const y2 = Math.min(y, (enIyi.j1 + 2) * BLOK);
-  return { x, y: yy, genislik: x2 - x, yukseklik: y2 - yy, kirpildi: true, oran };
+  //
+  // ── KENAR BAŞINA EN ÇOK %10 ──────────────────────────────────
+  // Sayfanın kenarı gölgedeyse parlaklık orayı "sayfa değil" sayıyor.
+  // Gerçek bir fotoğrafta sağ %16 kesildi ve sağ sütunun BÜTÜN sayfa
+  // numaraları kayboldu — kırpma kazandırırken veri yok etmiş oldu.
+  // Kesme miktarı sınırlanıyor: gölgeli kenarın gürültüsüne katlanmak,
+  // bir sütunu kaybetmekten iyi.
+  const enCokX = g * KENAR_PAYI, enCokY = y * KENAR_PAYI;
+  const x = Math.min(enCokX, Math.max(0, (enIyi.i0 - 1) * BLOK));
+  const yy = Math.min(enCokY, Math.max(0, (enIyi.j0 - 1) * BLOK));
+  const x2 = Math.max(g - enCokX, Math.min(g, (enIyi.i1 + 2) * BLOK));
+  const y2 = Math.max(y - enCokY, Math.min(y, (enIyi.j1 + 2) * BLOK));
+  return {
+    x: Math.round(x), y: Math.round(yy),
+    genislik: Math.round(x2 - x), yukseklik: Math.round(y2 - yy),
+    kirpildi: true, oran,
+  };
 }
 
 // Dikdörtgeni kes — SAF (Node ölçümü için). Tarayıcıda bu iş tuvale
@@ -310,7 +343,7 @@ export function kirp({ data, genislik: g }, kutu) {
 // Çıktı:  { data, genislik, yukseklik, aci, silinenNokta }
 //         data yerinde DEĞİŞTİRİLİYOR (kopya almıyoruz: 1800x2400 bir
 //         görüntü 17 MB, gereksiz kopya telefonda belleği zorluyor).
-export function ikiliyeCevir({ data, genislik: g, yukseklik: y }, { nokta = true } = {}) {
+export function ikiliyeCevir({ data, genislik: g, yukseklik: y }, { nokta = true, duyarlilik = 0.15 } = {}) {
   const p = data;
 
   // Gri tonlama + integral görüntü (her noktada sol-üst dikdörtgenin
@@ -332,7 +365,7 @@ export function ikiliyeCevir({ data, genislik: g, yukseklik: y }, { nokta = true
   // Pencere genişliğin ~1/32'si; metin satırından belirgin biçimde
   // büyük olmalı ki harfin kendi karanlığı eşiği aşağı çekmesin.
   const yari = Math.max(8, Math.round(g / 32));
-  const T = 0.15;                       // ortalamanın %15 altı → siyah
+  const T = duyarlilik;                 // ortalamanın bu kadar altı → siyah
 
   const ikili = new Uint8Array(g * y);      // 1 = koyu (metin)
   for (let j = 0; j < y; j++) {

@@ -97,9 +97,20 @@ const SERIT_BIRLESIM = 0.04;   // bu kadar yakın iki şerit aynı sütundur
 const EN_AZ_UYE      = 3;      // bir şerit en az bu kadar numara taşır
 const EN_AZ_MEDYAN   = 10;     // başlık numaralarını ayıklayan eşik
 
-export function sutunlariBul(satirlar, genislik) {
-  const sayilar = satirlar
-    .flatMap(s => s.kelimeler.filter(k => SAYI.test(k.metin)))
+// Satırlardaki temiz sayı kelimeleri (şerit araması için).
+export const sayiKelimeleri = (satirlar) =>
+  satirlar.flatMap(s => s.kelimeler.filter(k => SAYI.test(k.metin)));
+
+// Şerit bulunamayan sayfa için son çare: sağ %22 numara şeridi sayılıyor.
+export const tekSutun = (genislik) => ([
+  { x0: 0, x1: genislik, sayiX: Math.round(genislik * 0.78) },
+]);
+
+// Verilen sayı kelimelerinden sütunları çıkarır. Bulamazsa BOŞ döner —
+// çağıran o zaman rakam geçişini tüm sayfaya uygulayıp yeniden deneyebilir.
+export function seritleriBul(sayiListesi, genislik) {
+  const sayilar = [...(sayiListesi ?? [])]
+    .filter(k => SAYI.test(k.metin))
     .sort((a, b) => a.x1 - b.x1);
 
   // Sağ kenara göre sıkı kümeler
@@ -125,11 +136,7 @@ export function sutunlariBul(satirlar, genislik) {
     return degerler[Math.floor(degerler.length / 2)] >= EN_AZ_MEDYAN;
   });
 
-  // Şerit bulunamadıysa (numaralar okunamamış) tek sütun varsayılıyor:
-  // sayfanın sağ %22'si numara şeridi kabul ediliyor.
-  if (!gecerli.length) {
-    return [{ x0: 0, x1: genislik, sayiX: Math.round(genislik * 0.78) }];
-  }
+  if (!gecerli.length) return [];
 
   const sutunlar = [];
   gecerli.forEach((c, i) => {
@@ -143,6 +150,13 @@ export function sutunlariBul(satirlar, genislik) {
   });
 
   return sutunlar;
+}
+
+// Birinci geçişin sayılarıyla dene; olmazsa tek sütun.
+// (Rakam geçişini de deneyen tam akış metinCikar.js'de.)
+export function sutunlariBul(satirlar, genislik) {
+  const sutunlar = seritleriBul(sayiKelimeleri(satirlar), genislik);
+  return sutunlar.length ? sutunlar : tekSutun(genislik);
 }
 
 // Satırları sütunlara böl. Tesseract iki sütunlu sayfada sol ve sağ
