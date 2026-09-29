@@ -506,3 +506,93 @@ export function olcekle({ data, genislik: g, yukseklik: y }, hedef) {
   }
   return { data: cikti, genislik: yg, yukseklik: yy };
 }
+
+// ── PERSPEKTİF DÜZELTME ─────────────────────────────────────────
+// Kitap fotoğrafı elde çekiliyor: sayfa yalnızca eğik değil, YAMUK.
+// Üst kenar alt kenardan dar, satırlar sağa doğru yaklaşıyor. Düz bir
+// döndürme bunu düzeltmiyor; OCR'ın satır varsayımı bozuluyor ve sayfa
+// numarası sütunu eğri bir şerit hâline geliyor.
+//
+// Kullanıcı dört köşeyi işaretlediğinde bu dörtgen, dikdörtgene
+// dönüştürülüyor (projektif dönüşüm). Hedefin her pikseli için kaynakta
+// karşılığı hesaplanıp çift doğrusal örnekleniyor — ters eşleme, ileri
+// eşlemenin bıraktığı deliklerden kaçınıyor.
+//
+// Katsayılar 8 bilinmeyenli doğrusal sistemden geliyor (DLT). Sistem
+// küçük olduğu için Gauss eliminasyonu yeterli; kütüphane gerekmiyor.
+function projektifKatsayi(hedef, kaynak) {
+  // hedef[i] -> kaynak[i] eşlemesi (4 nokta)
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const { x: u, y: v } = hedef[i];
+    const { x, y } = kaynak[i];
+    A.push([u, v, 1, 0, 0, 0, -u * x, -v * x]); b.push(x);
+    A.push([0, 0, 0, u, v, 1, -u * y, -v * y]); b.push(y);
+  }
+
+  // Gauss eliminasyonu (kısmi pivotlama)
+  for (let s = 0; s < 8; s++) {
+    let enIyi = s;
+    for (let r = s + 1; r < 8; r++) if (Math.abs(A[r][s]) > Math.abs(A[enIyi][s])) enIyi = r;
+    if (Math.abs(A[enIyi][s]) < 1e-9) return null;      // tekil: dörtgen bozuk
+    [A[s], A[enIyi]] = [A[enIyi], A[s]];
+    [b[s], b[enIyi]] = [b[enIyi], b[s]];
+    for (let r = 0; r < 8; r++) {
+      if (r === s) continue;
+      const k = A[r][s] / A[s][s];
+      if (!k) continue;
+      for (let ss = s; ss < 8; ss++) A[r][ss] -= k * A[s][ss];
+      b[r] -= k * b[s];
+    }
+  }
+  return b.map((v, i) => v / A[i][i]);
+}
+
+// Dört köşeyi (sol-üst, sağ-üst, sağ-alt, sol-alt) dikdörtgene açar.
+export function perspektifDuzelt({ data, genislik: g, yukseklik: y }, koseler, hedefG, hedefY) {
+  const hedef = [
+    { x: 0, y: 0 }, { x: hedefG - 1, y: 0 },
+    { x: hedefG - 1, y: hedefY - 1 }, { x: 0, y: hedefY - 1 },
+  ];
+  const k = projektifKatsayi(hedef, koseler);
+  if (!k) return null;
+  const [a, bb, c, d, e, f, gg, h] = k;
+
+  const cikti = new Uint8ClampedArray(hedefG * hedefY * 4).fill(255);
+  for (let j = 0; j < hedefY; j++) {
+    for (let i = 0; i < hedefG; i++) {
+      const payda = gg * i + h * j + 1;
+      const sx = (a * i + bb * j + c) / payda;
+      const sy = (d * i + e * j + f) / payda;
+      if (sx < 0 || sy < 0 || sx >= g - 1 || sy >= y - 1) continue;   // dışarısı beyaz
+      const i0 = Math.floor(sx), j0 = Math.floor(sy);
+      const fx = sx - i0, fy = sy - j0;
+      const hedefK = (j * hedefG + i) * 4;
+      for (let ch = 0; ch < 3; ch++) {
+        const p00 = data[(j0 * g + i0) * 4 + ch], p10 = data[(j0 * g + i0 + 1) * 4 + ch];
+        const p01 = data[((j0 + 1) * g + i0) * 4 + ch], p11 = data[((j0 + 1) * g + i0 + 1) * 4 + ch];
+        cikti[hedefK + ch] =
+          p00 * (1 - fx) * (1 - fy) + p10 * fx * (1 - fy) + p01 * (1 - fx) * fy + p11 * fx * fy;
+      }
+      cikti[hedefK + 3] = 255;
+    }
+  }
+  return { data: cikti, genislik: hedefG, yukseklik: hedefY };
+}
+
+// Dörtgenin açılacağı dikdörtgenin ölçüsü: karşılıklı kenarların
+// uzunundan alınıyor ki metin sıkışmasın.
+export function dortgenOlcusu(koseler) {
+  const uzunluk = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
+  const genislik = Math.max(uzunluk(koseler[0], koseler[1]), uzunluk(koseler[3], koseler[2]));
+  const yukseklik = Math.max(uzunluk(koseler[0], koseler[3]), uzunluk(koseler[1], koseler[2]));
+  return { genislik: Math.max(1, Math.round(genislik)), yukseklik: Math.max(1, Math.round(yukseklik)) };
+}
+
+// Dörtgen neredeyse eksen hizalı bir dikdörtgen mi? Öyleyse perspektif
+// dönüşüme gerek yok, düz kırpma hem hızlı hem kayıpsız.
+export function dikdortgenMi(koseler, tolerans = 2) {
+  const [su, sagu, saga, sa] = koseler;
+  return Math.abs(su.y - sagu.y) <= tolerans && Math.abs(sa.y - saga.y) <= tolerans
+      && Math.abs(su.x - sa.x) <= tolerans && Math.abs(sagu.x - saga.x) <= tolerans;
+}

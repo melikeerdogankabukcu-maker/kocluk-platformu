@@ -1,6 +1,7 @@
 import { satirlariAl, sayiKelimeleri, seritleriBul, tekSutun, sutunaAyir,
   numaralariEsle, satirlariMetne } from "./ocrSatir";
-import { ikiliyeCevir, sayfaKutusu, HEDEF_GENISLIK } from "./goruntuIsle";
+import { ikiliyeCevir, sayfaKutusu, perspektifDuzelt, dortgenOlcusu, dikdortgenMi,
+  HEDEF_GENISLIK } from "./goruntuIsle";
 
 // İçindekiler sayfasını metne çevirme: PDF ve fotoğraf (OCR).
 //
@@ -73,6 +74,65 @@ export async function pdfMetni(dosya, { enFazlaSayfa = 12 } = {}) {
 // goruntuIsle.js'de ve TARAYICIDAN BAĞIMSIZ: aynı kod Node'da gerçek
 // kitap fotoğraflarıyla çalıştırılıp ölçülebiliyor. Burada kalan iş
 // tarayıcıya özgü olan: dosyayı çözmek, büyütmek, döndürmek.
+// Kullanıcının seçtiği dörtgeni dikdörtgene açar ve eşikler.
+//
+// Dörtgenin sınırlayıcı kutusu kadarlık bölge tuvale çiziliyor (tüm
+// fotoğrafı belleğe almamak için), köşeler o düzleme taşınıyor, sonra
+// projektif dönüşüm uygulanıyor.
+async function dortgeniDuzlestir(bitmap, koseler) {
+  const xs = koseler.map(k => k.x), ys = koseler.map(k => k.y);
+  const sx = Math.max(0, Math.floor(Math.min(...xs)));
+  const sy = Math.max(0, Math.floor(Math.min(...ys)));
+  const sg = Math.min(bitmap.width - sx, Math.ceil(Math.max(...xs) - sx));
+  const sy2 = Math.min(bitmap.height - sy, Math.ceil(Math.max(...ys) - sy));
+
+  // Kaynak bölge, hedefin en çok iki katı çözünürlükte okunuyor:
+  // fazlası perspektif örneklemesini yavaşlatıyor, azı ayrıntı kaybı.
+  const hedef = dortgenOlcusu(koseler);
+  const buyutme = Math.min(2, Math.max(1, HEDEF_GENISLIK / Math.max(1, hedef.genislik)));
+  const kg = Math.max(1, Math.round(sg * buyutme));
+  const ky = Math.max(1, Math.round(sy2 * buyutme));
+
+  const kaynakTuval = document.createElement("canvas");
+  kaynakTuval.width = kg; kaynakTuval.height = ky;
+  const kctx = kaynakTuval.getContext("2d", { willReadFrequently: true });
+  kctx.imageSmoothingEnabled = true;
+  kctx.imageSmoothingQuality = "high";
+  kctx.drawImage(bitmap, sx, sy, sg, sy2, 0, 0, kg, ky);
+  const kaynakVeri = kctx.getImageData(0, 0, kg, ky);
+
+  const yerel = koseler.map(k => ({ x: (k.x - sx) * buyutme, y: (k.y - sy) * buyutme }));
+  const cikisG = Math.max(1, Math.round(hedef.genislik * buyutme));
+  const cikisY = Math.max(1, Math.round(hedef.yukseklik * buyutme));
+  const acilmis = perspektifDuzelt(
+    { data: kaynakVeri.data, genislik: kg, yukseklik: ky }, yerel, cikisG, cikisY);
+
+  // Dönüşüm çözülemediyse (bozuk dörtgen) düz kırpmaya düşüyoruz.
+  if (!acilmis) {
+    const tuval = document.createElement("canvas");
+    tuval.width = kg; tuval.height = ky;
+    const ctx = tuval.getContext("2d", { willReadFrequently: true });
+    ctx.putImageData(kaynakVeri, 0, 0);
+    const veri = ctx.getImageData(0, 0, kg, ky);
+    ikiliyeCevir({ data: veri.data, genislik: kg, yukseklik: ky });
+    ctx.putImageData(veri, 0, 0);
+    const blob = await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
+    return { blob, genislik: kg, yukseklik: ky };
+  }
+
+  ikiliyeCevir(acilmis);
+
+  const tuval = document.createElement("canvas");
+  tuval.width = acilmis.genislik; tuval.height = acilmis.yukseklik;
+  const ctx = tuval.getContext("2d");
+  const cikti = ctx.createImageData(acilmis.genislik, acilmis.yukseklik);
+  cikti.data.set(acilmis.data);
+  ctx.putImageData(cikti, 0, 0);
+
+  const blob = await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
+  return { blob, genislik: acilmis.genislik, yukseklik: acilmis.yukseklik };
+}
+
 // Sayfa aramak için küçük bir kopya yeter: karar blok ortalamalarından
 // veriliyor, tam çözünürlükte çalışmak boşa iş.
 const TARAMA_GENISLIK = 600;
@@ -89,7 +149,27 @@ async function gorseliHazirla(dosya, elleKutu = null) {
   // Kare sayfadan geniş: masa, ekran kenarı, gölge de içinde. Bunlar
   // satır bantlarını ve yerel eşiği bozuyor (ayrıntı goruntuIsle.js'de).
   // Önce sayfanın sınırları bulunuyor, işlem onun içinde yapılıyor.
+  // ── KULLANICI DÖRTGENİ: ÖNCE DÜZLEŞTİR ────────────────────────
+  // Dört köşe serbest seçildiyse sayfa yamuk demektir. Kırpmadan önce
+  // dörtgen dikdörtgene açılıyor: hem sayfa dışı tamamen çıkıyor hem de
+  // satırlar düzleşiyor, yani ayrıca eğiklik düzeltmeye gerek kalmıyor.
+  if (elleKutu?.koseler?.length === 4 && !dikdortgenMi(elleKutu.koseler, 2)) {
+    const kutu = await dortgeniDuzlestir(bitmap, elleKutu.koseler);
+    bitmap.close?.();
+    return kutu;
+  }
+
   let kaynak = { x: 0, y: 0, genislik: bitmap.width, yukseklik: bitmap.height };
+  // Dört köşe verildi ama dikdörtgen: düz kırpma yeter (hem hızlı hem
+  // yeniden örnekleme yok).
+  if (elleKutu?.koseler?.length === 4) {
+    const xs = elleKutu.koseler.map(k => k.x), ys = elleKutu.koseler.map(k => k.y);
+    elleKutu = {
+      x: Math.min(...xs), y: Math.min(...ys),
+      genislik: Math.max(...xs) - Math.min(...xs),
+      yukseklik: Math.max(...ys) - Math.min(...ys),
+    };
+  }
   if (elleKutu) {
     // Sınırları görüntünün içinde tut: dışarı taşan bir kutu
     // drawImage'de boş (siyah) alan doğururdu.
