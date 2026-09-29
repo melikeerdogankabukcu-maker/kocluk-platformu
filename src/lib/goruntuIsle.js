@@ -22,7 +22,15 @@
 //    kendi çevresinin ortalamasından hesaplanıyor, böylece gölge
 //    sınırın kendisi kayıyor ve iki yarı da okunabilir kalıyor.
 //    (Bradley–Roth yöntemi; integral görüntüyle tek geçişte.)
-const HEDEF_GENISLIK = 1800;
+// ── KÜÇÜK FOTOĞRAF DAHA ÇOK BÜYÜTÜLÜYOR ─────────────────────────
+// Telefonun kendi çektiği fotoğraf zaten 3000 piksel geniş; bu sayı
+// onu ETKİLEMİYOR, çünkü görüntü hiçbir zaman küçültülmüyor. Sayı,
+// mesajlaşmadan geçip 1200 piksele inmiş ya da ekran görüntüsünden
+// gelmiş küçük fotoğraflar için: orada rakam yüksekliği 8 piksele
+// düşüyor ve tesseract 5/S, 3/8 ayırt edemiyor. 1200 piksellik iki
+// gerçek fotoğrafta ölçüldü (doğru sayfa numarası):
+//   1800 → 32/37 ve 51/61      2400 → 36/37 ve 55/61
+const HEDEF_GENISLIK = 2400;
 
 // ── EĞİKLİK (SKEW) ──────────────────────────────────────────────
 // Elde tutulan telefonla çekilen sayfa hep birkaç derece eğik oluyor.
@@ -121,8 +129,9 @@ const NOKTA_ORANI = 0.38;      // satır yüksekliğine göre en büyük nokta
 //
 // Eşik de orantılı: dar şeritte "mürekkepli" demek için birkaç piksel
 // yeterli ama gürültüye takılmamak için en az 4 piksel isteniyor.
-function satirBantlari(ikili, g, y) {
-  const i0 = Math.round(g * 0.2), i1 = Math.round(g * 0.8);
+function satirBantlari(ikili, g, y, bolgeX0 = 0, bolgeX1 = g) {
+  const bg = Math.max(1, bolgeX1 - bolgeX0);
+  const i0 = bolgeX0 + Math.round(bg * 0.2), i1 = bolgeX0 + Math.round(bg * 0.8);
   const esik = Math.max(4, Math.round((i1 - i0) * 0.004));
   const bantlar = [];
   let bas = -1;
@@ -183,8 +192,98 @@ function noktalariCiz(ikili, g, dizi, b0, b1) {
   }
 }
 
-function noktaDolgusunuSil(ikili, g, y, kip = "sil") {
-  const bantlar = satirBantlari(ikili, g, y);
+// ── DOLU ÇUBUKLARI SİL ──────────────────────────────────────────
+// Kitabın kenarında kâğıt kıvrılıyor ve orada koyu bir gölge şeridi
+// oluşuyor; eşikleme onu düz siyah bir çubuğa çeviriyor. Sayfa
+// numaraları bu çubuğa YAPIŞIK kalıyor ve OCR ikisini tek leke
+// görüyor: gerçek bir fotoğrafta sağ sütunun 215, 225, 227, 253 ...
+// numaralarının hiçbiri okunamadı, yerine "4", "01", "3" parçaları
+// çıktı.
+//
+// Kesip atmak çözüm değil — denendi, numaralar da gitti. Ölçüt şu:
+// bir metin sütunu baştan sona dolu OLAMAZ. Sayfanın yarısından
+// fazlası mürekkepli olan sütun ya da satır, kenar gölgesi veya
+// çerçeve demektir; harfin kendisi asla o kadar uzun sürmez.
+// Ölçü KALINLIK. "Sayfanın yarısını kaplayan sütun" denendi ve
+// yetmedi: kitap kenarındaki gölge dümdüz değil, eğik iniyor, hiçbir
+// sütunu baştan sona doldurmuyor. Oysa kalınlığı sabit — ve bir harf
+// çizgisi asla 13 piksel kalınlığında dolu olamaz (1800 piksel
+// genişlikte kalın başlık çizgileri bile 8 pikseli geçmiyor).
+//
+// Açma (aşındır + genişlet): yalnızca her yönden 13 piksel dolu olan
+// lekeler ayakta kalıyor. Kalanlar siliniyor; nokta dolgusu, ince
+// çizgi ve harf etkilenmiyor.
+const LEKE_KALINLIK = 13;
+
+function kalinLekeleriSil(ikili, g, y, k = LEKE_KALINLIK) {
+  const r = k >> 1;
+  const gecici = new Uint8Array(g * y), asinmis = new Uint8Array(g * y);
+
+  // Aşındırma: satır yönünde en küçük, sonra sütun yönünde en küçük
+  for (let j = 0; j < y; j++) {
+    for (let i = 0; i < g; i++) {
+      let en = 1;
+      for (let d = -r; d <= r && en; d++) {
+        const x = i + d;
+        if (x < 0 || x >= g || !ikili[j * g + x]) en = 0;
+      }
+      gecici[j * g + i] = en;
+    }
+  }
+  for (let j = 0; j < y; j++) {
+    for (let i = 0; i < g; i++) {
+      let en = 1;
+      for (let d = -r; d <= r && en; d++) {
+        const yy = j + d;
+        if (yy < 0 || yy >= y || !gecici[yy * g + i]) en = 0;
+      }
+      asinmis[j * g + i] = en;
+    }
+  }
+
+  // Genişletme: aşınmış çekirdekleri eski boyuna döndür
+  gecici.fill(0);
+  for (let j = 0; j < y; j++) {
+    for (let i = 0; i < g; i++) {
+      let en = 0;
+      for (let d = -r; d <= r && !en; d++) {
+        const x = i + d;
+        if (x >= 0 && x < g && asinmis[j * g + x]) en = 1;
+      }
+      gecici[j * g + i] = en;
+    }
+  }
+  let silinen = 0;
+  for (let j = 0; j < y; j++) {
+    for (let i = 0; i < g; i++) {
+      let en = 0;
+      for (let d = -r; d <= r && !en; d++) {
+        const yy = j + d;
+        if (yy >= 0 && yy < y && gecici[yy * g + i]) en = 1;
+      }
+      if (en && ikili[j * g + i]) { ikili[j * g + i] = 0; silinen++; }
+    }
+  }
+  return silinen;
+}
+
+// ── SÜTUN SÜTUN ÇALIŞIYOR ───────────────────────────────────────
+// İki sütunlu bir içindekiler sayfasında soldaki satırlarla sağdakiler
+// hizasız. Sayfanın tamamına bakınca aralarında hiç boş satır kalmıyor
+// ve bütün sayfa TEK banda dönüşüyor: gerçek bir fotoğrafta 2667
+// satırlık sayfada 2 bant bulundu, nokta dolgusundan 4 nokta silindi.
+// Silinmeyen dolgu OCR'da "vererek MAUNNTNZTTUTUUUUN" gibi çöpe
+// dönüşüyor ve satırın SAYFA NUMARASINI da içine alıyor.
+// Bu yüzden bantlar ve dolgu temizliği her sütunda ayrı yürüyor.
+function noktaDolgusunuSil(ikili, g, y, kip = "sil", bolgeler = null) {
+  const alanlar = bolgeler?.length ? bolgeler : [[0, g]];
+  let silinen = 0;
+  for (const [ax0, ax1] of alanlar) silinen += bolgedeSil(ikili, g, y, kip, ax0, ax1);
+  return silinen;
+}
+
+function bolgedeSil(ikili, g, y, kip, ax0, ax1) {
+  const bantlar = satirBantlari(ikili, g, y, ax0, ax1);
 
   let silinen = 0;
   for (const [b0, b1] of bantlar) {
@@ -193,9 +292,9 @@ function noktaDolgusunuSil(ikili, g, y, kip = "sil") {
     // 2) Bant içindeki sütun koşuları (ardışık mürekkepli sütunlar)
     const kosular = [];
     let k0 = -1;
-    for (let i = 0; i <= g; i++) {
+    for (let i = ax0; i <= ax1; i++) {
       let dolu = false;
-      if (i < g) for (let j = b0; j <= b1; j++) if (ikili[j * g + i]) { dolu = true; break; }
+      if (i < ax1) for (let j = b0; j <= b1; j++) if (ikili[j * g + i]) { dolu = true; break; }
       if (dolu && k0 < 0) k0 = i;
       if (!dolu && k0 >= 0) { kosular.push([k0, i - 1]); k0 = -1; }
     }
@@ -361,13 +460,50 @@ export function sayfaKutusu({ data, genislik: g, yukseklik: y }) {
   // Kesme miktarı sınırlanıyor: gölgeli kenarın gürültüsüne katlanmak,
   // bir sütunu kaybetmekten iyi.
   const enCokX = g * KENAR_PAYI, enCokY = y * KENAR_PAYI;
-  const x = Math.min(enCokX, Math.max(0, (enIyi.i0 - 1) * BLOK));
-  const yy = Math.min(enCokY, Math.max(0, (enIyi.j0 - 1) * BLOK));
-  const x2 = Math.max(g - enCokX, Math.min(g, (enIyi.i1 + 2) * BLOK));
-  const y2 = Math.max(y - enCokY, Math.min(y, (enIyi.j1 + 2) * BLOK));
+  let sol = Math.round(Math.min(enCokX, Math.max(0, (enIyi.i0 - 1) * BLOK)));
+  let ust = Math.round(Math.min(enCokY, Math.max(0, (enIyi.j0 - 1) * BLOK)));
+  let sag = Math.round(Math.max(g - enCokX, Math.min(g, (enIyi.i1 + 2) * BLOK)));
+  let alt = Math.round(Math.max(y - enCokY, Math.min(y, (enIyi.j1 + 2) * BLOK)));
+
+  // ── METİN TAŞIYAN KENAR KESİLMEZ ──────────────────────────────
+  // Parlaklık ölçütü, gölgeye giren bir kâğıt kenarını "sayfa değil"
+  // sayabiliyor. Gerçek bir fotoğrafta sağ %10 tam da böyle kesildi ve
+  // SAĞ SÜTUNUN BÜTÜN SAYFA NUMARALARI (215, 225, 227, 253 ...) yok
+  // oldu. Kullanıcı bunu yalnızca "okuma bozuk" diye görüyor; kaybın
+  // kırpmadan geldiğini anlamasının yolu yok.
+  //
+  // Bu yüzden karar parlaklığa değil DOKUYA bırakılıyor: uyarlamalı
+  // eşikleme karşıtlığa baktığı için gölgeyi metinden ayırıyor. Masa,
+  // kitap kapağı gibi gerçek bir arka plan sayfanın içinden belirgin
+  // biçimde koyu çıkıyor; gölgede kalmış kâğıt çıkmıyor. Beş gerçek
+  // fotoğrafta ölçüldü (kesilecek şeridin koyuluğu / sayfa içininki):
+  //   gerçek arka plan  : 2,66 · 2,68 · 3,48 · 4,09 · 7,08 kat
+  //   metin taşıyan kenar: 0,85 · 1,12 · 1,26 · 1,31 kat
+  // Eşik ikisinin arasına kondu. Şüphede kalınca KESMİYOR: fazladan
+  // arka plan almak kazancı azaltır, eksik almak veriyi yok eder.
+  const KOYULUK_KATI = 1.8;
+  if (sol > 0 || ust > 0 || sag < g || alt < y) {
+    const koyu = koyuHaritasi(data, g, y, 0.15);
+    // Örnekleme adımı 2: oran için her piksel gerekmiyor, maliyet dörtte bire iniyor.
+    const koyuluk = (x0, x1, y0, y1) => {
+      let toplam = 0, adet = 0;
+      for (let j = y0; j < y1; j += 2) for (let i = x0; i < x1; i += 2) { toplam += koyu[j * g + i]; adet++; }
+      return adet ? toplam / adet : 0;
+    };
+    const ic = koyuluk(sol, sag, ust, alt);
+    const arkaPlan = (o) => ic > 0 && o >= ic * KOYULUK_KATI;
+    if (sol > 0 && !arkaPlan(koyuluk(0, sol, 0, y))) sol = 0;
+    if (sag < g && !arkaPlan(koyuluk(sag, g, 0, y))) sag = g;
+    if (ust > 0 && !arkaPlan(koyuluk(0, g, 0, ust))) ust = 0;
+    if (alt < y && !arkaPlan(koyuluk(0, g, alt, y))) alt = y;
+  }
+
+  if (sol === 0 && ust === 0 && sag === g && alt === y) {
+    return { x: 0, y: 0, genislik: g, yukseklik: y, kirpildi: false, oran };
+  }
   return {
-    x: Math.round(x), y: Math.round(yy),
-    genislik: Math.round(x2 - x), yukseklik: Math.round(y2 - yy),
+    x: sol, y: ust,
+    genislik: sag - sol, yukseklik: alt - ust,
     kirpildi: true, oran,
   };
 }
@@ -390,10 +526,13 @@ export function kirp({ data, genislik: g }, kutu) {
 // Çıktı:  { data, genislik, yukseklik, aci, silinenNokta }
 //         data yerinde DEĞİŞTİRİLİYOR (kopya almıyoruz: 1800x2400 bir
 //         görüntü 17 MB, gereksiz kopya telefonda belleği zorluyor).
-export function ikiliyeCevir({ data, genislik: g, yukseklik: y },
-  { nokta = true, duyarlilik = 0.15, noktaKipi = "sil" } = {}) {
-  const p = data;
-
+// Uyarlamalı eşikleme (Bradley–Roth): her piksel kendi çevresinin
+// ortalamasıyla kıyaslanıyor. Sabit bir eşik, gölgeye giren kâğıdı
+// baştan sona siyah yapardı; buradaki ölçüt PARLAKLIK değil KARŞITLIK
+// olduğu için gölgedeki metin de metin olarak çıkıyor.
+//
+// Çıktı: 1 = koyu (metin), 0 = açık.
+function koyuHaritasi(p, g, y, T) {
   // Gri tonlama + integral görüntü (her noktada sol-üst dikdörtgenin
   // toplamı). Integral sayesinde pencere ortalaması pencere boyutundan
   // bağımsız, sabit maliyetle bulunuyor.
@@ -413,7 +552,6 @@ export function ikiliyeCevir({ data, genislik: g, yukseklik: y },
   // Pencere genişliğin ~1/32'si; metin satırından belirgin biçimde
   // büyük olmalı ki harfin kendi karanlığı eşiği aşağı çekmesin.
   const yari = Math.max(8, Math.round(g / 32));
-  const T = duyarlilik;                 // ortalamanın bu kadar altı → siyah
 
   const ikili = new Uint8Array(g * y);      // 1 = koyu (metin)
   for (let j = 0; j < y; j++) {
@@ -430,10 +568,22 @@ export function ikiliyeCevir({ data, genislik: g, yukseklik: y },
     }
   }
 
+  return ikili;
+}
+
+export function ikiliyeCevir({ data, genislik: g, yukseklik: y },
+  { nokta = true, duyarlilik = 0.15, noktaKipi = "sil", sutunlar = null, cubuk = true } = {}) {
+  const p = data;
+  const ikili = koyuHaritasi(p, g, y, duyarlilik);
+
+  // Çubuklar ilk gidiyor: hem eğiklik izdüşümünü hem satır bantlarını
+  // bozuyorlar (kenardan geçen bir çubuk HER satıra mürekkep koyuyor).
+  const silinenCubuk = cubuk ? kalinLekeleriSil(ikili, g, y) : 0;
+
   // Eğiklik AÇISI nokta silmeden ÖNCE ölçülüyor: nokta dolguları tam
   // satır çizgisi üzerinde duruyor ve izdüşüm profilini güçlendiriyor.
   const aci = egiklikBul(ikili, g, y);
-  const silinenNokta = nokta ? noktaDolgusunuSil(ikili, g, y, noktaKipi) : 0;
+  const silinenNokta = nokta ? noktaDolgusunuSil(ikili, g, y, noktaKipi, sutunlar) : 0;
 
   for (let n = 0; n < g * y; n++) {
     const k = n * 4, v = ikili[n] ? 0 : 255;
@@ -441,7 +591,7 @@ export function ikiliyeCevir({ data, genislik: g, yukseklik: y },
     p[k + 3] = 255;
   }
 
-  return { data: p, genislik: g, yukseklik: y, aci, silinenNokta };
+  return { data: p, genislik: g, yukseklik: y, aci, silinenNokta, silinenCubuk };
 }
 
 export { HEDEF_GENISLIK, satirBantlari };

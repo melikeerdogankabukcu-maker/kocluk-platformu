@@ -101,6 +101,76 @@ const EN_AZ_MEDYAN   = 10;     // başlık numaralarını ayıklayan eşik
 export const sayiKelimeleri = (satirlar) =>
   satirlar.flatMap(s => s.kelimeler.filter(k => SAYI.test(k.metin)));
 
+// ── SAYFA İKİ SÜTUNLU MU? ───────────────────────────────────────
+// İki sütunlu bir içindekiler sayfası tek blok olarak okunduğunda her
+// şey bozuluyor: soldaki satırla sağdaki satır tek satıra yapışıyor,
+// satır ayırma çöküyor (gerçek bir fotoğrafta 2165 satırlık sayfada
+// yalnızca 2 bant bulundu), nokta dolgusu silinemiyor ve numaralar
+// yanlış başlığa bağlanıyor. Ölçülen sonuç: 49 sayfa numarasından 11'i
+// doğru, güven 42.
+//
+// Oluk, PİKSELDEN DEĞİL OCR'IN KELİME KUTULARINDAN bulunuyor. Piksel
+// denendi ve işe yaramadı: eşiklemenin gürültüsü sayfanın her yerine
+// dağıldığı için "boş dikey şerit" hiçbir yerde tam boş çıkmıyor,
+// tek sütunlu sayfalarla iki sütunlu sayfa aynı ölçüyü veriyordu
+// (ortancaya oran: tek sütun %35, iki sütun %31 — ayırt etmiyor).
+// Kelime kutularında gürültü yok: oluk, hiçbir kelimenin üzerinden
+// geçmediği dikey bandın ta kendisi.
+const OLUK_EN_AZ  = 0.025;   // sayfa genişliğine göre en dar oluk
+const OLUK_KENAR  = 0.25;    // kenarlardaki boşluk oluk sayılmaz
+const OLUK_TOLERANS = 0.05;  // bu kadar satır olukta yazı taşıyabilir
+// ── BOŞLUK HER ZAMAN SÜTUN AYIRACI DEĞİL ────────────────────────
+// Tek sütunlu bir sayfada da hiçbir kelimenin geçmediği geniş bir
+// dikey bant var: başlıklarla sağa dayalı sayfa numaraları arasındaki
+// boşluk. Orayı sütun sanmak sayfayı ortasından ikiye böler.
+// Ayıran ölçü, boşluğun SAĞINDA NE OLDUĞU. Gerçek fotoğraflarda
+// ölçüldü (sağ tarafın harf payı):
+//   gerçek ikinci sütun      → %49 · %50 · %54
+//   yalnızca numara şeridi   → %18
+// İki taraf da sayfanın harflerinin en az üçte birini taşımalı.
+const OLUK_EN_AZ_PAY = 0.30;
+
+// Sayfayı ikiye bölen dikey boşluğu bulur; yoksa null döner.
+export function olukBul(satirlar, genislik) {
+  const kelimeler = satirlar.flatMap(s => s.kelimeler);
+  // Az kelimeyle "hiçbir kelimenin geçmediği bant" ölçütü anlamsız:
+  // yarısı boş bir sayfada her yer oluk görünürdü.
+  if (kelimeler.length < 20 || genislik <= 0) return null;
+
+  const gecen = new Int32Array(genislik);
+  for (const k of kelimeler) {
+    const a = Math.max(0, Math.floor(k.x0)), b = Math.min(genislik - 1, Math.ceil(k.x1));
+    for (let x = a; x <= b; x++) gecen[x]++;
+  }
+
+  // Tek bir bozuk okuma (iki sütunu birleştiren çöp bir "kelime") oluğu
+  // gizlemesin diye küçük bir paya izin veriliyor.
+  const izin = Math.max(0, Math.floor(satirlar.length * OLUK_TOLERANS));
+  const i0 = Math.round(genislik * OLUK_KENAR);
+  const i1 = Math.round(genislik * (1 - OLUK_KENAR));
+  let enIyi = null, bas = -1;
+  for (let x = i0; x <= i1; x++) {
+    const bos = x < i1 && gecen[x] <= izin;
+    if (bos && bas < 0) bas = x;
+    if (!bos && bas >= 0) {
+      if (!enIyi || x - bas > enIyi.x1 - enIyi.x0) enIyi = { x0: bas, x1: x };
+      bas = -1;
+    }
+  }
+  if (!enIyi || enIyi.x1 - enIyi.x0 < genislik * OLUK_EN_AZ) return null;
+
+  const oluk = Math.round((enIyi.x0 + enIyi.x1) / 2);
+  const harf = (k) => (k.metin ?? "").replace(/[^0-9A-Za-zÇĞİÖŞÜçğıöşü]/g, "").length;
+  let solHarf = 0, sagHarf = 0;
+  for (const k of kelimeler) {
+    if ((k.x0 + k.x1) / 2 < oluk) solHarf += harf(k); else sagHarf += harf(k);
+  }
+  const toplam = solHarf + sagHarf;
+  if (!toplam) return null;
+  if (solHarf < toplam * OLUK_EN_AZ_PAY || sagHarf < toplam * OLUK_EN_AZ_PAY) return null;
+  return oluk;
+}
+
 // Şerit bulunamayan sayfa için son çare: sağ %22 numara şeridi sayılıyor.
 export const tekSutun = (genislik) => ([
   { x0: 0, x1: genislik, sayiX: Math.round(genislik * 0.78) },

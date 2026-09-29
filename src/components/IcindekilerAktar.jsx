@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { icindekileriAyristir, sayfaSayisi } from "../lib/icindekiler";
+import { icindekileriAyristir, sayfaSayisi, okumaPuani } from "../lib/icindekiler";
 import { bolumleriEslestir } from "../lib/konuEslestir";
 import { pdfMetni, fotografMetni } from "../lib/metinCikar";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
@@ -64,11 +64,12 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
         kutular,
         // Hangi okuma kipinin doğru olduğunu ölçüyle seçiyoruz:
         // ayrıştırıcı kaç satır çıkarabiliyorsa o kip iyidir.
-        degerlendir: (m) => icindekileriAyristir(m).bolumler.length,
+        degerlendir: okumaPuani,
         ilerleme: ({ asama, yuzde, sira, toplam }) => setIslemde({
           mesaj: asama === "loading language traineddata"
             ? "Türkçe dil verisi indiriliyor (ilk kullanımda bir kez)..."
             : asama === "ikinci deneme" ? "Farklı bir okuma kipi deneniyor..."
+            : asama === "sutunlar" ? "Sayfa iki sütunlu, sütunlar ayrılıyor..."
             : asama === "sayfa numaralari" ? "Sayfa numaraları okunuyor..."
             : toplam > 1 ? `Görsel okunuyor (${sira ?? "?"}/${toplam})...`
             : "Görsel okunuyor...",

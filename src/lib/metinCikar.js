@@ -1,5 +1,5 @@
 import { satirlariAl, sayiKelimeleri, seritleriBul, tekSutun, sutunaAyir,
-  numaralariEsle, satirlariMetne } from "./ocrSatir";
+  numaralariEsle, satirlariMetne, olukBul } from "./ocrSatir";
 import { ikiliyeCevir, sayfaKutusu, perspektifDuzelt, dortgenOlcusu, dikdortgenMi,
   HEDEF_GENISLIK } from "./goruntuIsle";
 
@@ -74,6 +74,23 @@ export async function pdfMetni(dosya, { enFazlaSayfa = 12 } = {}) {
 // goruntuIsle.js'de ve TARAYICIDAN BAĞIMSIZ: aynı kod Node'da gerçek
 // kitap fotoğraflarıyla çalıştırılıp ölçülebiliyor. Burada kalan iş
 // tarayıcıya özgü olan: dosyayı çözmek, büyütmek, döndürmek.
+
+// ── GÖRÜNTÜ İKİ KEZ KURULABİLİR OLMALI ──────────────────────────
+// Nokta dolgusunu sütun sütun silmek gerekiyor (iki sütunlu sayfada
+// satır bantları yoksa dolgu hiç silinmiyor, bkz. goruntuIsle.js) ama
+// sütunların nerede olduğu ancak İLK OKUMADAN SONRA belli oluyor.
+// Bu yüzden renkli kopya saklanıyor: sütunlar belli olunca görüntü
+// aynı tuvalde yeniden eşikleniyor.
+async function ikiliBlob(tuval, ctx, renkli, g, y) {
+  const kur = async (sutunlar) => {
+    const veri = new ImageData(new Uint8ClampedArray(renkli), g, y);
+    ikiliyeCevir({ data: veri.data, genislik: g, yukseklik: y }, sutunlar ? { sutunlar } : {});
+    ctx.putImageData(veri, 0, 0);
+    return await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
+  };
+  return { blob: await kur(null), genislik: g, yukseklik: y, sutunlariUygula: kur };
+}
+
 // Kullanıcının seçtiği dörtgeni dikdörtgene açar ve eşikler.
 //
 // Dörtgenin sınırlayıcı kutusu kadarlık bölge tuvale çiziliyor (tüm
@@ -113,24 +130,13 @@ async function dortgeniDuzlestir(bitmap, koseler) {
     tuval.width = kg; tuval.height = ky;
     const ctx = tuval.getContext("2d", { willReadFrequently: true });
     ctx.putImageData(kaynakVeri, 0, 0);
-    const veri = ctx.getImageData(0, 0, kg, ky);
-    ikiliyeCevir({ data: veri.data, genislik: kg, yukseklik: ky });
-    ctx.putImageData(veri, 0, 0);
-    const blob = await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
-    return { blob, genislik: kg, yukseklik: ky };
+    return await ikiliBlob(tuval, ctx, kaynakVeri.data, kg, ky);
   }
-
-  ikiliyeCevir(acilmis);
 
   const tuval = document.createElement("canvas");
   tuval.width = acilmis.genislik; tuval.height = acilmis.yukseklik;
-  const ctx = tuval.getContext("2d");
-  const cikti = ctx.createImageData(acilmis.genislik, acilmis.yukseklik);
-  cikti.data.set(acilmis.data);
-  ctx.putImageData(cikti, 0, 0);
-
-  const blob = await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
-  return { blob, genislik: acilmis.genislik, yukseklik: acilmis.yukseklik };
+  const ctx = tuval.getContext("2d", { willReadFrequently: true });
+  return await ikiliBlob(tuval, ctx, acilmis.data, acilmis.genislik, acilmis.yukseklik);
 }
 
 // Sayfa aramak için küçük bir kopya yeter: karar blok ortalamalarından
@@ -256,12 +262,7 @@ async function gorseliHazirla(dosya, elleKutu = null) {
   bitmap.close?.();
 
   // ── 4) EŞİKLE ─────────────────────────────────────────────────
-  const gorsel = ctx.getImageData(0, 0, g, y);
-  ikiliyeCevir({ data: gorsel.data, genislik: g, yukseklik: y });
-  ctx.putImageData(gorsel, 0, 0);
-
-  const blob = await new Promise(cozumle => tuval.toBlob(cozumle, "image/png"));
-  return { blob, genislik: g, yukseklik: y };
+  return await ikiliBlob(tuval, ctx, ctx.getImageData(0, 0, g, y).data, g, y);
 }
 
 // Fotoğraftan OCR ile metin çıkarır.
@@ -280,10 +281,12 @@ async function gorseliHazirla(dosya, elleKutu = null) {
 // tamamen kayboluyor. Hangi kipin doğru olduğu kitaptan kitaba
 // değişiyor ve önceden bilinemiyor.
 //
-// Çözüm tahmin etmek değil ÖLÇMEK: birinci kip az satır verdiyse
-// ikincisi deneniyor ve AYRIŞTIRILABİLİR SATIR SAYISI yüksek olan
-// seçiliyor. Ölçüt çağıran taraftan geliyor (degerlendir), böylece bu
-// dosya ayrıştırıcıyı tanımak zorunda kalmıyor.
+// Çözüm tahmin etmek değil ÖLÇMEK: birinci kip zayıf kaldıysa
+// ikincisi deneniyor ve PUANI yüksek olan seçiliyor. Ölçüt çağıran
+// taraftan geliyor (degerlendir), böylece bu dosya ayrıştırıcıyı
+// tanımak zorunda kalmıyor. Ölçütün kendisi "kaç satır çıktı" değil
+// "kaç sayfa numarası birbiriyle tutarlı" — bkz. icindekiler.js,
+// okumaPuani: satır saymak bozuk okumayı ödüllendiriyordu.
 const KIP_BIRINCIL = "6";    // tek düzgün metin bloğu
 const KIP_YEDEK    = "4";    // değişken boyutlu tek sütun
 const YETERLI_SATIR = 4;
@@ -408,10 +411,11 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
 
     for (let i = 0; i < liste.length; i++) {
       ilerleme?.({ asama: "hazirlik", yuzde: null, sira: i + 1, toplam: liste.length });
-      let girdi, olcu = null;
+      let girdi, olcu = null, hazirla = null;
       try {
         const hazir = await gorseliHazirla(liste[i], kutular?.[i] ?? null);
         girdi = hazir.blob;
+        hazirla = hazir;
         olcu = { genislik: hazir.genislik, yukseklik: hazir.yukseklik };
       } catch {
         // Ön işleme başarısızsa (bozuk görsel, eski tarayıcı) ham
@@ -426,6 +430,28 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
         ilerleme?.({ asama: "ikinci deneme", yuzde: null, sira: i + 1, toplam: liste.length });
         const yedek = await oku(girdi, KIP_YEDEK);
         if (yedek.puan > sonuc.puan) sonuc = yedek;
+      }
+
+      // ── İKİ SÜTUNLU SAYFA: DOLGUYU SÜTUN SÜTUN SİL ────────────
+      // Oluk ancak kelime kutuları elde olunca bulunabiliyor, yani ilk
+      // okumadan sonra. Bulunursa görüntü yeniden eşikleniyor: bu kez
+      // nokta dolgusu hem tüm sayfada hem her sütunda ayrı taranıyor.
+      // Ölçüldü (iki sütunlu gerçek fotoğraf): silinen nokta 0 → 3179,
+      // OCR güveni 42 → 65, doğru sayfa numarası 11 → 17.
+      const oluk = olcu && hazirla?.sutunlariUygula
+        ? olukBul(satirlariAl(sonuc.bloklar), olcu.genislik) : null;
+      if (oluk != null) {
+        try {
+          ilerleme?.({ asama: "sutunlar", yuzde: null, sira: i + 1, toplam: liste.length });
+          const yeniGirdi = await hazirla.sutunlariUygula(
+            [[0, olcu.genislik], [0, oluk], [oluk, olcu.genislik]]);
+          const yeni = await oku(yeniGirdi, KIP_BIRINCIL);
+          // Ölçüt karar versin: yeniden kurulan görüntü daha kötü
+          // okunuyorsa (beklenmedik düzen) eskisiyle devam.
+          if (!degerlendir || yeni.puan >= sonuc.puan) { sonuc = yeni; girdi = yeniGirdi; }
+        } catch {
+          // Yeniden kurma başarısızsa ilk görüntüyle devam.
+        }
       }
 
       // Sayfa numaralarını rakam geçişiyle düzelt

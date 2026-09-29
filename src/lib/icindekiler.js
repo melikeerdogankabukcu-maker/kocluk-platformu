@@ -165,5 +165,34 @@ export function icindekileriAyristir(metin) {
 }
 
 // Bölümün sayfa sayısı — bitişi bilinmiyorsa null.
+// ── OKUMA PUANI: HANGİ OKUMA DAHA DOĞRU? ────────────────────────
+// Bir fotoğraf birkaç ayarla okunabiliyor (farklı sayfa bölümleme
+// kipi, sütun sütun temizlenmiş görüntü). Hangisinin doğru olduğuna
+// bir ölçütle karar vermek gerekiyor ve "kaç satır çıktı" ölçütü
+// YANILTIYOR: bozuk bir okuma nokta dolgusunu satır sanıp daha ÇOK
+// satır üretebiliyor. Gerçek veriyle ölçüldü — bir fotoğrafta 63
+// satır çıkaran okuma 33 numarayı doğru bildi, 55 satır çıkaran okuma
+// 51'ini.
+//
+// Buradaki ölçüt sayfa numaralarının ARTMASI: içindekilerde numaralar
+// baştan sona büyür, uydurulmuş bir numara bu sırayı bozar. En uzun
+// artan alt dizinin uzunluğu ölçülüyor. Aynı veride bu ölçüt gerçek
+// doğrulukla neredeyse birebir örtüştü (32/36/31/35 ölçüt ↔
+// 32/36/31/35 doğru).
+export function okumaPuani(metin) {
+  const sayfalar = icindekileriAyristir(metin).bolumler
+    .map(b => b.sayfaBas)
+    .filter(v => typeof v === "number");
+  // En uzun artan alt dizi (sabırlı sıralama): uçlar dizisinde her
+  // değer, o uzunluktaki dizilerin en küçük bitişi.
+  const uclar = [];
+  for (const v of sayfalar) {
+    let i = uclar.findIndex(u => u >= v);
+    if (i < 0) i = uclar.length;
+    uclar[i] = v;
+  }
+  return uclar.length;
+}
+
 export const sayfaSayisi = (b) =>
   b.sayfaBas != null && b.sayfaSon != null ? b.sayfaSon - b.sayfaBas + 1 : null;
