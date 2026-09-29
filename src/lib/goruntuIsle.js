@@ -138,7 +138,52 @@ function satirBantlari(ikili, g, y) {
   return bantlar;
 }
 
-function noktaDolgusunuSil(ikili, g, y) {
+// ── DENENDİ VE ELENDİ: DOLGUYU NOKTA OLARAK ÇİZMEK ──────────────
+// Düşünce şuydu: dolguyu silmek yerine yerine DÜZGÜN, eşit aralıklı
+// noktalar çizelim; OCR onları nokta okusun, satırın geometrisi de
+// korunsun (silince kalan koca boşluk, iki sütunlu sayfada sütun
+// ayıracına benziyor).
+//
+// GERÇEK FOTOĞRAFLARLA ÖLÇÜLDÜ ve hipotez çürüdü. İki kitap sayfası,
+// 98 satır, "başlık + sayfa numarası birlikte doğru" ölçütü:
+//   silme                         → %83
+//   nokta çizme (boy 0.10, adım 4)→ %42
+//   nokta çizme (boy 0.06, adım 6)→ %43
+//   nokta çizme (boy 0.08, adım 8)→ %37
+// Sayıların ucuna yapışan noktaları kırpmak da kurtarmadı (%43).
+//
+// Sebebi: sayfa numarası artık boşluktan değil, sağa dayalı NUMARA
+// ŞERİTLERİNDEN bulunuyor (bkz. ocrSatir.js). Dolgu kalınca numaralar
+// "temiz sayı" olmaktan çıkıyor, şerit kurulamıyor ve sütunlar
+// çöküyor. Yani çizmenin korumaya çalıştığı bilgi zaten kullanılmıyor,
+// bozduğu bilgi ise kritik.
+//
+// Kod duruyor ama VARSAYILAN DEĞİL: aynı fikri yeniden denemek
+// isteyen, ölçümü tekrarlamadan açmasın.
+function noktalariCiz(ikili, g, dizi, b0, b1) {
+  const yukseklik = b1 - b0 + 1;
+  const boy = Math.max(2, Math.round(yukseklik * 0.10));   // nokta kenarı
+  const adim = boy * 4;                                     // noktalar arası
+  const x0 = dizi[0].x0;
+  const x1 = dizi[dizi.length - 1].x1;
+
+  // Taban çizgisi: özgün noktaların ortalarının ortancası. Dolgu
+  // genellikle harflerin alt hizasında duruyor; ortalama yerine
+  // ortanca, tek bir kaçak lekeden etkilenmiyor.
+  const ortalar = dizi.map(a => Math.round((a.y0 + a.y1) / 2)).sort((m, n) => m - n);
+  const taban = ortalar[Math.floor(ortalar.length / 2)];
+
+  for (let x = x0; x + boy <= x1; x += adim) {
+    for (let dx = 0; dx < boy; dx++) {
+      for (let dy = 0; dy < boy; dy++) {
+        const jj = taban + dy - Math.floor(boy / 2);
+        if (jj >= b0 && jj <= b1) ikili[jj * g + x + dx] = 1;
+      }
+    }
+  }
+}
+
+function noktaDolgusunuSil(ikili, g, y, kip = "sil") {
   const bantlar = satirBantlari(ikili, g, y);
 
   let silinen = 0;
@@ -166,19 +211,21 @@ function noktaDolgusunuSil(ikili, g, y) {
       return { x0, x1, y0, y1, nokta: w <= esik && h <= esik && oran >= 0.45 && oran <= 2.2 };
     });
 
-    // 4) Ardışık dizileri sil
+    // 4) Ardışık dizileri temizle: ya sil ya da düzgün noktalarla yeniden çiz
     let i = 0;
     while (i < adaylar.length) {
       if (!adaylar[i].nokta) { i++; continue; }
       let son = i;
       while (son + 1 < adaylar.length && adaylar[son + 1].nokta) son++;
       if (son - i + 1 >= DIZI_ESIGI) {
-        for (let k = i; k <= son; k++) {
-          const a = adaylar[k];
+        const dizi = adaylar.slice(i, son + 1);
+        // Önce özgün lekeleri temizle
+        dizi.forEach(a => {
           for (let x = a.x0; x <= a.x1; x++)
             for (let j = a.y0; j <= a.y1; j++) ikili[j * g + x] = 0;
           silinen++;
-        }
+        });
+        if (kip === "isaretle") noktalariCiz(ikili, g, dizi, b0, b1);
       }
       i = son + 1;
     }
@@ -343,7 +390,8 @@ export function kirp({ data, genislik: g }, kutu) {
 // Çıktı:  { data, genislik, yukseklik, aci, silinenNokta }
 //         data yerinde DEĞİŞTİRİLİYOR (kopya almıyoruz: 1800x2400 bir
 //         görüntü 17 MB, gereksiz kopya telefonda belleği zorluyor).
-export function ikiliyeCevir({ data, genislik: g, yukseklik: y }, { nokta = true, duyarlilik = 0.15 } = {}) {
+export function ikiliyeCevir({ data, genislik: g, yukseklik: y },
+  { nokta = true, duyarlilik = 0.15, noktaKipi = "sil" } = {}) {
   const p = data;
 
   // Gri tonlama + integral görüntü (her noktada sol-üst dikdörtgenin
@@ -385,7 +433,7 @@ export function ikiliyeCevir({ data, genislik: g, yukseklik: y }, { nokta = true
   // Eğiklik AÇISI nokta silmeden ÖNCE ölçülüyor: nokta dolguları tam
   // satır çizgisi üzerinde duruyor ve izdüşüm profilini güçlendiriyor.
   const aci = egiklikBul(ikili, g, y);
-  const silinenNokta = nokta ? noktaDolgusunuSil(ikili, g, y) : 0;
+  const silinenNokta = nokta ? noktaDolgusunuSil(ikili, g, y, noktaKipi) : 0;
 
   for (let n = 0; n < g * y; n++) {
     const k = n * 4, v = ikili[n] ? 0 : 255;
