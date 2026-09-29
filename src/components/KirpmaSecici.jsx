@@ -211,9 +211,18 @@ export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, o
     background: arka, color: renk, fontSize: YAZI.ikincil, fontWeight: 700,
   });
 
-  // Karartma maskesi: dış dikdörtgenden dörtgeni oyuyor.
+  // ── KARARTMA MASKESİ: DELİK AÇMAK ────────────────────────────
+  // Dış dikdörtgenden seçili dörtgeni oyuyoruz. İki ayrıntı şart:
+  //
+  //  1) FILL-RULE "evenodd". Varsayılan kural (nonzero) iki halkanın
+  //     dönüş YÖNÜNE bakıyor; ikisi de aynı yöne dönerse delik açılmıyor
+  //     ve seçili alan da kararıyor — ilk sürümde tam bu oldu, bütün
+  //     önizleme karanlık çıktı.
+  //  2) İç halka ters yöne diziliyor. evenodd'u desteklemeyen bir
+  //     tarayıcıda da delik açılsın diye ikinci güvence.
   const poligon = koseler && gorsel
-    ? koseler.map(k => `${(k.x / gorsel.g) * 100}% ${(k.y / gorsel.y) * 100}%`).join(", ")
+    ? [...koseler].reverse()
+        .map(k => `${(k.x / gorsel.g) * 100}% ${(k.y / gorsel.y) * 100}%`).join(", ")
     : "";
 
   return (
@@ -250,7 +259,8 @@ export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, o
                 <div style={{
                   position: "absolute", inset: 0, pointerEvents: "none",
                   background: "rgba(0,0,0,.45)",
-                  clipPath: `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${poligon}, 0% 0%)`,
+                  clipPath: `polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, ${poligon})`,
+                  WebkitClipPath: `polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, ${poligon})`,
                 }} />
                 {/* Çerçeve: köşeler serbest olduğu için düz çizgi yerine
                     çokgen çiziliyor. */}
