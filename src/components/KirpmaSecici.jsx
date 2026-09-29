@@ -22,8 +22,14 @@ import Modal from "./Modal";
 // Ekranda gösterilen görüntü küçültülmüş; kırpma kutusu ise ÖZGÜN
 // piksellerde döndürülmeli, yoksa OCR yanlış yeri okur. Bütün hesap
 // ekran düzleminde yapılıp çıkışta ölçekle çarpılıyor.
-const TUTAMAK = 22;        // köşe tutamağının dokunma alanı (ekran px)
-const EN_KUCUK = 40;       // çerçevenin en küçük kenarı (ekran px)
+// Tutamak, dokunma hedefi olarak görsel boyutundan BÜYÜK: parmak ucu
+// ~9 mm, köşedeki 18 pikselik kareyi tam tutturmak zor.
+const TUTAMAK = 24;        // tutamağın dokunma yarıçapı (görüntü px)
+const EN_KUCUK = 40;       // çerçevenin en küçük kenarı (görüntü px)
+// Önizleme ne kadar büyükse kenarı o kadar hassas ayarlanıyor; ölçü
+// pencereye ve ekran yüksekliğine göre kısıtlanıyor.
+const EN_GENIS = 760;
+const EKRAN_PAYI = 0.62;   // önizleme, pencere yüksekliğinin en çok bu kadarı
 
 export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, onIptal }) {
   const [gorsel, setGorsel] = useState(null);     // { url, g, y, olcek }
@@ -39,35 +45,51 @@ export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, o
       const bitmap = await createImageBitmap(dosya);
       if (iptal) { bitmap.close?.(); return; }
 
-      // Ekran ölçeği: dar telefonda da tamamı görünsün.
-      const enFazla = Math.min(520, (window.innerWidth || 400) - 80);
-      const olcek = Math.min(1, enFazla / bitmap.width);
+      // Ekran ölçeği: dar telefonda da tamamı görünsün, geniş ekranda
+      // gereksiz küçük kalmasın. Yükseklik de sınırlanıyor — yoksa
+      // dikey bir fotoğrafta alt kenar pencereden taşıyor ve
+      // tutamağına ulaşılamıyor.
+      const enFazlaG = Math.min(EN_GENIS, (window.innerWidth || 400) - 72);
+      const enFazlaY = Math.max(240, (window.innerHeight || 700) * EKRAN_PAYI);
+      const olcek = Math.min(1, enFazlaG / bitmap.width, enFazlaY / bitmap.height);
       const g = Math.round(bitmap.width * olcek);
       const y = Math.round(bitmap.height * olcek);
 
+      // ── ÖNİZLEME EKRAN YOĞUNLUĞUNDA ─────────────────────────
+      // Tuval yerleşim boyutunda çizilirse telefonda (dpr 2-3) görüntü
+      // yumuşak çıkıyor ve küçük sayfa numaraları seçilemiyor — oysa
+      // çerçeveyi tam oraya dayamak gerekiyor. Tuval dpr katında
+      // çiziliyor, ekranda yerleşim boyutunda gösteriliyor.
+      const dpr = Math.min(3, window.devicePixelRatio || 1);
+      const tg = Math.round(g * dpr), ty = Math.round(y * dpr);
+
       const tuval = document.createElement("canvas");
-      tuval.width = g; tuval.height = y;
+      tuval.width = tg; tuval.height = ty;
       const ctx = tuval.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(bitmap, 0, 0, g, y);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bitmap, 0, 0, tg, ty);
       bitmap.close?.();
 
       // Otomatik kutu: aynı işi OCR hattı da yapıyor; burada yalnızca
       // başlangıç çerçevesi olarak kullanılıyor.
       let baslangic = { x: 0, y: 0, genislik: g, yukseklik: y };
       try {
-        const veri = ctx.getImageData(0, 0, g, y);
-        const bulunan = sayfaKutusu({ data: veri.data, genislik: g, yukseklik: y });
+        const veri = ctx.getImageData(0, 0, tg, ty);
+        const bulunan = sayfaKutusu({ data: veri.data, genislik: tg, yukseklik: ty });
         if (bulunan.kirpildi) {
+          // Kutu tuval (dpr katı) düzleminde geliyor; çerçeve yerleşim
+          // düzleminde tutuluyor.
           baslangic = {
-            x: bulunan.x, y: bulunan.y,
-            genislik: bulunan.genislik, yukseklik: bulunan.yukseklik,
+            x: bulunan.x / dpr, y: bulunan.y / dpr,
+            genislik: bulunan.genislik / dpr, yukseklik: bulunan.yukseklik / dpr,
           };
         }
       } catch {
         // Bulunamadıysa tüm kare: kullanıcı kendisi daraltır.
       }
 
-      url = tuval.toDataURL("image/jpeg", 0.85);
+      url = tuval.toDataURL("image/jpeg", 0.95);
       if (iptal) return;
       setGorsel({ url, g, y, olcek });
       setKutu(baslangic);
@@ -91,19 +113,30 @@ export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, o
   // görüntüyle birlikte küçülüyorlar.
   const yuzde = (deger, tam) => `${(deger / tam) * 100}%`;
 
+  // Hangi tutamağa basıldı? Önce köşeler (iki kenarı birden oynatır),
+  // sonra kenarlar (tek kenar), en son içerisi (taşıma).
   const tutamakNeresi = (p) => {
     if (!kutu) return null;
     const { x, y, genislik, yukseklik } = kutu;
+    const x2 = x + genislik, y2 = y + yukseklik;
+
     const koseler = {
-      solUst:  { x, y },
-      sagUst:  { x: x + genislik, y },
-      solAlt:  { x, y: y + yukseklik },
-      sagAlt:  { x: x + genislik, y: y + yukseklik },
+      solUst: { x, y }, sagUst: { x: x2, y },
+      solAlt: { x, y: y2 }, sagAlt: { x: x2, y: y2 },
     };
     for (const [ad, k] of Object.entries(koseler)) {
       if (Math.abs(p.x - k.x) <= TUTAMAK && Math.abs(p.y - k.y) <= TUTAMAK) return ad;
     }
-    const icerde = p.x > x && p.x < x + genislik && p.y > y && p.y < y + yukseklik;
+
+    // Kenarlar: kenara yakın VE o kenarın uzunluğu boyunca.
+    const dikeyIcinde = p.y >= y - TUTAMAK && p.y <= y2 + TUTAMAK;
+    const yatayIcinde = p.x >= x - TUTAMAK && p.x <= x2 + TUTAMAK;
+    if (dikeyIcinde && Math.abs(p.x - x) <= TUTAMAK) return "sol";
+    if (dikeyIcinde && Math.abs(p.x - x2) <= TUTAMAK) return "sag";
+    if (yatayIcinde && Math.abs(p.y - y) <= TUTAMAK) return "ust";
+    if (yatayIcinde && Math.abs(p.y - y2) <= TUTAMAK) return "alt";
+
+    const icerde = p.x > x && p.x < x2 && p.y > y && p.y < y2;
     return icerde ? "tasi" : null;
   };
 
@@ -122,24 +155,31 @@ export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, o
     const k = surukle.kutu;
     const sinir = (v, alt, ust) => Math.max(alt, Math.min(ust, v));
 
-    let yeni;
     if (surukle.tur === "tasi") {
-      yeni = {
+      setKutu({
         x: sinir(k.x + dx, 0, gorsel.g - k.genislik),
         y: sinir(k.y + dy, 0, gorsel.y - k.yukseklik),
         genislik: k.genislik, yukseklik: k.yukseklik,
-      };
-    } else {
-      // Köşe: karşı köşe sabit kalıyor.
-      const sol = surukle.tur.startsWith("sol");
-      const ust = surukle.tur.endsWith("Ust");
-      const x0 = sol ? sinir(k.x + dx, 0, k.x + k.genislik - EN_KUCUK) : k.x;
-      const y0 = ust ? sinir(k.y + dy, 0, k.y + k.yukseklik - EN_KUCUK) : k.y;
-      const x1 = sol ? k.x + k.genislik : sinir(k.x + k.genislik + dx, k.x + EN_KUCUK, gorsel.g);
-      const y1 = ust ? k.y + k.yukseklik : sinir(k.y + k.yukseklik + dy, k.y + EN_KUCUK, gorsel.y);
-      yeni = { x: x0, y: y0, genislik: x1 - x0, yukseklik: y1 - y0 };
+      });
+      return;
     }
-    setKutu(yeni);
+
+    // Kenar koordinatlarıyla çalışmak köşe ve kenarı tek kurala indiriyor:
+    // hangi kenarlar oynayacaksa yalnızca onlar güncelleniyor, karşı
+    // kenar sabit kalıyor.
+    const tur = surukle.tur;
+    let x0 = k.x, y0 = k.y, x1 = k.x + k.genislik, y1 = k.y + k.yukseklik;
+    const solOynar = tur === "sol" || tur === "solUst" || tur === "solAlt";
+    const sagOynar = tur === "sag" || tur === "sagUst" || tur === "sagAlt";
+    const ustOynar = tur === "ust" || tur === "solUst" || tur === "sagUst";
+    const altOynar = tur === "alt" || tur === "solAlt" || tur === "sagAlt";
+
+    if (solOynar) x0 = sinir(x0 + dx, 0, x1 - EN_KUCUK);
+    if (sagOynar) x1 = sinir(x1 + dx, x0 + EN_KUCUK, gorsel.g);
+    if (ustOynar) y0 = sinir(y0 + dy, 0, y1 - EN_KUCUK);
+    if (altOynar) y1 = sinir(y1 + dy, y0 + EN_KUCUK, gorsel.y);
+
+    setKutu({ x: x0, y: y0, genislik: x1 - x0, yukseklik: y1 - y0 });
   };
 
   const bitir = () => setSurukle(null);
@@ -166,6 +206,17 @@ export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, o
     background: arka, color: renk, fontSize: YAZI.ikincil, fontWeight: 700,
   });
 
+  // Kenar tutamağı: kenarın ortasında ince bir çubuk.
+  const kenar = (ad, x, y, yatay) => (
+    <div key={ad} style={{
+      position: "absolute", left: yuzde(x, gorsel.g), top: yuzde(y, gorsel.y),
+      width: yatay ? 28 : 6, height: yatay ? 6 : 28,
+      marginLeft: yatay ? -14 : -3, marginTop: yatay ? -3 : -14,
+      borderRadius: 3, background: "#fff", border: `2px solid ${c.bg}`,
+      boxShadow: "0 1px 3px rgba(0,0,0,.35)", pointerEvents: "none",
+    }} />
+  );
+
   const kose = (ad, x, y) => (
     <div key={ad} style={{
       position: "absolute", left: yuzde(x, gorsel.g), top: yuzde(y, gorsel.y),
@@ -177,11 +228,12 @@ export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, o
 
   return (
     <Modal title={toplam > 1 ? `Metin sınırı (${sira}/${toplam})` : "Metin sınırını çizin"}
-      onClose={onIptal} maxWidth={600}>
+      onClose={onIptal} maxWidth={840}>
       <div style={{ display: "flex", flexDirection: "column", gap: BOSLUK.m }}>
         <div style={{ fontSize: YAZI.kucuk, color: RENK.metinIkincil, lineHeight: 1.55 }}>
           Çerçeveyi <b>yalnızca içindekiler listesini</b> kapsayacak şekilde ayarlayın:
-          köşelerden boyutlandırın, ortasından sürükleyin. Masa, sayfa kenarı ve
+          <b>köşelerden</b> iki kenarı birden, <b>kenar ortalarındaki çubuklardan</b> tek
+          kenarı ayarlayın; ortasından sürükleyerek taşıyın. Masa, sayfa kenarı ve
           gölge dışarıda kalırsa okuma belirgin biçimde düzeliyor.
         </div>
 
@@ -218,6 +270,10 @@ export default function KirpmaSecici({ dosya, sira, toplam, color: c, onTamam, o
                 {kose("sagUst", kutu.x + kutu.genislik, kutu.y)}
                 {kose("solAlt", kutu.x, kutu.y + kutu.yukseklik)}
                 {kose("sagAlt", kutu.x + kutu.genislik, kutu.y + kutu.yukseklik)}
+                {kenar("ust", kutu.x + kutu.genislik / 2, kutu.y, true)}
+                {kenar("alt", kutu.x + kutu.genislik / 2, kutu.y + kutu.yukseklik, true)}
+                {kenar("sol", kutu.x, kutu.y + kutu.yukseklik / 2, false)}
+                {kenar("sag", kutu.x + kutu.genislik, kutu.y + kutu.yukseklik / 2, false)}
               </>
             )}
           </div>
