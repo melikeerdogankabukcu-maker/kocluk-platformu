@@ -3,6 +3,7 @@ import { icindekileriAyristir, sayfaSayisi } from "../lib/icindekiler";
 import { bolumleriEslestir } from "../lib/konuEslestir";
 import { pdfMetni, fotografMetni } from "../lib/metinCikar";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
+import KirpmaSecici from "./KirpmaSecici";
 
 // Bir kitabın içindekiler sayfasını sisteme aktarma akışı.
 //
@@ -42,10 +43,89 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
   const metneEkle = (yeni) =>
     setMetin(onceki => (onceki.trim() ? `${onceki.replace(/\s+$/, "")}\n${yeni}` : yeni));
 
+  // ── FOTOĞRAFTA ÖNCE SINIR, SONRA OKUMA ────────────────────────
+  // Sayfayı kendiliğinden bulan adım çoğu fotoğrafta çalışıyor ama
+  // sessizce yanılabiliyor: gölgede kalan bir kenarı "sayfa değil"
+  // sayıp o sütunun bütün sayfa numaralarını kesebiliyor. Kullanıcı
+  // bunu yalnızca "okuma kötü" diye görüyor.
+  //
+  // Bu yüzden fotoğraf okunmadan ÖNCE sınır gösteriliyor: çerçeve
+  // otomatik bulunan kutuyla açılıyor, kullanıcı gerekirse düzeltiyor.
+  // Birden fazla fotoğrafta sırayla soruluyor; her birinin kutusu
+  // kendi görüntüsünün özgün piksellerinde saklanıyor.
+  const [kirpma, setKirpma] = useState(null);   // { dosyalar, kutular, sira }
+
+  const fotograflariOku = async (dosyalar, kutular) => {
+    setHata(null);
+    setBolumler(null);
+    try {
+      setIslemde({ mesaj: "Görsel okunuyor..." });
+      const { metin: cikan, guven } = await fotografMetni(dosyalar, {
+        kutular,
+        // Hangi okuma kipinin doğru olduğunu ölçüyle seçiyoruz:
+        // ayrıştırıcı kaç satır çıkarabiliyorsa o kip iyidir.
+        degerlendir: (m) => icindekileriAyristir(m).bolumler.length,
+        ilerleme: ({ asama, yuzde, sira, toplam }) => setIslemde({
+          mesaj: asama === "loading language traineddata"
+            ? "Türkçe dil verisi indiriliyor (ilk kullanımda bir kez)..."
+            : asama === "ikinci deneme" ? "Farklı bir okuma kipi deneniyor..."
+            : asama === "sayfa numaralari" ? "Sayfa numaraları okunuyor..."
+            : toplam > 1 ? `Görsel okunuyor (${sira ?? "?"}/${toplam})...`
+            : "Görsel okunuyor...",
+          yuzde,
+        }),
+      });
+      metneEkle(cikan);
+      // Sonucu HEMEN söyle. Önceden kullanıcı "Bölümleri çıkar"a
+      // basana kadar okumanın işe yarayıp yaramadığını bilmiyordu.
+      const cikanSatir = icindekileriAyristir(cikan).bolumler.length;
+      if (!cikan.trim()) {
+        setHata("Görselden metin çıkarılamadı. Daha net ve düz çekilmiş bir fotoğraf deneyin.");
+      } else if (cikanSatir === 0) {
+        setHata("Metin okundu ama sayfa numarası olan hiçbir satır bulunamadı. " +
+                "Fotoğrafta içindekiler listesinin tamamı görünüyor mu, sayfa numaraları kesilmiş mi bakın.");
+      } else if (guven != null && guven < 70) {
+        // Düşük güveni saklamıyoruz: koç satırları okumadan kaydederse
+        // yanlış başlıklar kitaba yerleşir.
+        setHata(`${cikanSatir} satır okundu ama okuma güveni düşük (%${Math.round(guven)}). ` +
+                `Aşağıdaki metni satır satır kontrol edin.`);
+      }
+    } catch (err) {
+      console.error("Icindekiler cikarma:", err);
+      setHata("Dosya okunamadı: " + (err?.message ?? "bilinmeyen hata"));
+    } finally {
+      setIslemde(null);
+    }
+  };
+
+  // Sınır penceresinden gelen kutu: son fotoğraftaysa okumaya geç.
+  // Okuma durum güncelleyicisinin İÇİNDEN başlatılmıyor: React
+  // güncelleyiciyi iki kez çağırabiliyor ve OCR iki kez koşardı.
+  const kutuSecildi = (kutu) => {
+    if (!kirpma) return;
+    const kutular = [...kirpma.kutular];
+    kutular[kirpma.sira] = kutu;
+    const sonraki = kirpma.sira + 1;
+    if (sonraki < kirpma.dosyalar.length) {
+      setKirpma({ ...kirpma, kutular, sira: sonraki });
+    } else {
+      setKirpma(null);
+      fotograflariOku(kirpma.dosyalar, kutular);
+    }
+  };
+
   const dosyaSec = async (e) => {
     const dosyalar = [...(e.target.files ?? [])];
     e.target.value = "";
     if (dosyalar.length === 0) return;
+
+    if (kaynak !== "pdf") {
+      setHata(null);
+      setBolumler(null);
+      setKirpma({ dosyalar, kutular: new Array(dosyalar.length).fill(null), sira: 0 });
+      return;
+    }
+
     setHata(null);
     setBolumler(null);
 
@@ -66,36 +146,6 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
                     `İçindekiler daha ilerideyse yalnızca o sayfaları içeren bir PDF verin.`);
           }
         }
-      } else {
-        setIslemde({ mesaj: "Görsel okunuyor..." });
-        const { metin: cikan, guven } = await fotografMetni(dosyalar, {
-          // Hangi okuma kipinin doğru olduğunu ölçüyle seçiyoruz:
-          // ayrıştırıcı kaç satır çıkarabiliyorsa o kip iyidir.
-          degerlendir: (m) => icindekileriAyristir(m).bolumler.length,
-          ilerleme: ({ asama, yuzde, sira, toplam }) => setIslemde({
-            mesaj: asama === "loading language traineddata"
-              ? "Türkçe dil verisi indiriliyor (ilk kullanımda bir kez)..."
-              : asama === "ikinci deneme" ? "Farklı bir okuma kipi deneniyor..."
-              : toplam > 1 ? `Görsel okunuyor (${sira ?? "?"}/${toplam})...`
-              : "Görsel okunuyor...",
-            yuzde,
-          }),
-        });
-        metneEkle(cikan);
-        // Sonucu HEMEN söyle. Önceden kullanıcı "Bölümleri çıkar"a
-        // basana kadar okumanın işe yarayıp yaramadığını bilmiyordu.
-        const cikanSatir = icindekileriAyristir(cikan).bolumler.length;
-        if (!cikan.trim()) {
-          setHata("Görselden metin çıkarılamadı. Daha net ve düz çekilmiş bir fotoğraf deneyin.");
-        } else if (cikanSatir === 0) {
-          setHata("Metin okundu ama sayfa numarası olan hiçbir satır bulunamadı. " +
-                  "Fotoğrafta içindekiler listesinin tamamı görünüyor mu, sayfa numaraları kesilmiş mi bakın.");
-        } else if (guven != null && guven < 70) {
-          // Düşük güveni saklamıyoruz: koç satırları okumadan kaydederse
-          // yanlış başlıklar kitaba yerleşir.
-          setHata(`${cikanSatir} satır okundu ama okuma güveni düşük (%${Math.round(guven)}). ` +
-                  `Aşağıdaki metni satır satır kontrol edin.`);
-        }
       }
     } catch (err) {
       console.error("Icindekiler cikarma:", err);
@@ -104,6 +154,17 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
       setIslemde(null);
     }
   };
+
+  const kirpmaPenceresi = kirpma ? (
+    <KirpmaSecici
+      dosya={kirpma.dosyalar[kirpma.sira]}
+      sira={kirpma.sira + 1}
+      toplam={kirpma.dosyalar.length}
+      color={c}
+      onTamam={kutuSecildi}
+      onIptal={() => setKirpma(null)}
+    />
+  ) : null;
 
   const ayristir = () => {
     const { bolumler: b, atlanan: a } = icindekileriAyristir(metin);
@@ -131,6 +192,9 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: BOSLUK.m }}>
+      {/* Fotoğrafta okuma öncesi metin sınırı */}
+      {kirpmaPenceresi}
+
       {/* Kaynak seçimi */}
       <div style={{ display: "flex", gap: BOSLUK.s }}>
         {KAYNAKLAR.map(k => (

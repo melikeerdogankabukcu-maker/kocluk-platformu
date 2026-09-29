@@ -79,7 +79,9 @@ const TARAMA_GENISLIK = 600;
 // Eğiklik ölçümü için küçük kopyanın genişliği
 const ACI_GENISLIK = 900;
 
-async function gorseliHazirla(dosya) {
+// elleKutu verilirse sayfa arama ATLANIYOR: kullanıcı sınırı kendi
+// çizdiyse tahmin etmeye çalışmak, onun kararını bozmak olurdu.
+async function gorseliHazirla(dosya, elleKutu = null) {
   // Tarayıcı API'leri: bu yol yalnızca istemcide çalışıyor.
   const bitmap = await createImageBitmap(dosya);
 
@@ -88,7 +90,17 @@ async function gorseliHazirla(dosya) {
   // satır bantlarını ve yerel eşiği bozuyor (ayrıntı goruntuIsle.js'de).
   // Önce sayfanın sınırları bulunuyor, işlem onun içinde yapılıyor.
   let kaynak = { x: 0, y: 0, genislik: bitmap.width, yukseklik: bitmap.height };
-  try {
+  if (elleKutu) {
+    // Sınırları görüntünün içinde tut: dışarı taşan bir kutu
+    // drawImage'de boş (siyah) alan doğururdu.
+    const x = Math.max(0, Math.min(bitmap.width - 1, Math.round(elleKutu.x)));
+    const y = Math.max(0, Math.min(bitmap.height - 1, Math.round(elleKutu.y)));
+    kaynak = {
+      x, y,
+      genislik: Math.max(1, Math.min(bitmap.width - x, Math.round(elleKutu.genislik))),
+      yukseklik: Math.max(1, Math.min(bitmap.height - y, Math.round(elleKutu.yukseklik))),
+    };
+  } else try {
     const tOlcek = Math.min(1, TARAMA_GENISLIK / bitmap.width);
     const tg = Math.max(1, Math.round(bitmap.width * tOlcek));
     const ty = Math.max(1, Math.round(bitmap.height * tOlcek));
@@ -204,7 +216,7 @@ const YETERLI_SATIR = 4;
 // dikey örtüşmesiyle satırlara eşleniyor.
 const RAKAMLAR = "0123456789";
 
-export async function fotografMetni(dosyalar, { ilerleme, degerlendir } = {}) {
+export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular } = {}) {
   const liste = Array.isArray(dosyalar) ? dosyalar : [dosyalar];
   const { createWorker } = await import("tesseract.js");
 
@@ -318,7 +330,7 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir } = {}) {
       ilerleme?.({ asama: "hazirlik", yuzde: null, sira: i + 1, toplam: liste.length });
       let girdi, olcu = null;
       try {
-        const hazir = await gorseliHazirla(liste[i]);
+        const hazir = await gorseliHazirla(liste[i], kutular?.[i] ?? null);
         girdi = hazir.blob;
         olcu = { genislik: hazir.genislik, yukseklik: hazir.yukseklik };
       } catch {
