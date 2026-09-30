@@ -2,6 +2,7 @@ import { satirlariAl, sayiKelimeleri, seritleriBul, tekSutun, sutunaAyir,
   numaralariEsle, satirlariMetne } from "./ocrSatir";
 import { ikiliyeCevir, sayfaKutusu, perspektifDuzelt, dortgenOlcusu, dikdortgenMi,
   metinBolgeleri, sutunAraliklari, HEDEF_GENISLIK } from "./goruntuIsle";
+import { servisVar, seritleriOku } from "./okumaServisi";
 
 // İçindekiler sayfasını metne çevirme: PDF ve fotoğraf (OCR).
 //
@@ -435,12 +436,30 @@ export async function fotografMetni(dosyalar, { ilerleme, degerlendir, kutular }
 
         // Tüm sayfa zaten rakamla okunduysa yeniden okumuyoruz; yalnızca
         // bu sütunun şeridine düşenleri süzüyoruz.
-        const sayilar = tumSayilar
+        let sayilar = tumSayilar
           ? tumSayilar.filter(k => k.x0 >= sutun.sayiX && k.x0 < sutun.x1)
           : await rakamGecisi(girdi, {
               left: sutun.sayiX, top: 0,
               width: Math.max(1, sutun.x1 - sutun.sayiX), height: olcu.yukseklik,
             });
+
+        // ── ŞERİT ZAYIF OKUNDUYSA SERVİSE SOR ──────────────────
+        // Ölçüt satır başına numara: içindekilerde neredeyse her
+        // satırın bir sayfa numarası vardır. Yarısından azı okunmuşsa
+        // o şerit gerçekten okunamamış demektir — gerçek bir kitap
+        // fotoğrafında 29 satırlık sütunda 19 numara çıkmıştı,
+        // gölgedeki şeritte ise neredeyse hiç.
+        //
+        // Servis kapalıysa (adres tanımsız) bu blok hiç çalışmıyor;
+        // açıkken de yalnız DAHA ÇOK numara getirdiyse kabul ediliyor.
+        if (servisVar() && sayilar.length < sutunSatirlari.length * 0.5) {
+          ilerleme?.({ asama: "servis", yuzde: null });
+          const servisSayilari = await seritleriOku(girdi, [{
+            x0: sutun.sayiX, y0: 0,
+            x1: Math.max(sutun.sayiX + 1, sutun.x1), y1: olcu.yukseklik,
+          }]);
+          if (servisSayilari.length > sayilar.length) sayilar = servisSayilari;
+        }
 
         parcalar.push(satirlariMetne(sutunSatirlari, numaralariEsle(sutunSatirlari, sayilar), sutun.sayiX));
       }

@@ -70,6 +70,7 @@ export default function IcindekilerAktar({ konular = [], color: c, onKaydet, onV
             ? "Türkçe dil verisi indiriliyor (ilk kullanımda bir kez)..."
             : asama === "ikinci deneme" ? "Farklı bir okuma kipi deneniyor..."
             : asama === "sutunlar" ? "Sayfa iki sütunlu, sütunlar ayrılıyor..."
+            : asama === "servis" ? "Sayfa numaraları okuma servisine soruluyor..."
             : asama === "sayfa numaralari" ? "Sayfa numaraları okunuyor..."
             : toplam > 1 ? `Görsel okunuyor (${sira ?? "?"}/${toplam})...`
             : "Görsel okunuyor...",
