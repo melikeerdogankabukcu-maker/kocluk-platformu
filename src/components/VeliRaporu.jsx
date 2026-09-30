@@ -70,6 +70,24 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
     day: "numeric", month: "long", year: "numeric",
   });
 
+  // ── DOĞRULANMIŞ ÇALIŞMA KAYDI ────────────────────────────────
+  // Raporun rakiplerden ayrıldığı yer burası. Rakiplerin veli
+  // raporlarında da görev oranı, rozet ve süre var — ama hepsi
+  // ÖĞRENCİNİN BEYANI. Bizde süreyi sunucu ölçüyor, koç onaylıyor ve
+  // onaylanan kayıt kilitleniyor. Bu bölüm o farkı gösteriyor; yoksa
+  // "kanıtlı takip" iddiası belgede hiçbir yerde görünmüyordu.
+  const kanit = analiz?.kanit;
+  // Hiç plan kullanılmamışsa bölüm HİÇ çıkmıyor: boş bir kanıt
+  // bölümü, iddiayı güçlendirmek yerine zayıflatır.
+  const kanitVar = kanit && (kanit.yapilan_blok > 0 || kanit.sayac_dk > 0
+    || kanit.fotografli_kayit > 0 || kanit.onayli_gorev > 0);
+
+  const saatMetni = (dk) => {
+    if (!dk) return "—";
+    const sa = Math.floor(dk / 60), d2 = dk % 60;
+    return sa ? (d2 ? `${sa} sa ${d2} dk` : `${sa} sa`) : `${d2} dk`;
+  };
+
   const gd = analiz?.genel_degerlendirme;
   const stil = gd ? genelDegerlendirmeStil(gd.durum) : null;
   const s = puan ? seviyeHesapla(puan.xp ?? 0) : null;
@@ -242,7 +260,10 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
                 {analiz.plan_istatistik?.oran != null &&
                   kutu("Plan", `%${analiz.plan_istatistik.oran}`,
                     `${analiz.plan_istatistik.yapilan}/${analiz.plan_istatistik.toplam} blok`)}
-                {analiz.plan_istatistik?.calisilan_dk > 0 &&
+                {/* Süre kutusu yalnız kanıt bölümü YOKSA burada: ikisi de
+                    çıkarsa aynı sayı iki farklı etiketle görünüyor ve
+                    kanıt belgesinde bu özensiz durur. */}
+                {!kanitVar && analiz.plan_istatistik?.calisilan_dk > 0 &&
                   kutu("Çalışma", `${Math.round(analiz.plan_istatistik.calisilan_dk / 60)} sa`, "bildirilen süre")}
                 {kutu("Ders", analiz.ders_istatistik?.tamamlanan ?? 0, "tamamlandı")}
                 {analiz.haftalik_istatistik?.soru_sayisi > 0 &&
@@ -250,6 +271,43 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
                 {analiz.gorev_istatistik?.geciken > 0 &&
                   kutu("Geciken", analiz.gorev_istatistik.geciken, "görev")}
               </div>
+            ))}
+
+            {/* Doğrulanmış çalışma kaydı */}
+            {kanitVar && bolum("DOĞRULANMIŞ ÇALIŞMA KAYDI", (
+              <>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {kutu("Sayaçla ölçülen", saatMetni(kanit.sayac_dk),
+                    kanit.sayacli_blok > 0 ? `${kanit.sayacli_blok} blokta` : "sayaç kullanılmadı")}
+                  {kutu("Öğrenci beyanı", saatMetni(kanit.bildirilen_dk), "kendi girdiği")}
+                  {kanit.yapilan_blok > 0 &&
+                    kutu("Koç onaylı", `${kanit.onayli_blok}/${kanit.yapilan_blok}`,
+                      kanit.onay_orani != null ? `%${kanit.onay_orani} blok` : "blok")}
+                  {kanit.fotografli_kayit > 0 &&
+                    kutu("Fotoğraflı", kanit.fotografli_kayit, "kayıt")}
+                  {kanit.onayli_gorev > 0 &&
+                    kutu("Onaylı ödev", `${kanit.onayli_gorev}/${kanit.teslim_gorev}`, "teslim")}
+                </div>
+                <div style={{
+                  marginTop: 8, padding: "9px 11px", borderRadius: 8,
+                  background: "#fafaf8", border: "1px solid #f0ede8",
+                  fontSize: 10, lineHeight: 1.6, color: "#666",
+                }}>
+                  <div style={{ fontWeight: 700, color: "#444", marginBottom: 3 }}>
+                    Bu kayıt nasıl doğrulanıyor?
+                  </div>
+                  <div>• <b>Süre sunucuda ölçülüyor.</b> Öğrenci başlat/durdur diyor,
+                    geçen süreyi sunucunun saati hesaplıyor; tek oturumda en çok 4 saat sayılıyor.
+                    Öğrencinin kendi yazdığı süre ayrıca gösteriliyor — ikisi farklı şeydir.</div>
+                  <div>• <b>Koç onayladıktan sonra kayıt kilitlenir.</b> Onaylanmış bir blokta
+                    "yapıldı" işareti ve süre değiştirilemez; veritabanı değişikliği reddeder.</div>
+                  {kanit.fotografli_kayit > 0 &&
+                    <div>• <b>Fotoğraflı kayıt:</b> öğrencinin yüklediği çözüm ve test görselleri.</div>}
+                  {kanit.iade_blok > 0 &&
+                    <div>• Koç bu dönemde {kanit.iade_blok} bloğu <b>iade etti</b>; iade edilen iş
+                      yeniden yapılana kadar tamamlanmış sayılmıyor.</div>}
+                </div>
+              </>
             ))}
 
             {/* Sınav gelişimi */}
