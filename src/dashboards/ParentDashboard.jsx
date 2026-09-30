@@ -392,7 +392,7 @@ export default function ParentDashboard({ userId, userName }) {
           { ad: "Seviye", icerik: <SeviyeAvatar studentId={child.id} color={c} salt baslik={`${child.full_name.split(" ")[0]} — Seviye`} /> },
           { ad: "Rozetler", id: "bolum-rozet",
             icerik: <div id="bolum-rozet"><Rozetler studentId={child.id} color={c} baslik={`${child.full_name.split(" ")[0]} — Rozetler`} /></div> },
-          { ad: "Dönem Raporu", icerik: <VeliRaporu studentId={child.id} studentName={child.full_name} color={c} /> },
+          { ad: "Çalışma Kaydı", icerik: <VeliRaporu studentId={child.id} studentName={child.full_name} color={c} /> },
         ]} />
 
               {/* Ödeme Durumu */}

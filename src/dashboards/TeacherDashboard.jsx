@@ -929,7 +929,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
                             />
                             <VeliRaporu
                               studentId={s.id} studentName={s.full_name} color={c} variant="buton"
-                              baslik={`${s.full_name} — Dönem Raporu`}
+                              baslik={`${s.full_name} — Doğrulanmış Çalışma Kaydı`}
                             />
                             <HaftalikProgram
                               tasks={sTasks} programOgeleri={programMap[s.id] ?? []}

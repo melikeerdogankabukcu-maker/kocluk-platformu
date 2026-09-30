@@ -22,13 +22,19 @@ const HAZIR_ARALIKLAR = [
   { ad: "Tüm zaman", ay: null },
 ];
 
-// Veli için dönem raporu — yazdırılabilir / PDF olarak kaydedilebilir.
+// Dönem raporu — yazdırılabilir / PDF olarak kaydedilebilir.
+//
+// ── ADI NEDEN "DOĞRULANMIŞ ÇALIŞMA KAYDI" ───────────────────────
+// Belge yalnız veliye gitmiyor: kurum görüşmesinde de gösterilen şey
+// bu. "Veli raporu" adı hem o kullanımı daraltıyor hem de rakiplerin
+// öz-beyana dayalı karneleriyle aynı yere koyuyordu. Belgenin iddiası
+// ölçülmüş ve onaylanmış bir kayıt olmak; adı da bunu söylesin.
 //
 // PDF üretimi için harici kütüphane KULLANILMIYOR: jsPDF'in gömülü fontları
 // Türkçe karakterleri (ş/ğ/ı/İ) bozuyor ve düzeltmek ~300KB font gömmeyi
 // gerektiriyor. Tarayıcının yazdırma motoru hem Türkçe'yi doğru basıyor hem de
 // kullanıcıya "PDF olarak kaydet" seçeneğini zaten veriyor.
-export default function VeliRaporu({ studentId, studentName, color: c, baslik = "Veli Raporu", variant = "kart" }) {
+export default function VeliRaporu({ studentId, studentName, color: c, baslik = "Doğrulanmış Çalışma Kaydı", variant = "kart" }) {
   const [acik, setAcik] = useState(false);
   const [ogretmenNotu, setNot] = useState("");
   const [rozetler, setRozetler] = useState([]);
@@ -128,7 +134,7 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
         <button onClick={() => setAcik(true)} style={{
           fontSize: 11, padding: "4px 12px", borderRadius: 99, fontWeight: 600,
           border: `1px solid ${c.mid}55`, background: "transparent", color: c.mid, cursor: "pointer",
-        }}>📄 Dönem Raporu</button>
+        }}>📄 Çalışma Kaydı</button>
       ) : (
         <Card id="bolum-rapor">
           <SectionTitle title={baslik} color={c.mid} />
@@ -136,7 +142,7 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
             width: "100%", padding: "11px 0", borderRadius: 12,
             border: `1.5px dashed ${c.mid}`, background: "transparent",
             color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
-          }}>📄 Dönem raporu oluştur</button>
+          }}>📄 Doğrulanmış çalışma kaydı oluştur</button>
         </Card>
       )}
 
@@ -219,7 +225,7 @@ export default function VeliRaporu({ studentId, studentName, color: c, baslik = 
               <div>
                 <div style={{ fontSize: 18, fontWeight: 800 }}>{studentName}</div>
                 <div style={{ fontSize: 11, color: "#777", marginTop: 2 }}>
-                  Koçluk Platformu · Dönem Değerlendirme Raporu
+                  Koçluk Platformu · Doğrulanmış Çalışma Kaydı
                 </div>
                 <div style={{ fontSize: 10.5, color: "#999", marginTop: 3, fontWeight: 600 }}>
                   Dönem: {donemMetni}
