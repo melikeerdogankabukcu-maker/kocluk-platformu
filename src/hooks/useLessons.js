@@ -34,6 +34,13 @@ export function useLessons(userId) {
   //
   // Bugün: KOÇ planlarsa ders doğrudan onaylı. ÖĞRENCİ ister (talep)
   // ederse "beklemede" kalır ve KOÇ onaylar — talep akışı duruyor.
+  //
+  // Bu kural artık SUNUCUDA da işliyor (ders_yetki_migration.sql).
+  // Önceden yalnız arayüzden kaldırılmıştı: öğrenci API üzerinden
+  // kendi dersini onaylayabiliyor, katılımını işaretleyebiliyor ve
+  // ödemeyi "ödendi" gösterebiliyordu. Katılım kaydı veli raporundaki
+  // doğrulanmış çalışma kaydına girdiği için bu, belgeyi de
+  // sahtelenebilir yapıyordu.
   const createLesson = async (payload) => {
     const amTeacher = userId === payload.teacher_id;
     const { error } = await supabase.from("lessons").insert({
