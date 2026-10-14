@@ -78,6 +78,14 @@ CREATE TRIGGER tercih_zaman_damgasi
 -- zaten bu rolü kullanıyor, yani sınama artık üretimdeki yolu deniyor.
 -- Temizlik rol geri alındıktan SONRA yapılıyor, yoksa silme işini de
 -- RLS engeller.
+-- NOT: Supabase SQL Editor RAISE NOTICE ciktisini GOSTERMIYOR. Sonuc
+-- bu yuzden gecici bir tabloya yazilip en sonda SATIR olarak
+-- donduruluyor; "sinama gecti mi, yoksa atlandi mi" ancak boyle
+-- ayirt ediliyor. Hatasiz bitmek tek basina yeterli degil: cift
+-- bulunamazsa blok sessizce atliyor ve o da hatasiz gorunuyor.
+DROP TABLE IF EXISTS _sinama_sonucu;
+CREATE TEMP TABLE _sinama_sonucu (sonuc TEXT);
+
 DO $test$
 DECLARE
   koc UUID; ogr UUID; red BOOLEAN; okunan INTEGER; gecen INTEGER := 0;
@@ -85,7 +93,8 @@ BEGIN
   SELECT teacher_id, student_id INTO koc, ogr
     FROM teacher_students WHERE durum = 'onaylandi' LIMIT 1;
   IF ogr IS NULL THEN
-    RAISE NOTICE 'onayli koc-ogrenci cifti yok; davranis sinamasi atlandi.';
+    INSERT INTO _sinama_sonucu VALUES
+      ('ATLANDI - onayli koc-ogrenci cifti yok, davranis sinanamadi');
     RETURN;
   END IF;
 
@@ -133,5 +142,8 @@ BEGIN
   PERFORM set_config('request.jwt.claims', '', true);
   DELETE FROM kullanici_tercihleri WHERE id IN (ogr, koc);
 
-  RAISE NOTICE 'kullanici_tercihleri: % davranis sinamasi gecti.', gecen;
+  INSERT INTO _sinama_sonucu VALUES (format('GECTI - %s davranis sinamasi', gecen));
 END $test$;
+
+-- Migration'in sonucu: bu satir SQL Editor'de gorunur.
+SELECT sonuc AS "kullanici_tercihleri" FROM _sinama_sonucu;
