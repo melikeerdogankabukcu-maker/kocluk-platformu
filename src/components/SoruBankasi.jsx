@@ -5,6 +5,9 @@ import { useTopics } from "../lib/TopicsContext";
 import { sayfaSayisi } from "../lib/icindekiler";
 import { sadelestir } from "../lib/konuEslestir";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
+import { isbnCoz, isbnYaz } from "../lib/isbn";
+import { taramaVarMi } from "../lib/kodOkuyucu";
+import BarkodTarayici from "./BarkodTarayici";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import IcindekilerAktar from "./IcindekilerAktar";
@@ -33,6 +36,8 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
   const [bolumMap, setBolumMap] = useState({});      // banka_id -> bölümler
   const [secili,   setSecili]   = useState(null);    // açık kitabın id'si
   const [yeniForm, setYeniForm] = useState(null);    // null = form kapalı
+  const [tarayici, setTarayici] = useState(false);   // barkod penceresi açık mı
+  const [isbnHata, setIsbnHata] = useState(null);
   const [aktaran,  setAktaran]  = useState(null);    // içindekiler aktarılan kitabın id'si
   const [duzenlenen, setDuzenlenen] = useState(null); // { id, ad, yayinevi, sinav_turu, ders }
   const [islemde,  setIslemde]  = useState(false);
@@ -91,6 +96,9 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
         yayinevi:   yeniForm.yayinevi?.trim() || null,
         sinav_turu: yeniForm.sinav_turu || null,
         ders:       yeniForm.ders || null,
+        // Sağlaması tutmayan numara hiç kaydedilmiyor: yanlış ISBN,
+        // ileride "aynı kitap mı" sorusunu sessizce yanlış cevaplar.
+        isbn:       isbnCoz(yeniForm.isbn).isbn,
       }),
       "Kitap ekleme"
     );
@@ -530,6 +538,39 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                   ))}
                 </select>
               </div>
+              {/* ISBN: kitabın adı değil KİMLİĞİ. Bugün hızlı ekleme,
+                  yarın "bu kitap sistemde var mı" sorusunun cevabı. */}
+              <div style={{ display: "flex", gap: BOSLUK.s }}>
+                <input placeholder="ISBN (isteğe bağlı)" value={yeniForm.isbn ?? ""}
+                  inputMode="numeric"
+                  onChange={e => { setYeniForm(f => ({ ...f, isbn: e.target.value })); setIsbnHata(null); }}
+                  onBlur={e => {
+                    const ham = e.target.value.trim();
+                    if (!ham) { setIsbnHata(null); return; }
+                    const { isbn, hata } = isbnCoz(ham);
+                    setIsbnHata(hata);
+                    if (isbn) setYeniForm(f => ({ ...f, isbn }));
+                  }}
+                  style={{ ...girdiStil, flex: 1 }} />
+                {/* Düğme YALNIZCA destekleyen tarayıcıda: iPhone'da
+                    gösterip tıklayınca "olmadı" demek, kullanıcıya kendi
+                    cihazını suçlatırdı. */}
+                {taramaVarMi() && (
+                  <button onClick={() => setTarayici(true)} style={{
+                    padding: "0 14px", borderRadius: KOSE.m, cursor: "pointer",
+                    border: `1.5px solid ${c.mid}`, background: "#fff",
+                    color: c.text, fontSize: YAZI.ikincil, fontWeight: 600,
+                  }}>Tara</button>
+                )}
+              </div>
+              {isbnHata && (
+                <div style={{ fontSize: YAZI.mikro, color: RENK.hata.metin }}>{isbnHata}</div>
+              )}
+              {!isbnHata && isbnCoz(yeniForm.isbn).isbn && (
+                <div style={{ fontSize: YAZI.mikro, color: RENK.basari.metin }}>
+                  ✓ {isbnYaz(isbnCoz(yeniForm.isbn).isbn)}
+                </div>
+              )}
               <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, lineHeight: 1.5 }}>
                 Ders seçmek eşleştirmeyi belirgin biçimde iyileştirir: konu
                 yalnızca o dersin müfredatında aranır.
@@ -555,6 +596,13 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
             }}>+ Kitap ekle</button>
           )}
         </div>
+      )}
+
+      {tarayici && (
+        <BarkodTarayici
+          onSecildi={(isbn) => { setYeniForm(f => ({ ...(f ?? { ad: "", yayinevi: "", sinav_turu: "", ders: "" }), isbn })); setIsbnHata(null); }}
+          onKapat={() => setTarayici(false)}
+        />
       )}
     </Card>
   );
