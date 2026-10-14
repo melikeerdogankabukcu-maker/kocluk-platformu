@@ -8,6 +8,7 @@ import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import { isbnCoz, isbnYaz } from "../lib/isbn";
 import { taramaVarMi } from "../lib/kodOkuyucu";
 import BarkodTarayici from "./BarkodTarayici";
+import CevapAnahtari from "./CevapAnahtari";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import IcindekilerAktar from "./IcindekilerAktar";
@@ -38,6 +39,9 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
   const [yeniForm, setYeniForm] = useState(null);    // null = form kapalı
   const [tarayici, setTarayici] = useState(false);   // barkod penceresi açık mı
   const [isbnHata, setIsbnHata] = useState(null);
+  // Hangi bölümün cevap anahtarı açık + hangi bölümlerde anahtar var
+  const [anahtarBolum, setAnahtarBolum] = useState(null);
+  const [anahtarli, setAnahtarli] = useState({});   // bolum_id -> soru sayısı
   const [aktaran,  setAktaran]  = useState(null);    // içindekiler aktarılan kitabın id'si
   const [duzenlenen, setDuzenlenen] = useState(null); // { id, ad, yayinevi, sinav_turu, ders }
   const [islemde,  setIslemde]  = useState(false);
@@ -79,7 +83,21 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
       const aHarita = {};
       (atama ?? []).forEach(a => { (aHarita[a.banka_id] ??= new Set()).add(a.student_id); });
       setAtamalar(aHarita);
-    } else { setBolumMap({}); setAtamalar({}); }
+
+      // Hangi bölümde cevap anahtarı var? Anahtarın KENDİSİ çekilmiyor,
+      // yalnız soru sayısı: listede göstermek için yeterli ve anahtarı
+      // gereksiz yere belleğe almamak daha doğru.
+      const bolumIdler = Object.values(harita).flat().map(x => x.id);
+      if (bolumIdler.length) {
+        const { veri: anahtarlar } = await calistir(
+          supabase.from("cevap_anahtarlari").select("bolum_id, soru_sayisi").in("bolum_id", bolumIdler),
+          "Cevap anahtarlari", { sessiz: true }
+        );
+        const kHarita = {};
+        (anahtarlar ?? []).forEach(k => { kHarita[k.bolum_id] = k.soru_sayisi; });
+        setAnahtarli(kHarita);
+      } else setAnahtarli({});
+    } else { setBolumMap({}); setAtamalar({}); setAnahtarli({}); }
 
     setYukleniyor(false);
   }, []);
@@ -360,6 +378,19 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                               flexShrink: 0, fontSize: YAZI.mikro,
                               color: x.konu ? c.text : RENK.uyari.metin,
                             }}>{x.konu ?? "bağlanmadı"}</span>
+                            {/* Cevap anahtarı yalnız kitabın sahibinde:
+                                anahtar öğrenciye kapalı (veritabanında da
+                                politikası yok). */}
+                            {benim && rol !== "student" && (
+                              <button onClick={() => setAnahtarBolum(x)} style={{
+                                flexShrink: 0, fontSize: YAZI.mikro, cursor: "pointer",
+                                padding: "2px 8px", borderRadius: KOSE.tam,
+                                border: `1px solid ${anahtarli[x.id] ? c.mid : RENK.cizgi}`,
+                                background: anahtarli[x.id] ? c.light : "#fff",
+                                color: anahtarli[x.id] ? c.text : RENK.metinSoluk,
+                                fontWeight: anahtarli[x.id] ? 700 : 500,
+                              }}>{anahtarli[x.id] ? `🔑 ${anahtarli[x.id]} soru` : "🔑 anahtar"}</button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -596,6 +627,19 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
             }}>+ Kitap ekle</button>
           )}
         </div>
+      )}
+
+      {anahtarBolum && (
+        <CevapAnahtari
+          bolum={anahtarBolum} color={c}
+          onKaydedildi={(bolumId, soruSayisi) =>
+            setAnahtarli(m => {
+              const yeni = { ...m };
+              if (soruSayisi == null) delete yeni[bolumId]; else yeni[bolumId] = soruSayisi;
+              return yeni;
+            })}
+          onKapat={() => setAnahtarBolum(null)}
+        />
       )}
 
       {tarayici && (
