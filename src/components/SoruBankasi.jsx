@@ -9,7 +9,6 @@ import { isbnCoz, isbnYaz } from "../lib/isbn";
 import { taramaVarMi } from "../lib/kodOkuyucu";
 import BarkodTarayici from "./BarkodTarayici";
 import CevapAnahtari from "./CevapAnahtari";
-import CevapKagidi from "./CevapKagidi";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import IcindekilerAktar from "./IcindekilerAktar";
@@ -43,7 +42,6 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
   // Hangi bölümün cevap anahtarı açık + hangi bölümlerde anahtar var
   const [anahtarBolum, setAnahtarBolum] = useState(null);
   const [anahtarli, setAnahtarli] = useState({});   // bolum_id -> { soru_sayisi, sik_sayisi }
-  const [kagitBolum, setKagitBolum] = useState(null);  // { bolum, banka }
   const [aktaran,  setAktaran]  = useState(null);    // içindekiler aktarılan kitabın id'si
   const [duzenlenen, setDuzenlenen] = useState(null); // { id, ad, yayinevi, sinav_turu, ders }
   const [islemde,  setIslemde]  = useState(false);
@@ -394,15 +392,6 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                                 color: anahtarli[x.id] ? c.text : RENK.metinSoluk,
                                 fontWeight: anahtarli[x.id] ? 700 : 500,
                               }}>{anahtarli[x.id] ? `🔑 ${anahtarli[x.id].soru_sayisi} soru` : "🔑 anahtar"}</button>
-                            {/* Cevap kâğıdı: anahtar girilmeden de
-                                basılabiliyor ama puanlanamıyor; pencere
-                                bunu söylüyor. */}
-                            <button onClick={() => setKagitBolum({ bolum: x, banka: b })} style={{
-                              flexShrink: 0, fontSize: YAZI.mikro, cursor: "pointer",
-                              padding: "2px 8px", borderRadius: KOSE.tam,
-                              border: `1px solid ${RENK.cizgi}`, background: "#fff",
-                              color: RENK.metinSoluk,
-                            }}>📄 kâğıt</button>
                             </>)}
                           </div>
                         ))}
@@ -652,22 +641,6 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
               return yeni;
             })}
           onKapat={() => setAnahtarBolum(null)}
-        />
-      )}
-
-      {kagitBolum && (
-        <CevapKagidi
-          bolum={kagitBolum.bolum}
-          kitapAdi={kagitBolum.banka.ad}
-          anahtar={anahtarli[kagitBolum.bolum.id] ?? null}
-          color={c}
-          /* Kitap kimlere atanmışsa onlar; atama yoksa kaynak tüm
-             öğrencilere açık demek (bkz. atama mantığı yukarıda). */
-          ogrenciler={(() => {
-            const secilenler = atamalar[kagitBolum.banka.id];
-            return secilenler?.size ? students.filter(s => secilenler.has(s.id)) : students;
-          })()}
-          onKapat={() => setKagitBolum(null)}
         />
       )}
 

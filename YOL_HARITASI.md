@@ -41,55 +41,30 @@ yok, fotoğraf cihazdan çıkmıyor, ücretli Render planı gerekmiyor.
 
 Hedef: mevcut 6-8 haftalık yayın planına sığmak.
 
-### 2.1 Fotoğraftan doğru/yanlış okuma
+### 2.1 Testin dijital çözülmesi ve kontrolü
 
-Listenin en değerli maddesi. Manuel net girişi bugün öğrencinin
-derse başına ders başına doldurduğu bir form; bırakılırsa veri
-bozuluyor ve uygulamanın bütün analizi dayanaksız kalıyor.
+**2026-10-14'te yön değişti.** Önceki tasarım basılı optik forma
+dayanıyordu: kâğıdı biz basacak, öğrenci işaretleyip fotoğrafını
+gönderecek, sistem okuyacaktı. Kullanıcı kararı: **öğrenci testi
+dijital ortamda çözecek ve kontrol oradan sağlanacak — optik forma
+ihtiyaç yok.**
 
-**Akış (kullanıcının kararı):** cevap anahtarı sistemde bizde durur →
-koç ödev verir, sistem o ödevin **cevap kâğıdını üretir** → kâğıt
-öğrenciye verilir → öğrenci işaretler, fotoğrafını gönderir → sistem
-okur, doğru/yanlışı çıkarır → **öğrenciye/koça onaylatır** → kaydeder.
+Bunun iki sonucu var:
 
-Kâğıdı bizim üretmemiz, değerlendirmedeki "öğrenci formu yazdırmalı"
-sürtünmesini ortadan kaldırıyor: kâğıdı koç veriyor.
+- **Cevap anahtarı bölüm başına değil, KİTABIN TAMAMI için bir tane.**
+  Dijital dosyadan yüklendiği için tek yerde tutulması yeterli.
+  (Bugünkü `cevap_anahtarlari` tablosu bölüme bağlı — değişmesi
+  gerekiyor.)
+- **Basılı kâğıt işi ertelendi.** Yazılmış olan parçalar duruyor ama
+  arayüze bağlı değil: `src/components/CevapKagidi.jsx`,
+  `src/lib/cevapKagidi.js`, `cevap_kagidi_migration.sql`. Kimlik
+  şeridi tasarımı (24 veri + 6 sağlama biti; 500 denemede tek kare
+  hatasının 500'ü yakalandı) ileride lazım olursa hazır.
 
-**Veri modeli (yeni)**
-
-| Tablo | İçerik |
-|---|---|
-| `cevap_anahtarlari` | kaynak (kitap/bölüm ya da deneme), soru sayısı, şık sayısı, cevap dizisi, kim girdi, onaylı mı |
-| `cevap_kagitlari` | hangi öğrenci, hangi ödev/test, kaç soru, üretim tarihi, tekil kod (QR) |
-| `okuma_sonuclari` | kâğıt, okunan dizi, güven değerleri, onaylayan, onay tarihi, ham görsel |
-
-Sonuç onaylanınca mevcut `test_sessions` kaydına yazılır — yeni bir
-ilerleme sistemi kurulmuyor, var olanı besliyor.
-
-**Adımlar**
-
-1. **Cevap anahtarı girişi** — ızgara arayüzü, koç bir kez girer.
-   Ön koşul budur: anahtar yoksa okunan cevap bir işe yaramaz.
-2. **Cevap kâğıdı üretimi** — yazdırılabilir sayfa. Harici PDF
-   kütüphanesi yok (`VeliRaporu`/`HaftalikProgram`'daki kararın aynısı:
-   jsPDF Türkçe'yi bozuyor, tarayıcının yazdırma motoru kullanılıyor).
-   Kâğıtta: dört köşe referans işareti, kâğıdı tanıtan QR, baloncuk
-   ızgarası, öğrenci adı ve ödev başlığı.
-3. **Okuma** — köşe işaretlerinden perspektif düzeltme → eşikleme →
-   ızgara konumlarından her baloncuğun doluluk oranı → cevap dizisi.
-   Önce tarayıcıda; ölçüm tutmazsa servise taşınır.
-4. **Onay ekranı** — okunan cevaplar gösterilir, şüpheli olanlar
-   işaretlenir, düzeltilebilir. **Otomatik kayıt yok.** Işık, açı ve
-   silinti yüzünden hata olacak; onay ekranı bunu zararsız kılıyor.
-5. **Sonucun işlenmesi** — `test_sessions` + konu ilerlemesi +
-   doğrulanmış çalışma kaydı.
-6. **Ölçüm** — gerçek işaretlenmiş kâğıtlarla doğruluk ölçülür:
-   kaç cevap doğru okundu, kaç tanesi "şüpheli" diye işaretlendi,
-   kaç tanesi sessizce yanlış okundu. **Sessiz yanlış okuma tek
-   kabul edilemez hata**; ölçüt o.
-
-**Kabul ölçütü:** 20 gerçek kâğıtta sessiz yanlış okuma sıfır, okunan
-cevapların %95'i doğru, kalan %5 "şüpheli" olarak işaretlenmiş.
+**Süreç notu:** bu iş önkabul sınanmadan yazıldı. Üç migration ve
+birkaç bileşen arka arkaya çıktı, sonra yolun kendisi değişti. Bundan
+sonraki her yeni akışta önce AKIŞIN TAMAMI yazılıp onaylanacak, sonra
+veri modeli.
 
 ### 2.2 QR ile kitaplık
 

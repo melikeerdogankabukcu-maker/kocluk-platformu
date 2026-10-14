@@ -1,3 +1,14 @@
+// ⏸ ERTELENDİ (2026-10-14, kullanıcı kararı)
+//
+// Bu bileşen ARAYÜZE BAĞLI DEĞİL. Optik form yolu şu an kapsamda yok:
+// öğrenci testi DİJİTAL ortamda çözecek ve kontrol oradan sağlanacak,
+// yani basılı cevap kâğıdına ihtiyaç kalmıyor.
+//
+// Kod ve `cevap_kagidi_migration.sql` ileride lazım olursa diye
+// duruyor (kimlik şeridi tasarımı ve ölçümü işe yarar bir parça).
+// Yeniden açılacaksa önce akışın tamamı doğrulanmalı — bu iş bir kez
+// önkabul sınanmadan yazıldı.
+
 import { useState } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
