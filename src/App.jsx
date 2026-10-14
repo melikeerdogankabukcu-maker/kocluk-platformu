@@ -6,6 +6,7 @@ import TopBar from "./components/TopBar";
 import SifreBelirle from "./components/SifreBelirle";
 import { servisiUyandir } from "./hooks/useAnaliz";
 import { TopicsProvider } from "./lib/TopicsContext";
+import { TercihSaglayici } from "./lib/TercihContext";
 import StudentDashboard from "./dashboards/StudentDashboard";
 import TeacherDashboard from "./dashboards/TeacherDashboard";
 import ParentDashboard from "./dashboards/ParentDashboard";
@@ -156,13 +157,18 @@ export default function App() {
       background: "#f7f4ef",
       fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
     }}>
-      <TopBar role={role} userName={userName} userId={user.id} onLogout={handleLogout} />
-      <TopicsProvider userId={user.id}>
-        {role === "student" && <StudentDashboard userId={user.id} userName={userName} />}
-        {/* Admin öğretmenin üst kümesi: aynı paneli görür */}
-        {(role === "teacher" || role === "admin") && <TeacherDashboard userId={user.id} userName={userName} role={role} />}
-        {role === "parent"  && <ParentDashboard  userId={user.id} userName={userName} />}
-      </TopicsProvider>
+      {/* Tercih sağlayıcı BARI DA kapsıyor: renk seçimi hem üst barda
+          hem panelde aynı anda uygulanmalı, yoksa biri bir an eski
+          renkte kalır. */}
+      <TercihSaglayici userId={user.id} rol={role}>
+        <TopBar role={role} userName={userName} userId={user.id} onLogout={handleLogout} />
+        <TopicsProvider userId={user.id}>
+          {role === "student" && <StudentDashboard userId={user.id} userName={userName} />}
+          {/* Admin öğretmenin üst kümesi: aynı paneli görür */}
+          {(role === "teacher" || role === "admin") && <TeacherDashboard userId={user.id} userName={userName} role={role} />}
+          {role === "parent"  && <ParentDashboard  userId={user.id} userName={userName} />}
+        </TopicsProvider>
+      </TercihSaglayici>
     </div>
   );
 }

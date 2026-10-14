@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
 import { API_URL } from "../lib/config";
-import { COLORS } from "../lib/theme";
+import { useTercih } from "../lib/TercihContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { useTopics } from "../lib/TopicsContext";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
@@ -45,7 +45,9 @@ import { ogrencilerinBloklari, blokSayisi } from "../lib/planVerisi";
 import { GUN_KISA, DILIMLER, TURLER, ilerleme, sureMetni, saatAraligi, blokAltBilgi } from "../lib/calismaPlani";
 
 export default function TeacherDashboard({ userId, userName, role }) {
-  const c = COLORS.teacher;
+  // Renk kullanıcının seçiminden geliyor; seçim yoksa rolün
+  // varsayılan paleti (bkz. lib/theme.js, paletCoz).
+  const { palet: c } = useTercih("teacher");
   const { sinavTurleri, examSubjectsOf, topicsOf, tumDersler: tumDerslerFn, tumKonular: tumKonularFn, dersinTuru } = useTopics();
   const { gruplar, yukle: gruplariTazele } = useGruplar(userId);
   const [students,    setStudents]    = useState([]);

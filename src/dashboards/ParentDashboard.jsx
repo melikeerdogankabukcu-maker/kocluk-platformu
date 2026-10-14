@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
 import { branslariEkle, kocEtiketi } from "../lib/branslar";
-import { COLORS } from "../lib/theme";
+import { useTercih } from "../lib/TercihContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { computeTopicProgress } from "../lib/progressHelpers";
 import { ogrencininBloklari } from "../lib/planVerisi";
@@ -29,7 +29,9 @@ import CalismaPlani from "../components/CalismaPlani";
 import { programTakvimOgeleri } from "../lib/studyPrograms";
 
 export default function ParentDashboard({ userId, userName }) {
-  const c = COLORS.parent;
+  // Renk kullanıcının seçiminden geliyor; seçim yoksa rolün
+  // varsayılan paleti (bkz. lib/theme.js, paletCoz).
+  const { palet: c } = useTercih("parent");
   const [child, setChild] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [cocukBloklari, setCocukBloklari] = useState([]);

@@ -1,6 +1,9 @@
-import { COLORS } from "../lib/theme";
+import { useState } from "react";
+import { useTercih } from "../lib/TercihContext";
+import { avatarSimgesi } from "../lib/avatarlar";
 import { useDarEkran } from "../lib/ekran";
 import BildirimZili from "./BildirimZili";
+import Gorunum from "./Gorunum";
 
 // Üst bar.
 //
@@ -16,7 +19,10 @@ import BildirimZili from "./BildirimZili";
 // de artık pencereye sabitleniyor (BildirimZili).
 export default function TopBar({ role, userName, userId, onLogout }) {
   const labels = { student: "Öğrenci", teacher: "Öğretmen", parent: "Veli", admin: "Yönetici" };
-  const color = COLORS[role];
+  // Renk kullanıcının seçiminden; seçim yoksa rolün varsayılanı.
+  const { palet: color, tercih } = useTercih(role);
+  const [gorunum, setGorunum] = useState(false);
+  const simge = avatarSimgesi(tercih.avatar);
   const dar = useDarEkran(560);
 
   // Dar ekranda yalnızca ilk ad: tam ad rozeti tek başına barın yarısını
@@ -45,6 +51,16 @@ export default function TopBar({ role, userName, userId, onLogout }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: dar ? 6 : 10, minWidth: 0 }}>
         <BildirimZili userId={userId} rol={role} />
+        {/* Görünüm: her rolde var ve hiçbir panele ait değil, o yüzden
+            barda duruyor. Avatar seçilmişse düğme onu gösteriyor —
+            seçimin nerede değiştirileceği böylece kendiliğinden belli. */}
+        <button onClick={() => setGorunum(true)} title="Görünüm" aria-label="Görünüm" style={{
+          width: 30, height: 30, borderRadius: 20, flexShrink: 0,
+          border: "1.5px solid rgba(255,255,255,0.4)", cursor: "pointer",
+          background: "transparent", color: "#fff", fontSize: simge ? 15 : 13,
+          display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+          padding: 0,
+        }}>{simge ?? "🎨"}</button>
         <span style={{
           fontSize: 12, color: "rgba(255,255,255,0.85)",
           background: "rgba(255,255,255,0.15)",
@@ -59,6 +75,8 @@ export default function TopBar({ role, userName, userId, onLogout }) {
           background: "transparent", color: "#fff", transition: "all .15s",
         }}>Çıkış</button>
       </div>
+
+      {gorunum && <Gorunum rol={role} ad={userName} onKapat={() => setGorunum(false)} />}
     </div>
   );
 }

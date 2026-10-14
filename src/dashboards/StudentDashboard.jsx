@@ -3,7 +3,8 @@ import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
 import { branslariEkle, kocEtiketi } from "../lib/branslar";
 import { odevDosyalari, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
-import { COLORS } from "../lib/theme";
+import { useTercih } from "../lib/TercihContext";
+import { avatarSimgesi } from "../lib/avatarlar";
 import { useTopics } from "../lib/TopicsContext";
 import { genelDegerlendirmeStil } from "../lib/analizHelpers";
 import { computeTopicProgress, planOzeti } from "../lib/progressHelpers";
@@ -41,7 +42,10 @@ import { useProgramAtama } from "../hooks/useProgramAtama";
 import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
 
 export default function StudentDashboard({ userId, userName }) {
-  const c = COLORS.student;
+  // Renk kullanıcının seçiminden geliyor; seçim yoksa rolün
+  // varsayılan paleti (bkz. lib/theme.js, paletCoz).
+  const { palet: c, tercih: gorunumTercihi } = useTercih("student");
+  const avatarSimgem = avatarSimgesi(gorunumTercihi.avatar);
   const { sinavTurleri, examSubjectsOf, topicsOf, dersinTuru } = useTopics();
 
   const [tasks,        setTasks]        = useState([]);
@@ -641,7 +645,7 @@ export default function StudentDashboard({ userId, userName }) {
                       cursor: "pointer", padding: "14px 16px", borderRadius: 14,
                       background: c.light, border: `1px solid ${c.mid}22`,
                     }}>
-                      <OgrenciAvatari ad={userName} fotoUrl={profile.photo_url}
+                      <OgrenciAvatari ad={userName} fotoUrl={profile.photo_url} simge={avatarSimgem}
                         boyut={54} kose={16} zemin={c.bg} yazi="#fff" yaziBoyut={20} />
                       {/* İsim + eğitim bilgileri */}
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -907,7 +911,7 @@ export default function StudentDashboard({ userId, userName }) {
                   {/* Fotoğraf varsa daire onu gösteriyor; yoksa eskisi gibi
                       baş harfler (ya da profil hiç yoksa 👤). */}
                   {profile?.photo_url ? (
-                    <OgrenciAvatari ad={userName} fotoUrl={profile.photo_url}
+                    <OgrenciAvatari ad={userName} fotoUrl={profile.photo_url} simge={avatarSimgem}
                       boyut={54} kose={16} zemin="rgba(255,255,255,0.18)" yazi="#fff" />
                   ) : (
                     <div style={{

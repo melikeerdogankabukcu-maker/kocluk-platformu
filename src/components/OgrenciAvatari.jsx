@@ -17,7 +17,7 @@ export const basHarfler = (ad = "") =>
   ad.trim().split(/\s+/).filter(Boolean).map(w => w[0]).join("").slice(0, 2).toLocaleUpperCase("tr");
 
 export default function OgrenciAvatari({
-  ad, fotoUrl, boyut = 36, kose = 10,
+  ad, fotoUrl, simge, boyut = 36, kose = 10,
   zemin = "#eee", yazi = "#555", yaziBoyut,
 }) {
   const harfler = (
@@ -27,6 +27,14 @@ export default function OgrenciAvatari({
     }}>{basHarfler(ad)}</span>
   );
 
+  // Sıra: FOTOĞRAF > SEÇİLEN SİMGE > BAŞ HARFLER.
+  // Fotoğraf önce geliyor çünkü yüklemek bilinçli ve daha kişisel bir
+  // tercih; simgeyi fotoğrafın üstüne koymak, kullanıcının yüklediği
+  // şeyi görünmez kılardı.
+  const icerik = simge
+    ? <span style={{ fontSize: Math.round(boyut * 0.52), lineHeight: 1 }}>{simge}</span>
+    : harfler;
+
   return (
     <div style={{
       width: boyut, height: boyut, borderRadius: kose, flexShrink: 0,
@@ -34,9 +42,9 @@ export default function OgrenciAvatari({
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       {fotoUrl ? (
-        <GuvenliGorsel url={fotoUrl} alt={ad ?? "Profil fotoğrafı"} yedek={harfler}
+        <GuvenliGorsel url={fotoUrl} alt={ad ?? "Profil fotoğrafı"} yedek={icerik}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-      ) : harfler}
+      ) : icerik}
     </div>
   );
 }
