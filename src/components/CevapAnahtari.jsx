@@ -80,7 +80,9 @@ export default function CevapAnahtari({ bolum, color: c, onKapat, onKaydedildi }
     );
     setIslemde(false);
     if (h) return;
-    onKaydedildi?.(bolum.id, soruSayisi);
+    // Çağıran hem soru hem şık sayısını tutuyor: kâğıt ızgarası
+    // ikisine birden bağlı.
+    onKaydedildi?.(bolum.id, { soru_sayisi: soruSayisi, sik_sayisi: sikSayisi });
     onKapat();
   };
 
