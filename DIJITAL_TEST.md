@@ -98,9 +98,30 @@ uygulamada göstermek başka şey.
 - Kendi sorularımız / kuruma ait sorular
 - Telifi serbest kaynaklar (ÖSYM çıkmış sorular — bunlar kamuya açık)
 
-**Karar gerekiyor:** pilot hangi içerikle yapılacak? Ölçüm ve
-geliştirme için kendi sorularınız ya da çıkmış sorular en güvenli
-başlangıç.
+### Karar (2026-10-15, kullanıcı)
+
+Amaç yayınevi işbirliği. **İzin henüz yok**; elde PDF kitaplar var ve
+geliştirme/ölçüm bunlarla yapılacak. **Yayına yalnız izin alındıktan
+sonra çıkılacak.**
+
+Bu sınır hafızada değil ÜRÜNDE duracak. Kitapta bir **hak durumu**
+alanı olacak:
+
+| Durum | Anlamı | Öğrenciye açılır mı |
+|---|---|---|
+| `deneme` | Geliştirme/ölçüm için yüklendi, izin yok | **Hayır** |
+| `izinli` | Yayınevi ile yazılı anlaşma var | Evet |
+| `kendi` | Kuruma/koça ait özgün sorular | Evet |
+| `acik` | Kamuya açık (ÖSYM çıkmış sorular vb.) | Evet |
+
+Varsayılan `deneme`. Öğrenciye soru sunan sorgu bu alanı denetler;
+izinsiz kitabın soruları öğrenci tarafına **hiçbir yoldan** gidemez.
+Böylece "izin gelince açarız" bir niyet değil, bir anahtar olur —
+ve yanlışlıkla açılması mümkün olmaz.
+
+Not: bu alan hukuki bir koruma değil, operasyonel bir kilit. İzni
+veren de alan da sizsiniz; sistem yalnızca yanlışlıkla yayımlamayı
+engelliyor.
 
 ---
 
@@ -156,9 +177,16 @@ buydu: girdi yolu, akışın kendisi doğrulanmadan yazıldı.
 
 ## 8. Karar bekleyenler
 
-1. **Pilot içeriği ne olacak?** (telif kapısı) Kendi sorularınız,
-   çıkmış sorular, yoksa anlaşmalı bir yayınevi kitabı?
-2. **Şekilli sorular aşama 1'de olsun mu**, yoksa önce düz metin mi?
-3. **Soruların asıl girdi yolu** hangisi olacak — yayınevi dosyası mı,
-   fotoğraftan okuma mı? (Aşama 3'ü bu belirliyor; şimdi karar
-   gerekmiyor ama yönü bilmek modeli etkiliyor.)
+1. ~~Pilot içeriği~~ → **karar verildi:** elde bulunan PDF kitaplar,
+   `deneme` hak durumuyla; yayına izinden sonra.
+2. ~~Asıl girdi yolu~~ → **karar verildi:** yayınevi dosyası. PDF'ler
+   şimdilik onun yerine geçiyor, yani içe aktarma hattı **PDF
+   okumaya** göre kurulacak.
+3. **Şekilli sorular aşama 1'de olsun mu?** Bunu tahminle değil
+   ÖLÇÜMLE cevaplayalım: bir PDF'e bakıp (a) metin katmanı var mı
+   yoksa taranmış görüntü mü, (b) soruların yüzde kaçında şekil var,
+   (c) şıklar düzenli bir kalıpta mı duruyor — üçünü çıkarırım,
+   kapsamı ona göre konuşuruz.
+
+**Sıradaki adım:** bir PDF kitabın yolunu verin. Ölçümü yapıp bu
+belgeye yazayım; aşama 1'in kapsamı o ölçümden çıksın.
