@@ -9,6 +9,7 @@ import { isbnCoz, isbnYaz } from "../lib/isbn";
 import { taramaVarMi } from "../lib/kodOkuyucu";
 import BarkodTarayici from "./BarkodTarayici";
 import CevapAnahtari from "./CevapAnahtari";
+import SoruYonetimi from "./SoruYonetimi";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import IcindekilerAktar from "./IcindekilerAktar";
@@ -28,6 +29,16 @@ import IcindekilerAktar from "./IcindekilerAktar";
 // Bölümlerin müfredat konusuna bağlanması ödev önerisinin temeli:
 // "öğrenci şu konuda zayıf" bilgisi zaten var, eksik olan o konunun
 // hangi kitabın hangi sayfalarında olduğuydu.
+// Soruların öğrenciye açılabilirliği. Etiketler bilerek açık sözlü:
+// "kapalı pilot"un izinli OLMADIĞI arayüzde de yazılı dursun.
+const HAK_DURUMU = [
+  { kod: "deneme",       ad: "Deneme (öğrenciye kapalı)", acik: false },
+  { kod: "kapali_pilot", ad: "Kapalı pilot — izin yok, yalnız kendi öğrencilerim", acik: true },
+  { kod: "izinli",       ad: "Yayınevi izni var", acik: true },
+  { kod: "kendi",        ad: "Kendi/kurum sorularım", acik: true },
+  { kod: "acik",         ad: "Kamuya açık (ÖSYM çıkmış vb.)", acik: true },
+];
+
 export default function SoruBankasi({ userId, students = [], color: c, rol = "teacher" }) {
   const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();
 
@@ -40,6 +51,7 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
   const [tarayici, setTarayici] = useState(false);   // barkod penceresi açık mı
   const [isbnHata, setIsbnHata] = useState(null);
   // Hangi bölümün cevap anahtarı açık + hangi bölümlerde anahtar var
+  const [soruBanka, setSoruBanka] = useState(null);   // soru yönetimi açık mı
   const [anahtarBolum, setAnahtarBolum] = useState(null);
   const [anahtarli, setAnahtarli] = useState({});   // bolum_id -> { soru_sayisi, sik_sayisi }
   const [aktaran,  setAktaran]  = useState(null);    // içindekiler aktarılan kitabın id'si
@@ -135,6 +147,7 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
     setIslemde(true);
     const { hata } = await calistir(
       supabase.from("soru_bankalari").update({
+        hak_durumu: duzenlenen.hak_durumu ?? "deneme",
         ad:         duzenlenen.ad.trim(),
         yayinevi:   duzenlenen.yayinevi?.trim() || null,
         sinav_turu: duzenlenen.sinav_turu || null,
@@ -357,6 +370,15 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                   <span style={{ fontSize: YAZI.mikro, color: RENK.metinSoluk, flexShrink: 0 }}>
                     {bolumler.length === 0 ? "içindekiler yok" : `${bagli}/${bolumler.length} bölüm bağlı`}
                   </span>
+                  {/* Dijital test: sorular burada yönetiliyor. Yalnız
+                      kitabın sahibinde — doğru cevap sorunun içinde. */}
+                  {benim && rol !== "student" && (
+                    <button onClick={(e) => { e.stopPropagation(); setSoruBanka(b); }} style={{
+                      flexShrink: 0, fontSize: YAZI.mikro, cursor: "pointer",
+                      padding: "2px 9px", borderRadius: KOSE.tam,
+                      border: `1px solid ${RENK.cizgi}`, background: "#fff", color: RENK.metinSoluk,
+                    }}>❓ sorular</button>
+                  )}
                   <span style={{ fontSize: YAZI.kucuk, color: c.mid, fontWeight: 700, flexShrink: 0 }}>
                     {isOpen ? "▴" : "▾"}
                   </span>
@@ -462,6 +484,14 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                         <input value={duzenlenen.yayinevi} placeholder="Yayınevi"
                           onChange={e => setDuzenlenen(d => ({ ...d, yayinevi: e.target.value }))}
                           style={girdiStil} />
+                        <label style={{ fontSize: YAZI.mikro, color: RENK.metinIkincil }}>
+                          <div style={{ marginBottom: 3 }}>Soruların durumu</div>
+                          <select value={duzenlenen.hak_durumu ?? "deneme"}
+                            onChange={e => setDuzenlenen(d => ({ ...d, hak_durumu: e.target.value }))}
+                            style={{ ...girdiStil, width: "100%" }}>
+                            {HAK_DURUMU.map(h => <option key={h.kod} value={h.kod}>{h.ad}</option>)}
+                          </select>
+                        </label>
                         <div style={{ display: "flex", gap: BOSLUK.s }}>
                           <select value={duzenlenen.sinav_turu}
                             onChange={e => setDuzenlenen(d => ({ ...d, sinav_turu: e.target.value, ders: "" }))}
@@ -531,6 +561,9 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                       <button onClick={() => setDuzenlenen({
                         id: b.id, ad: b.ad ?? "", yayinevi: b.yayinevi ?? "",
                         sinav_turu: b.sinav_turu ?? "", ders: b.ders ?? "",
+                        // Mevcut durum forma taşınmazsa düzenleme her
+                        // seferinde kitabı sessizce 'deneme'ye çevirirdi.
+                        hak_durumu: b.hak_durumu ?? "deneme",
                       })} style={{
                         alignSelf: "flex-start", background: "none", border: "none", padding: 0,
                         color: c.mid, fontSize: YAZI.kucuk, fontWeight: 600, cursor: "pointer",
@@ -629,6 +662,16 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
             }}>+ Kitap ekle</button>
           )}
         </div>
+      )}
+
+      {soruBanka && (
+        <SoruYonetimi
+          banka={soruBanka}
+          bolumler={bolumMap[soruBanka.id] ?? []}
+          color={c}
+          onDegisti={yukle}
+          onKapat={() => setSoruBanka(null)}
+        />
       )}
 
       {anahtarBolum && (
