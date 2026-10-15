@@ -1,0 +1,164 @@
+# Dijital test — akış tasarımı (ONAY BEKLİYOR)
+
+**Bu belge kod değil, karar belgesidir.** Optik form işi önkabul
+sınanmadan yazıldığı için yolun ortasında değişti; bu sefer sıra
+tersine: önce akış onaylanacak, sonra veri modeli yazılacak.
+
+Karar: **öğrenci testi uygulamada çözecek. Sorular da uygulamada
+olacak** (kullanıcı, 2026-10-15).
+
+---
+
+## 1. Bugün elimizde ne var, ne yok
+
+| | Durum |
+|---|---|
+| Kitap ve bölüm başlıkları (`soru_bankalari`, `soru_bankasi_bolumleri`) | Var |
+| Fotoğraftan içindekiler okuma | Var, ölçüldü (110/147) |
+| Test **sonucu** (`test_sessions`: soru/doğru/yanlış sayısı) | Var |
+| **Soru içeriği** (metin, şıklar, şekil, doğru cevap) | **YOK — hiçbir tabloda durmuyor** |
+| Soru bazlı sonuç (hangi soruyu yanlış yaptı) | **YOK** |
+
+Yani bu iş mevcut bir şeyi geliştirmek değil, yeni bir temel kurmak.
+
+---
+
+## 2. Akış
+
+### Koç tarafı — kitabı sisteme almak
+
+1. Kitabı kitaplığa ekler (bugün var; ISBN ile de eklenebiliyor).
+2. **Soruları yükler.** Kaynağı aşağıdaki 3. bölümün konusu.
+3. Yüklenen soruları gözden geçirir: metin doğru mu, şıklar tam mı,
+   şekil doğru soruya mı bağlanmış, doğru cevap doğru mu.
+   **Onaylanmadan öğrenciye açılmaz.**
+4. Bölüm/konu eşlemesi yapılır (bugünkü içindekiler yapısıyla aynı
+   mantık) — soru bazlı konu analizi buna bağlı.
+
+### Öğrenci tarafı — testi çözmek
+
+1. Koç ödev verir: "şu kitabın şu testi".
+2. Öğrenci testi açar, soruları **ekranda** görür, şık işaretler.
+3. Yarıda bırakabilir, sonra devam edebilir (oturum saklanır).
+4. "Bitir" der.
+
+### Puanlama
+
+- **Doğru cevap öğrencinin cihazına İNMEZ.** Soru metni ve şıklar
+  iner; doğru cevap inmez. Değerlendirme sunucuda yapılır (RPC),
+  tarayıcıya yalnız sonuç döner.
+- Bu, cevap anahtarında verdiğimiz kararın aynısı ve sebebi de aynı:
+  tarayıcıya inen her şeyi öğrenci okuyabilir. "Doğrulanmış çalışma
+  kaydı" iddiası olan bir üründe testin cevabı sızamaz.
+- Sonuç bitince: soru bazlı doğru/yanlış, konu bazlı özet,
+  `test_sessions`'a kayıt, konu ilerlemesine ve analize akış.
+
+---
+
+## 3. Sorular sisteme nasıl girecek? (ASIL MESELE)
+
+İşin tamamı burada. Üç yol var, üçü de aynı veri modeline yazıyor
+ama maliyetleri çok farklı.
+
+**a) Yayınevi dosyası.** Yayınevi kitabın sorularını dijital olarak
+veriyor. En temiz yol; kullanıcının planında zaten yayınevi
+işbirliği var. Ama biçim yayınevine göre değişir (Word, PDF, XML,
+kendi veritabanı) ve her biri için ayrı dönüştürücü gerekir.
+**Ön koşul: anlaşma.**
+
+**b) Fotoğraftan okuma.** Elimizdeki okuma servisi (`/soru` uç
+noktası) sayfayı yazı ve şekil bloklarına ayırıp yazıyı okuyor.
+Soru metnini çıkarmak mümkün; ama **şıkları ayırmak, şekli doğru
+soruya bağlamak ve doğru cevabı bilmek** ayrı işler. Üstelik
+`/soru`'nun yazı/şekil ayrımı **henüz ölçülmedi** (elimizde soru
+sayfası fotoğrafı yok). Bu yol ciddi ölçüm ister.
+
+**c) Elle giriş.** Koç soruyu yazar. Yavaş ama hemen çalışır ve
+kalite yüksek. 40 soruluk bir test için gerçekçi değil; ama ilk
+pilot için 10-20 soruluk bir set hazırlamaya yeter.
+
+**Önerim:** pilot (c) ile kurulur — veri modeli, çözme ekranı ve
+puanlama gerçek sorularla çalışır hale gelir. Sonra (a) ya da (b)
+yalnızca *girdi yolu* olarak eklenir; iskelet değişmez.
+
+---
+
+## 4. Telif — bu bir kapı
+
+Yayınevinin sorularını sisteme alıp öğrenciye göstermek, telifli
+içeriğin çoğaltılması ve yayımlanmasıdır. Kitabın **içindekiler
+sayfasını** okumak başka şey (yönlendirme bilgisi), **sorularını**
+uygulamada göstermek başka şey.
+
+İzinsiz yapılırsa risk uygulamanın kendisindedir; yayınevinin
+şikâyeti mağazadan kaldırılmaya kadar gider.
+
+**Üç meşru yol:**
+- Yayınevi ile yazılı anlaşma (planda zaten var)
+- Kendi sorularımız / kuruma ait sorular
+- Telifi serbest kaynaklar (ÖSYM çıkmış sorular — bunlar kamuya açık)
+
+**Karar gerekiyor:** pilot hangi içerikle yapılacak? Ölçüm ve
+geliştirme için kendi sorularınız ya da çıkmış sorular en güvenli
+başlangıç.
+
+---
+
+## 5. Şekilli sorular
+
+Matematik ve fen sorularının çoğunda grafik, geometri çizimi ya da
+tablo var. Düz metin yetmiyor. Soru = **metin + (varsa) görsel +
+şıklar**. Şıklar da bazen görsel oluyor (şekil şıkları).
+
+Bu, veri modelini ve çözme ekranını doğrudan etkiliyor; "önce düz
+metin sorularla başlayalım" denirse çok daha hızlı ilerler ama
+matematik kitaplarının büyük kısmı kapsam dışı kalır.
+
+---
+
+## 6. Veri modeli taslağı (onaylanınca yazılacak)
+
+```
+sorular
+  id, banka_id, bolum_id, numara, metin, gorsel_url,
+  sik_sayisi, siklar (metin/görsel), dogru_cevap, konu,
+  onayli (koç gözden geçirdi mi), ekleyen_id
+
+test_oturumlari
+  id, student_id, banka_id, bolum_id, baslangic, bitis, durum
+
+oturum_cevaplari
+  oturum_id, soru_id, verilen_cevap, sure_sn
+```
+
+- `dogru_cevap` **asla** istemciye gönderilmiyor; sorular öğrenciye
+  bu alan olmadan sunuluyor (ayrı bir görünüm ya da RPC).
+- Puanlama RPC'si: oturumu kapatır, cevapları anahtarla karşılaştırır,
+  `test_sessions` kaydını açar.
+- Bugünkü `cevap_anahtarlari` tablosu (bölüme bağlı) bu modelde
+  **gereksiz kalıyor**: doğru cevap sorunun kendisinde. Kullanıcının
+  "anahtar tek yerde dursun" isteği böylece kendiliğinden karşılanıyor.
+
+---
+
+## 7. Aşamalar
+
+| Aşama | İçerik | Çıktı |
+|---|---|---|
+| 1 | Veri modeli + elle soru girişi + çözme ekranı + sunucuda puanlama | Tek kitapla uçtan uca çalışan pilot |
+| 2 | Sonuçların konu analizine ve doğrulanmış çalışma kaydına akması | Mevcut analiz soru bazlı veriyle besleniyor |
+| 3 | Toplu girdi yolu (yayınevi dosyası ya da fotoğraftan okuma) | Ölçekleme |
+
+Aşama 1 bitmeden 3'e geçilmez — optik formda yapılan hata tam olarak
+buydu: girdi yolu, akışın kendisi doğrulanmadan yazıldı.
+
+---
+
+## 8. Karar bekleyenler
+
+1. **Pilot içeriği ne olacak?** (telif kapısı) Kendi sorularınız,
+   çıkmış sorular, yoksa anlaşmalı bir yayınevi kitabı?
+2. **Şekilli sorular aşama 1'de olsun mu**, yoksa önce düz metin mi?
+3. **Soruların asıl girdi yolu** hangisi olacak — yayınevi dosyası mı,
+   fotoğraftan okuma mı? (Aşama 3'ü bu belirliyor; şimdi karar
+   gerekmiyor ama yönü bilmek modeli etkiliyor.)
