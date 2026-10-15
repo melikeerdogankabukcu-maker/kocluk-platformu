@@ -110,9 +110,28 @@ alanı olacak:
 | Durum | Anlamı | Öğrenciye açılır mı |
 |---|---|---|
 | `deneme` | Geliştirme/ölçüm için yüklendi, izin yok | **Hayır** |
+| `kapali_pilot` | İzin yok, kullanıcı kararıyla kapalı denemede | **Yalnız kitabı ekleyen koçun kendi öğrencilerine** |
 | `izinli` | Yayınevi ile yazılı anlaşma var | Evet |
 | `kendi` | Kuruma/koça ait özgün sorular | Evet |
 | `acik` | Kamuya açık (ÖSYM çıkmış sorular vb.) | Evet |
+
+**Kapalı pilot (2026-10-15 kullanıcı kararı).** Elde izin yok;
+kitaplar önümüzdeki yıl müfredattan kalkıyor. Kullanıcı denemeyi
+öğrencilerle başlatmayı seçti ve bunun **izinli olmadığı** bilerek
+kaydedildi. Teknik karşılığı:
+
+- Yalnız kitabı ekleyen koçun **kendi öğrencileri** erişebilir
+- **Dışa aktarma / toplu indirme yok** — soru metni yalnız çözme
+  ekranında, soru soru sunulur
+- **Erişim kayıt altında:** her test oturumu kim-hangi kitap-ne zaman
+  bilgisiyle kaydediliyor (`test_oturumlari` tablosunun kendisi bu
+  kaydı tutuyor, ayrıca bir günlüğe gerek yok)
+- İzin geldiğinde tek yapılacak: kitabın hak durumunu `izinli` yapmak
+
+Notum kayıtlara geçsin: müfredattan kalkmak telif hakkını sona
+erdirmiyor; bu seçim riski azaltır, izinli hâle getirmez. Yayınevine
+"müfredattan kalkacak kitap için pilot izni" diye gitmek hukuken değil
+ama pazarlıkta güçlü bir taleptir ve kapıyı asıl o açar.
 
 Varsayılan `deneme`. Öğrenciye soru sunan sorgu bu alanı denetler;
 izinsiz kitabın soruları öğrenci tarafına **hiçbir yoldan** gidemez.
