@@ -37,6 +37,7 @@ import HaftaninSozu from "../components/HaftaninSozu";
 import SinavHedefi from "../components/SinavHedefi";
 import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
+import Testlerim from "../components/Testlerim";
 import { HaftalikSoruGrafigi, CalismaSerisi, DogrulukTrendi, DersDagilimi, CalismaSuresiGrafigi } from "../components/CalismaGrafikleri";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
@@ -1400,6 +1401,10 @@ export default function StudentDashboard({ userId, userName }) {
           // burada salt okunur görüyor.
           { ad: "Kaynaklarım", id: "bolum-soru-bankasi",
             icerik: <SoruBankasi userId={userId} color={c} rol="student" /> },
+          // Dijital test: yalnız koçun açtığı kitaplarda çıkıyor,
+          // hiç test yoksa kart kendini göstermiyor.
+          { ad: "Testler", id: "bolum-testler",
+            icerik: <Testlerim color={c} /> },
         ]} />
       </>}
     />

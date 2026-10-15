@@ -1,0 +1,100 @@
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../supabase";
+import { calistir } from "../lib/db";
+import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
+import Card from "./Card";
+import SectionTitle from "./SectionTitle";
+import TestCoz from "./TestCoz";
+
+// Öğrencinin çözebileceği dijital testler.
+//
+// Liste `acik_testlerim()` RPC'sinden geliyor; öğrenci `sorular`
+// tablosunu okuyamadığı için onaylı soru sayısını kendisi sayamıyor.
+// RPC hak durumunu da denetliyor: izni olmayan kitap listeye hiç
+// düşmüyor.
+export default function Testlerim({ color: c, baslik = "Testler" }) {
+  const [testler, setTestler] = useState([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [acilan, setAcilan] = useState(null);   // { oturumId, baslik }
+  const [islemde, setIslemde] = useState(null); // başlatılan testin anahtarı
+  const [hata, setHata] = useState(null);
+
+  const yukle = useCallback(async () => {
+    setYukleniyor(true);
+    const { veri } = await calistir(
+      supabase.rpc("acik_testlerim"), "Acik testler", { sessiz: true });
+    setTestler(veri ?? []);
+    setYukleniyor(false);
+  }, []);
+
+  useEffect(() => { yukle(); }, [yukle]);
+
+  const basla = async (t) => {
+    const anahtar = `${t.banka_id}|${t.bolum_id ?? ""}`;
+    setIslemde(anahtar); setHata(null);
+    // Yarıda kalmış oturum varsa RPC onu döndürüyor; yeni oturum
+    // açmak öğrencinin önceki cevaplarını çöpe atardı.
+    const { veri, hata: h } = await calistir(
+      supabase.rpc("test_basla", { p_banka: t.banka_id, p_bolum: t.bolum_id }),
+      "Test baslatma");
+    setIslemde(null);
+    if (h) { setHata(h.message ?? "Test başlatılamadı."); return; }
+    setAcilan({ oturumId: veri, baslik: t.bolum_adi ? `${t.ad} — ${t.bolum_adi}` : t.ad });
+  };
+
+  if (!yukleniyor && testler.length === 0) return null;   // test yoksa kart hiç çıkmıyor
+
+  return (
+    <>
+      <Card id="bolum-testler">
+        <SectionTitle title={baslik} color={c.mid} />
+        {hata && (
+          <div style={{
+            background: RENK.hata.zemin, color: RENK.hata.metin, fontSize: 12,
+            padding: "8px 11px", borderRadius: KOSE.s, marginBottom: BOSLUK.s,
+          }}>{hata}</div>
+        )}
+        {yukleniyor ? (
+          <div style={{ fontSize: YAZI.ikincil, color: RENK.metinSoluk }}>Yükleniyor...</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: BOSLUK.s }}>
+            {testler.map(t => {
+              const anahtar = `${t.banka_id}|${t.bolum_id ?? ""}`;
+              return (
+                <div key={anahtar} style={{
+                  display: "flex", alignItems: "center", gap: BOSLUK.s,
+                  padding: "10px 12px", borderRadius: KOSE.m,
+                  border: `1px solid ${RENK.cizgi}`, background: RENK.yuzey,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: YAZI.ikincil, fontWeight: 600, color: RENK.metin }}>
+                      {t.bolum_adi ?? t.ad}
+                    </div>
+                    <div style={{ fontSize: YAZI.mikro, color: RENK.metinSoluk }}>
+                      {[t.bolum_adi ? t.ad : null, t.ders, `${t.soru_sayisi} soru`]
+                        .filter(Boolean).join(" · ")}
+                      {t.devam_eden && " · yarıda kaldı"}
+                    </div>
+                  </div>
+                  <button onClick={() => basla(t)} disabled={islemde === anahtar} style={{
+                    flexShrink: 0, padding: "7px 16px", borderRadius: KOSE.tam, border: "none",
+                    background: c.bg, color: "#fff", fontSize: YAZI.mikro, fontWeight: 700,
+                    cursor: "pointer",
+                  }}>{islemde === anahtar ? "..." : t.devam_eden ? "Devam et" : "Çöz"}</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {acilan && (
+        <TestCoz
+          oturumId={acilan.oturumId} baslik={acilan.baslik} color={c}
+          onBitti={yukle}
+          onKapat={() => { setAcilan(null); yukle(); }}
+        />
+      )}
+    </>
+  );
+}
