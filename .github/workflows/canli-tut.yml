@@ -1,0 +1,79 @@
+# Supabase projesini uyanık tutar.
+#
+# ── NEDEN ───────────────────────────────────────────────────────
+# Ücretsiz katmanda 7 gün istek gelmeyen proje uykuya alınıyor ve
+# uygulama tamamen kapanıyor (23 Ekim 2026'da oldu). Pilot başlayana
+# kadar günde bir yoklama isteği atılıyor.
+#
+# ── BU BİR YAMA ─────────────────────────────────────────────────
+# Uykuyu engelliyor; kapasiteyi büyütmüyor ve "kimse kullanmıyor"
+# sinyalini gizliyor. Öğrenci pilotu başladığında gerçek çözüm ücretli
+# plandır ve bu dosya SİLİNMELİ.
+#
+# ── BİLİNEN TUZAK ───────────────────────────────────────────────
+# GitHub, 60 gün hiç etkinlik olmayan depolarda zamanlanmış iş
+# akışlarını DEVRE DIŞI BIRAKIYOR. Yani depoya uzun süre hiç dokunulmazsa
+# bu görev sessizce durur — tam da en çok gerektiği anda. Depoya düzenli
+# commit gidiyorsa sorun yok; gitmiyorsa GitHub bir uyarı e-postası
+# yolluyor, onu görmezden gelmeyin.
+#
+# ── GEREKEN AYAR ────────────────────────────────────────────────
+# Depo > Settings > Secrets and variables > Actions:
+#   SUPABASE_URL       https://<proje>.supabase.co
+#   SUPABASE_ANON_KEY  anon (public) anahtar
+# anon anahtarı zaten tarayıcıya inen bir değer, gizli değil; yine de
+# depo metnine gömmek yerine secret olarak tutuluyor ki değiştirmek
+# tek yerden olsun.
+
+name: Supabase canlı tut
+
+on:
+  schedule:
+    # Her gün 07:10 UTC. Günlük: 7 günlük uyku eşiğine bol pay bırakıyor
+    # ve GitHub yoğunlukta bazı çalıştırmaları atlayabiliyor.
+    - cron: "10 7 * * *"
+  # Elle de çalıştırılabilsin: ayarın doğruluğunu beklemeden sınamak için
+  workflow_dispatch:
+
+# Depoya yazmıyor, yalnız dışarı istek atıyor.
+permissions:
+  contents: read
+
+jobs:
+  yoklama:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Supabase'e yoklama isteği
+        env:
+          URL: ${{ secrets.SUPABASE_URL }}
+          ANAHTAR: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${URL:-}" ] || [ -z "${ANAHTAR:-}" ]; then
+            echo "SUPABASE_URL ya da SUPABASE_ANON_KEY tanımlı değil."
+            echo "Depo > Settings > Secrets and variables > Actions altından ekleyin."
+            exit 1
+          fi
+
+          # canli_mi() yalnız sunucu saatini döndüren küçük bir fonksiyon
+          # (canli_mi_migration.sql). Tablo okumuyoruz: anon rolünün
+          # hiçbir tabloda izni yok ve olmaması doğru.
+          kod=$(curl -sS -o cevap.txt -w "%{http_code}" \
+            -X POST "${URL%/}/rest/v1/rpc/canli_mi" \
+            -H "apikey: ${ANAHTAR}" \
+            -H "Authorization: Bearer ${ANAHTAR}" \
+            -H "Content-Type: application/json" \
+            --max-time 30 \
+            -d '{}')
+
+          echo "HTTP ${kod}"
+          echo "Cevap: $(cat cevap.txt)"
+
+          # Başarısızlıkta İŞ DE BAŞARISIZ OLSUN: GitHub o zaman
+          # e-posta atıyor. Sessizce geçerse görev yıllarca çalışmadan
+          # çalışıyor sanılır.
+          if [ "$kod" != "200" ]; then
+            echo "Yoklama başarısız. Proje uykuda ya da anahtar/adres yanlış olabilir."
+            exit 1
+          fi
