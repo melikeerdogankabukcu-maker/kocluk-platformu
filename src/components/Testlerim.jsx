@@ -18,11 +18,16 @@ export default function Testlerim({ color: c, baslik = "Testler" }) {
   const [acilan, setAcilan] = useState(null);   // { oturumId, baslik }
   const [islemde, setIslemde] = useState(null); // başlatılan testin anahtarı
   const [hata, setHata] = useState(null);
+  const [yuklemeHatasi, setYuklemeHatasi] = useState(null);
 
   const yukle = useCallback(async () => {
     setYukleniyor(true);
-    const { veri } = await calistir(
+    // Hata SESSİZ geçerse liste boş kalıyor ve ekran "test yok" diyor —
+    // oysa sebep izin ya da eksik bir fonksiyon olabilir. İkisi
+    // birbirinden ayırt edilemediği için hata ayrıca gösteriliyor.
+    const { veri, hata: h } = await calistir(
       supabase.rpc("acik_testlerim"), "Acik testler", { sessiz: true });
+    setYuklemeHatasi(h ? (h.message ?? "Test listesi alınamadı.") : null);
     setTestler(veri ?? []);
     setYukleniyor(false);
   }, []);
@@ -46,6 +51,12 @@ export default function Testlerim({ color: c, baslik = "Testler" }) {
     <>
       <Card id="bolum-testler">
         <SectionTitle title={baslik} color={c.mid} />
+        {yuklemeHatasi && (
+          <div style={{
+            background: RENK.hata.zemin, color: RENK.hata.metin, fontSize: 12,
+            padding: "8px 11px", borderRadius: KOSE.s, marginBottom: BOSLUK.s, lineHeight: 1.5,
+          }}>Test listesi alınamadı: {yuklemeHatasi}</div>
+        )}
         {hata && (
           <div style={{
             background: RENK.hata.zemin, color: RENK.hata.metin, fontSize: 12,
