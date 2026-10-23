@@ -209,3 +209,57 @@ buydu: girdi yolu, akışın kendisi doğrulanmadan yazıldı.
 
 **Sıradaki adım:** bir PDF kitabın yolunu verin. Ölçümü yapıp bu
 belgeye yazayım; aşama 1'in kapsamı o ölçümden çıksın.
+
+---
+
+## 9. YÖN DEĞİŞİKLİĞİ: sayfa fotoğrafı + konu eşlemesi (2026-10-23)
+
+**Kullanıcı:** "soru kısmında böyle tek tek ekleyemeyiz. bunun yerine
+sayfa fotoğraflarını konularla eşleştirerek yüklememiz lazım."
+
+Haklı: 40 soruluk bir testi soru soru girmek gerçekçi değil. Soru
+metnini ve şıkları sisteme yazmak yerine **sayfanın fotoğrafı**
+yükleniyor; öğrenci soruyu fotoğraftan okuyup uygulamada işaretliyor.
+
+### Veri modeli AYAKTA KALIYOR
+
+`sorular` tablosu metinsiz soruyu zaten destekliyor: `metin` boş
+olabilir, `gorsel_url` yeter (kısıt "metin ya da görsel" diyor). Yani
+bir sayfa yüklendiğinde o sayfadaki her soru için bir satır açılıyor,
+hepsi **aynı görseli** gösteriyor ve her birinin kendi doğru cevabı
+oluyor. Puanlama, oturum, kilitleme, hak durumu — hepsi değişmiyor.
+
+Değişen üç şey:
+
+**1. Giriş yolu.** Koç tek tek soru yazmıyor; bir sayfa yüklüyor ve
+şunu söylüyor: *bu sayfada 1-10 arası sorular var, cevaplar
+ABCDEABCDE, konu "Türev", 5 şık.* Tek işlem, on satır.
+
+**2. Çözme ekranı.** Soru metni yerine sayfa görseli gösteriliyor ve
+şıklar düz A/B/C/D/E düğmeleri oluyor (şık metni fotoğrafta).
+`TestCoz` bugün `siklar` dizisini bekliyor; boşsa harfleri kendisi
+üretecek.
+
+**3. Depolama izni.** Bugünkü kural yol tabanlı: dosyanın ilk klasörü
+sahibinin kimliği (`yol_sahibi`) ve öğrenci yalnız kendi klasörünü,
+koç da öğrencisinin klasörünü okuyabiliyor. Koçun yüklediği sayfa
+fotoğrafı bu kuralla öğrenciye AÇILMAZ.
+→ Ayrı bir yol öneki (`sorular/<banka_id>/...`) ve ona özel bir
+politika gerekiyor: görseli, kitap kendisine açık olan herkes okusun.
+Ölçüt zaten yazılı — `banka_ogrenciye_sunulabilir_mi()`. Böylece
+telif kilidi görsellere de uygulanıyor: izinsiz kitabın sayfası
+öğrenciye gitmiyor.
+
+### Önerilen etkileşim
+
+Sayfada 10 soru varsa öğrenciye **fotoğraf bir kez** gösterilip altına
+10 cevap satırı konuyor; her soru için ayrı ekranda aynı fotoğrafı
+tekrar tekrar göstermek telefonda yakınlaştırmayı baştan yaptırırdı.
+Soru şeridi sayfa sayfa gruplanıyor.
+
+### Telif notu yine geçerli
+
+Artık yayınevi sayfalarının FOTOĞRAFLARI saklanıyor ve öğrenciye
+gösteriliyor — metin çıkarmaktan daha doğrudan bir çoğaltma.
+`hak_durumu` kilidi burada da tek koruma: varsayılan `deneme`,
+öğrenciye kapalı. İzin alınana kadar kapalı pilot kaydı geçerli.
