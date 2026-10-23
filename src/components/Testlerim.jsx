@@ -42,8 +42,6 @@ export default function Testlerim({ color: c, baslik = "Testler" }) {
     setAcilan({ oturumId: veri, baslik: t.bolum_adi ? `${t.ad} — ${t.bolum_adi}` : t.ad });
   };
 
-  if (!yukleniyor && testler.length === 0) return null;   // test yoksa kart hiç çıkmıyor
-
   return (
     <>
       <Card id="bolum-testler">
@@ -56,6 +54,16 @@ export default function Testlerim({ color: c, baslik = "Testler" }) {
         )}
         {yukleniyor ? (
           <div style={{ fontSize: YAZI.ikincil, color: RENK.metinSoluk }}>Yükleniyor...</div>
+        ) : testler.length === 0 ? (
+          // Eskiden burada hiçbir şey çizilmiyordu (bileşen null
+          // dönüyordu). Tek başına duran bir kart için doğruydu, sekme
+          // içinde değil: "Testler" sekmesi tıklanınca bomboş açılıyor
+          // ve bozuk görünüyordu.
+          <div style={{ fontSize: YAZI.ikincil, color: RENK.metinSoluk, lineHeight: 1.55 }}>
+            Şu an çözebileceğiniz bir test yok. Koçunuz bir kaynağın
+            sorularını onaylayıp öğrencilere açtığında testler burada
+            çıkıyor.
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: BOSLUK.s }}>
             {testler.map(t => {

@@ -10,6 +10,7 @@ import { taramaVarMi } from "../lib/kodOkuyucu";
 import BarkodTarayici from "./BarkodTarayici";
 import CevapAnahtari from "./CevapAnahtari";
 import SoruYonetimi from "./SoruYonetimi";
+import { HAK_DURUMU } from "../lib/hakDurumu";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import IcindekilerAktar from "./IcindekilerAktar";
@@ -29,15 +30,6 @@ import IcindekilerAktar from "./IcindekilerAktar";
 // Bölümlerin müfredat konusuna bağlanması ödev önerisinin temeli:
 // "öğrenci şu konuda zayıf" bilgisi zaten var, eksik olan o konunun
 // hangi kitabın hangi sayfalarında olduğuydu.
-// Soruların öğrenciye açılabilirliği. Etiketler bilerek açık sözlü:
-// "kapalı pilot"un izinli OLMADIĞI arayüzde de yazılı dursun.
-const HAK_DURUMU = [
-  { kod: "deneme",       ad: "Deneme (öğrenciye kapalı)", acik: false },
-  { kod: "kapali_pilot", ad: "Kapalı pilot — izin yok, yalnız kendi öğrencilerim", acik: true },
-  { kod: "izinli",       ad: "Yayınevi izni var", acik: true },
-  { kod: "kendi",        ad: "Kendi/kurum sorularım", acik: true },
-  { kod: "acik",         ad: "Kamuya açık (ÖSYM çıkmış vb.)", acik: true },
-];
 
 export default function SoruBankasi({ userId, students = [], color: c, rol = "teacher" }) {
   const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();

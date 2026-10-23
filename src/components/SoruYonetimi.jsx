@@ -4,6 +4,7 @@ import { calistir } from "../lib/db";
 import { SIKLAR } from "../lib/cevapAnahtari";
 import { sayfalaraBol } from "../lib/soruSayfasi";
 import { imzaliUrlListesi } from "../lib/depo";
+import { ogrenciyeAcik, hakDurumuAdi } from "../lib/hakDurumu";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Modal from "./Modal";
 import SayfaYukle from "./SayfaYukle";
@@ -181,6 +182,22 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
         }}>
           Hiçbir soru onaylanmamış. Test yalnız onaylı sorulardan kuruluyor;
           öğrenci şu an bu kitaptan test başlatamaz.
+        </div>
+      )}
+
+      {/* Onay ile hak durumu AYRI iki kapı ve ikisi de kapatıyor.
+          Soruları onaylayıp kitabı açmayı atlamak en kolay atlanan
+          adım: öğrencinin Testler sekmesi sessizce boş kalıyor, sebebi
+          hiçbir yerde yazmıyordu. */}
+      {onayliAdet > 0 && !ogrenciyeAcik(banka.hak_durumu) && (
+        <div style={{
+          background: RENK.uyari.zemin, color: RENK.uyari.metin, fontSize: 11.5,
+          padding: "9px 11px", borderRadius: KOSE.s, marginBottom: BOSLUK.m, lineHeight: 1.5,
+        }}>
+          {onayliAdet} soru onaylı <b>ama kitap öğrenciye kapalı</b> — hak
+          durumu "{hakDurumuAdi(banka.hak_durumu)}". Kitaplıkta kitabı
+          düzenleyip hak durumunu değiştirmeden test öğrencinin Testler
+          sekmesinde çıkmıyor, sayfa fotoğrafı da açılmıyor.
         </div>
       )}
 
