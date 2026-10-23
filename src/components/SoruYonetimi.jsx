@@ -1,29 +1,39 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 import { SIKLAR } from "../lib/cevapAnahtari";
+import { sayfalaraBol } from "../lib/soruSayfasi";
+import { imzaliUrlListesi } from "../lib/depo";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Modal from "./Modal";
+import SayfaYukle from "./SayfaYukle";
 
 // Koçun bir kitabın sorularını girip yönettiği ekran.
+//
+// ── İKİ GİRDİ YOLU ──────────────────────────────────────────────
+// 1) SAYFA FOTOĞRAFI (asıl yol): bir fotoğraf + ilk soru numarası +
+//    cevap anahtarı → aynı görseli paylaşan N soru. Soru metni
+//    yazılmıyor; öğrenci soruyu fotoğraftan okuyor. Bir kitabı
+//    soru soru yazmak kullanılabilir bir iş değil (400 soruda 2000
+//    alan), kitabın kendisi zaten koçun elinde.
+// 2) TEK SORU (metin): koçun kendi yazdığı sorular için duruyor.
+//
+// Veri modeli ikisini de taşıyor: `sorular` tablosunda `metin` boşken
+// `gorsel_url` dolu olabiliyor (soru_icerik kısıtı).
 //
 // ── ONAYLANMADAN ÖĞRENCİYE GİTMİYOR ─────────────────────────────
 // Her sorunun bir `onayli` alanı var ve test yalnız onaylı sorulardan
 // kuruluyor (test_basla RPC'si). Soru sonradan DEĞİŞİRSE onay
-// kendiliğinden düşüyor (veritabanı tetikleyicisi). Sebebi: soruların
-// asıl girdi yolu ileride PDF'ten içe aktarma olacak ve oradaki bir
-// hata sessizce öğrencinin önüne gitmemeli.
-//
-// ── GÖRSEL ŞU AN YOK ────────────────────────────────────────────
-// Veri modeli soru ve şık görselini destekliyor (gorsel_url), ama
-// yükleme arayüzü bilerek yazılmadı: şekilli soruların kapsama
-// girip girmeyeceği gerçek bir PDF ölçülmeden karara bağlanmayacak
-// (bkz. DIJITAL_TEST.md). Şimdilik düz metin sorular.
+// kendiliğinden düşüyor (veritabanı tetikleyicisi). Sayfa yüklemede
+// onay bir sayfanın tamamı için tek düğme: en olası hata anahtarın
+// bir kayması ve bu, sayfanın tamamını birlikte ilgilendiriyor.
 export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDegisti }) {
   const [sorular, setSorular] = useState([]);
+  const [imzalar, setImzalar] = useState({});   // yol -> imzalı adres
   const [yukleniyor, setYukleniyor] = useState(true);
   const [islemde, setIslemde] = useState(false);
-  const [form, setForm] = useState(null);     // { id?, numara, metin, siklar, dogru_cevap, ... }
+  const [form, setForm] = useState(null);       // { id?, numara, metin, siklar, dogru_cevap, ... }
+  const [sayfaModu, setSayfaModu] = useState(false);
 
   const yukle = useCallback(async () => {
     setYukleniyor(true);
@@ -31,11 +41,19 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
       supabase.from("sorular").select("*").eq("banka_id", banka.id).order("numara"),
       "Sorular", { sessiz: true }
     );
-    setSorular(veri ?? []);
+    const liste = veri ?? [];
+    setSorular(liste);
     setYukleniyor(false);
+
+    // Kova kapalı: görseller ancak süreli imzalı adresle açılıyor.
+    // Aynı sayfayı paylaşan 20 soru için tek imza yetiyor.
+    const yollar = [...new Set(liste.map(s => s.gorsel_url).filter(Boolean))];
+    setImzalar(yollar.length > 0 ? await imzaliUrlListesi(yollar) : {});
   }, [banka.id]);
 
   useEffect(() => { yukle(); }, [yukle]);
+
+  const gruplar = useMemo(() => sayfalaraBol(sorular), [sorular]);
 
   const bosForm = () => ({
     numara: (sorular.at(-1)?.numara ?? 0) + 1,
@@ -96,6 +114,30 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
     if (!hata) { await yukle(); onDegisti?.(); }
   };
 
+  // ── Sayfa işlemleri ───────────────────────────────────────────
+  const sayfaOnayla = async (grup, deger) => {
+    const { hata } = await calistir(
+      supabase.from("sorular").update({ onayli: deger })
+        .in("id", grup.sorular.map(s => s.id)),
+      "Sayfa onayi");
+    if (!hata) { await yukle(); onDegisti?.(); }
+  };
+
+  const sayfaSil = async (grup) => {
+    const ilk = grup.sorular[0].numara, son = grup.sorular.at(-1).numara;
+    if (!confirm(`Bu sayfa ve ${grup.sorular.length} sorusu (${ilk}–${son}) silinsin mi?`)) return;
+    const { hata } = await calistir(
+      supabase.from("sorular").delete().in("id", grup.sorular.map(s => s.id)),
+      "Sayfa silme");
+    if (hata) return;
+    // Satırlar gittiyse fotoğrafın depoda kalması için bir sebep yok.
+    // Sıra bu: dosya önce silinip satırlar sonra kalsaydı, öğrenci
+    // açılamayan bir soruyla karşılaşırdı.
+    await supabase.storage.from("homework").remove([grup.gorsel_url]);
+    await yukle();
+    onDegisti?.();
+  };
+
   const gecerli = form
     && form.metin.trim().length > 0
     && form.dogru_cevap
@@ -112,16 +154,23 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
     <Modal title={`Sorular — ${banka.ad}`} onClose={onKapat} maxWidth={600}>
       <div style={{
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        marginBottom: BOSLUK.m, fontSize: YAZI.ikincil, color: RENK.metinIkincil,
+        gap: BOSLUK.s, marginBottom: BOSLUK.m, fontSize: YAZI.ikincil, color: RENK.metinIkincil,
       }}>
         <span>{sorular.length} soru · <b style={{ color: onayliAdet ? RENK.basari.metin : RENK.uyari.metin }}>
           {onayliAdet} onaylı
         </b></span>
-        {!form && (
-          <button onClick={() => setForm(bosForm())} style={{
-            padding: "6px 14px", borderRadius: KOSE.tam, border: "none",
-            background: c.bg, color: "#fff", fontSize: YAZI.mikro, fontWeight: 700, cursor: "pointer",
-          }}>+ Soru ekle</button>
+        {!form && !sayfaModu && (
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button onClick={() => setSayfaModu(true)} style={{
+              padding: "6px 14px", borderRadius: KOSE.tam, border: "none",
+              background: c.bg, color: "#fff", fontSize: YAZI.mikro, fontWeight: 700, cursor: "pointer",
+            }}>+ Sayfa yükle</button>
+            <button onClick={() => setForm(bosForm())} style={{
+              padding: "6px 12px", borderRadius: KOSE.tam, cursor: "pointer",
+              border: `1.5px solid ${RENK.cizgi}`, background: "#fff",
+              color: RENK.metinIkincil, fontSize: YAZI.mikro,
+            }}>+ Tek soru</button>
+          </div>
         )}
       </div>
 
@@ -133,6 +182,12 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
           Hiçbir soru onaylanmamış. Test yalnız onaylı sorulardan kuruluyor;
           öğrenci şu an bu kitaptan test başlatamaz.
         </div>
+      )}
+
+      {sayfaModu && (
+        <SayfaYukle banka={banka} bolumler={bolumler} varOlan={sorular} color={c}
+          onKapat={() => setSayfaModu(false)}
+          onYuklendi={async () => { setSayfaModu(false); await yukle(); onDegisti?.(); }} />
       )}
 
       {form && (
@@ -210,49 +265,120 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
         <div style={{ fontSize: YAZI.ikincil, color: RENK.metinSoluk }}>Yükleniyor...</div>
       ) : sorular.length === 0 ? (
         <div style={{ fontSize: YAZI.ikincil, color: RENK.metinSoluk, lineHeight: 1.5 }}>
-          Bu kitapta henüz soru yok. Pilot için 10-20 soruluk bir set yeterli.
+          Bu kitapta henüz soru yok. Bir sayfa fotoğrafı yükleyip cevap
+          anahtarını girmek, pilot için yeterli.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 320, overflowY: "auto" }}>
-          {sorular.map(s => (
-            <div key={s.id} style={{
-              display: "flex", gap: BOSLUK.s, alignItems: "center",
-              padding: "6px 4px", borderBottom: `1px solid ${RENK.cizgiSolgun}`,
-              fontSize: YAZI.kucuk,
-            }}>
-              <span style={{ width: 26, color: RENK.metinSilik, flexShrink: 0 }}>{s.numara}.</span>
-              <span style={{
-                flex: 1, minWidth: 0, overflow: "hidden",
-                textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>{s.metin || "(görsel soru)"}</span>
-              <span style={{
-                flexShrink: 0, fontWeight: 800, color: RENK.basari.metin, width: 16,
-              }}>{s.dogru_cevap}</span>
-              <button onClick={() => onayDegistir(s)} title={s.onayli ? "Onayı kaldır" : "Onayla"} style={{
-                flexShrink: 0, fontSize: YAZI.mikro, cursor: "pointer",
-                padding: "2px 8px", borderRadius: KOSE.tam,
-                border: `1px solid ${s.onayli ? RENK.basari.metin + "55" : RENK.cizgi}`,
-                background: s.onayli ? RENK.basari.zemin : "#fff",
-                color: s.onayli ? RENK.basari.metin : RENK.metinSoluk,
-              }}>{s.onayli ? "✓ onaylı" : "onayla"}</button>
-              <button onClick={() => setForm({
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 360, overflowY: "auto" }}>
+          {gruplar.map(g => g.gorsel_url ? (
+            <SayfaSatiri key={g.gorsel_url} grup={g} imza={imzalar[g.gorsel_url]}
+              bolumler={bolumler} onOnay={sayfaOnayla} onSil={sayfaSil} />
+          ) : (
+            <SoruSatiri key={g.sorular[0].id} s={g.sorular[0]} c={c}
+              onOnay={onayDegistir} onSil={sil}
+              onDuzenle={s => setForm({
                 id: s.id, numara: s.numara, metin: s.metin ?? "",
                 sik_sayisi: s.sik_sayisi,
                 siklar: SIKLAR.slice(0, s.sik_sayisi).map(h =>
                   (s.siklar ?? []).find(x => x.harf === h) ?? { harf: h, metin: "" }),
                 dogru_cevap: s.dogru_cevap, bolum_id: s.bolum_id ?? "", konu: s.konu ?? "",
-              })} style={{
-                flexShrink: 0, background: "none", border: "none", cursor: "pointer",
-                color: c.mid, fontSize: YAZI.mikro,
-              }}>düzenle</button>
-              <button onClick={() => sil(s)} style={{
-                flexShrink: 0, background: "none", border: "none", cursor: "pointer",
-                color: RENK.hata.metin, fontSize: YAZI.mikro,
-              }}>sil</button>
-            </div>
+              })} />
           ))}
         </div>
       )}
     </Modal>
+  );
+}
+
+// Bir sayfa: fotoğraf + o sayfanın soruları tek satırda.
+function SayfaSatiri({ grup, imza, bolumler, onOnay, onSil }) {
+  const ilk = grup.sorular[0], son = grup.sorular.at(-1);
+  const onayli = grup.sorular.filter(s => s.onayli).length;
+  const tumu   = onayli === grup.sorular.length;
+  const bolum  = bolumler.find(b => b.id === ilk.bolum_id)?.baslik;
+
+  return (
+    <div style={{
+      display: "flex", gap: BOSLUK.s, alignItems: "center",
+      padding: "7px 4px", borderBottom: `1px solid ${RENK.cizgiSolgun}`,
+    }}>
+      {imza ? (
+        <a href={imza} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+          <img src={imza} alt="" style={{
+            width: 42, height: 42, objectFit: "cover", display: "block",
+            borderRadius: KOSE.s, border: `1px solid ${RENK.cizgi}`,
+          }} />
+        </a>
+      ) : (
+        <div style={{
+          width: 42, height: 42, borderRadius: KOSE.s, flexShrink: 0,
+          background: RENK.yuzey, display: "flex", alignItems: "center",
+          justifyContent: "center", fontSize: 15,
+        }}>🖼</div>
+      )}
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: YAZI.kucuk, color: RENK.metin, fontWeight: 600 }}>
+          Sayfa · {ilk.numara}–{son.numara} ({grup.sorular.length} soru)
+        </div>
+        <div style={{
+          fontSize: YAZI.mikro, color: RENK.metinSilik,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {[ilk.konu, bolum].filter(Boolean).join(" · ") || "konu girilmemiş"}
+          {" · "}
+          <span style={{ letterSpacing: 0.5 }}>{grup.sorular.map(s => s.dogru_cevap).join("")}</span>
+        </div>
+      </div>
+
+      <button onClick={() => onOnay(grup, !tumu)}
+        title={tumu ? "Onayı kaldır" : "Sayfanın tamamını onayla"} style={{
+          flexShrink: 0, fontSize: YAZI.mikro, cursor: "pointer",
+          padding: "3px 9px", borderRadius: KOSE.tam,
+          border: `1px solid ${tumu ? RENK.basari.metin + "55" : RENK.cizgi}`,
+          background: tumu ? RENK.basari.zemin : "#fff",
+          color: tumu ? RENK.basari.metin : RENK.metinSoluk,
+        }}>{tumu ? "✓ onaylı" : onayli > 0 ? `${onayli}/${grup.sorular.length}` : "onayla"}</button>
+
+      <button onClick={() => onSil(grup)} style={{
+        flexShrink: 0, background: "none", border: "none", cursor: "pointer",
+        color: RENK.hata.metin, fontSize: YAZI.mikro,
+      }}>sil</button>
+    </div>
+  );
+}
+
+// Koçun kendi yazdığı tek soru.
+function SoruSatiri({ s, c, onOnay, onSil, onDuzenle }) {
+  return (
+    <div style={{
+      display: "flex", gap: BOSLUK.s, alignItems: "center",
+      padding: "6px 4px", borderBottom: `1px solid ${RENK.cizgiSolgun}`,
+      fontSize: YAZI.kucuk,
+    }}>
+      <span style={{ width: 26, color: RENK.metinSilik, flexShrink: 0 }}>{s.numara}.</span>
+      <span style={{
+        flex: 1, minWidth: 0, overflow: "hidden",
+        textOverflow: "ellipsis", whiteSpace: "nowrap",
+      }}>{s.metin || "(görsel soru)"}</span>
+      <span style={{
+        flexShrink: 0, fontWeight: 800, color: RENK.basari.metin, width: 16,
+      }}>{s.dogru_cevap}</span>
+      <button onClick={() => onOnay(s)} title={s.onayli ? "Onayı kaldır" : "Onayla"} style={{
+        flexShrink: 0, fontSize: YAZI.mikro, cursor: "pointer",
+        padding: "2px 8px", borderRadius: KOSE.tam,
+        border: `1px solid ${s.onayli ? RENK.basari.metin + "55" : RENK.cizgi}`,
+        background: s.onayli ? RENK.basari.zemin : "#fff",
+        color: s.onayli ? RENK.basari.metin : RENK.metinSoluk,
+      }}>{s.onayli ? "✓ onaylı" : "onayla"}</button>
+      <button onClick={() => onDuzenle(s)} style={{
+        flexShrink: 0, background: "none", border: "none", cursor: "pointer",
+        color: c.mid, fontSize: YAZI.mikro,
+      }}>düzenle</button>
+      <button onClick={() => onSil(s)} style={{
+        flexShrink: 0, background: "none", border: "none", cursor: "pointer",
+        color: RENK.hata.metin, fontSize: YAZI.mikro,
+      }}>sil</button>
+    </div>
   );
 }

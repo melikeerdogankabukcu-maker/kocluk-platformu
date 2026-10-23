@@ -263,3 +263,45 @@ Artık yayınevi sayfalarının FOTOĞRAFLARI saklanıyor ve öğrenciye
 gösteriliyor — metin çıkarmaktan daha doğrudan bir çoğaltma.
 `hak_durumu` kilidi burada da tek koruma: varsayılan `deneme`,
 öğrenciye kapalı. İzin alınana kadar kapalı pilot kaydı geçerli.
+
+---
+
+## 10. Yazıldı (2026-10-23)
+
+9. bölümdeki üç değişiklik uygulandı.
+
+**Depolama izni** — `soru_sayfasi_depo_migration.sql`.
+`soru_sayfasi_banka(name)` yoldan kitap kimliğini çıkarıyor
+(`sorular/<banka_id>/...`; kalıba uymayan yol NULL, politika NULL'da
+kapalı). `storage.objects` üzerinde dört politika: okuma = kitabın
+sahibi **ya da** `banka_ogrenciye_sunulabilir_mi()`; yazma/değiştirme/
+silme = yalnız kitabın sahibi. Öğrenci soru sayfası YÜKLEYEMİYOR —
+yükleyebilse kendi hazırladığı bir sayfayı teste sokabilirdi.
+
+**Giriş yolu** — `src/lib/soruSayfasi.js` (saf, 24 sınama) +
+`src/components/SayfaYukle.jsx`. Koç: fotoğraf + ilk soru no + şık
+sayısı + bölüm + konu + cevap anahtarı. Anahtarın uzunluğu kaç soru
+olduğunu söylüyor; "kaç soru" ayrıca sorulmuyor, iki yerden gelen sayı
+çelişebilirdi. Anahtar biçimi serbest (boşluk, virgül), iptal için
+`0`. Numara çakışması yüklemeden ÖNCE bulunuyor; satırlar yazılamazsa
+fotoğraf depodan geri alınıyor (sahipsiz dosya kalmasın).
+Yüklemeden önce "11:A 12:C ..." ızgarası gösteriliyor: bu akıştaki en
+olası hata anahtarın bir kayması ve doğru cevaplar öğrenciye hiç
+gösterilmediği için başka hiçbir yerde yakalanamıyor.
+
+**Koçun listesi** — `SoruYonetimi.jsx` artık soruları sayfalara
+bölüyor (`sayfalaraBol`): küçük görsel + numara aralığı + anahtar +
+**tek düğmeyle sayfanın tamamını onayla**. Onay bir sayfanın bütünü
+için: en olası hata (kayma) sayfanın tamamını ilgilendiriyor. Sayfa
+silinince satırlar gidiyor, sonra fotoğraf siliniyor — ters sırada
+öğrenci açılamayan bir soruyla karşılaşırdı.
+
+**Çözme ekranı** — `TestCoz.jsx` soru soru değil **sayfa sayfa**
+ilerliyor: fotoğraf bir kez, altında o sayfanın bütün soruları için
+düz A–E satırları. `siklar` dolu olan sorular (koçun kendi yazdıkları)
+eskisi gibi metinli şıklarla görünüyor; ikisi aynı testte karışabiliyor.
+
+**Kova kapalı olduğu için** görseller imzalı adresle açılıyor
+(`imzaliUrlListesi`); aynı sayfayı paylaşan 20 soru için tek imza.
+Bu, görsel soruların bugüne kadar hiç açılmayacağı anlamına geliyordu:
+`gorsel_url` doğrudan `<img src>`e veriliyordu ve kova public değil.
