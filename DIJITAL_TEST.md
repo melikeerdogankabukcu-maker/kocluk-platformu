@@ -305,3 +305,73 @@ eskisi gibi metinli şıklarla görünüyor; ikisi aynı testte karışabiliyor.
 (`imzaliUrlListesi`); aynı sayfayı paylaşan 20 soru için tek imza.
 Bu, görsel soruların bugüne kadar hiç açılmayacağı anlamına geliyordu:
 `gorsel_url` doğrudan `<img src>`e veriliyordu ve kova public değil.
+
+---
+
+## 11. Testin birimi KONU oldu (2026-10-26)
+
+**Soru:** "sonuç koça iletiliyor ama analize işleniyor mu?"
+
+İşleniyordu, ama konu kırılımı işlenmiyordu. İki ayrı kayıp bulundu:
+
+1. `test_sessions.subject` kitabın `ders` alanından geliyor ve o alan
+   zorunlu değil. Boşsa sunucu `'Genel'` yazıyor: test çözülüyor,
+   puanlanıyor, ama gerçek dersin doğruluk oranına hiç girmiyor.
+2. **`sorular.konu` kolonunu hiçbir şey okumuyordu.** Koç sayfayı
+   konuyla eşliyordu, veri yazılıyordu, kimse bakmıyordu.
+   `test_sessions.topic` BÖLÜMÜN konusundan doluyordu; bölüm
+   bağlanmamışsa yerine **kitabın adı** yazılıyordu, yani konu
+   analizine konu diye "ABC Yayınları TYT Matematik" düşüyordu.
+
+**Karar (kullanıcı):** konu test biriminin kendisi olsun.
+
+`konu_testleri_migration.sql`:
+- `test_oturumlari` artık `konu` ve `kapsam` taşıyor.
+- `acik_testlerim()` konu başına bir satır döndürüyor; öğrenci
+  "Türev — 20 soru" diye test görüyor.
+- `test_basla(p_banka, p_konu)` — eski `p_bolum` imzası kaldırıldı.
+  Varsayılanı yok: unutulunca "kitabın tamamı" gibi sessiz bir anlam
+  kazanmasın.
+- `testi_bitir` konuyu doğrudan `test_sessions.topic`'e yazıyor.
+- **Oturumun soru kümesi tek yerde tanımlı** (`oturumun_sorulari`).
+  Eskiden aynı WHERE iki fonksiyonda ayrı ayrı duruyordu; biri
+  değişip diğeri kalsa öğrenci GÖRMEDİĞİ sorudan puan kaybederdi ve
+  hata test bitene kadar görünmezdi. Fonksiyon öğrenciye kapalı
+  (`dogru_cevap` içeriyor), yalnız SECURITY DEFINER çağıranlar
+  kullanıyor.
+
+**Eski oturumlar bozulmuyor:** kapsamı bölüme göre kurulmuş yarım
+oturumlar `kapsam='bolum'` kalıyor ve eski kuralla puanlanıyor.
+Sessizce konuya çevirmek, öğrencinin gördüğünden başka bir soru kümesi
+üzerinden puanlanması olurdu.
+
+Arayüz: sayfa yüklerken **konu zorunlu** ve müfredat konularından
+öneriliyor (serbest yazılabiliyor — müfredatta olmayan başlık yüzünden
+sayfa yüklenemez olmasın). Konusu olmayan sorular öğrenciye "Konusuz
+sorular" diye ayrı bir test olarak çıkıyor; gizlenseydi hiç
+çözülemezlerdi. Koça iki yeni uyarı: kitabın dersi boşsa ve konusuz
+soru varsa.
+
+## 12. Fotoğraf üzerine karalama (2026-10-26)
+
+Kâğıt kitapta öğrenci sayfanın üstünde işlem yapıyor, şık çiziyor.
+Ekranda yapamamak dijital testi kâğıttan geriye düşürüyordu.
+
+`src/lib/karalama.js` (saf, 19 sınama) + `SayfaKaralama.jsx`:
+kalem (üç renk), silgi, geri al, temizle.
+
+- **Noktalar piksel değil oran (0–1).** Fotoğrafın ekrandaki genişliği
+  değişken; piksel tutulsa çizgiler her boyut değişiminde kayardı.
+- **Varsayılan kip "kaydır".** Tuval sürekli dokunmayı yakalasa
+  telefonda kaydırmak ve yakınlaştırmak imkânsız olurdu, öğrenci küçük
+  yazıyı okuyamazdı. Yazmak için düğmeye basmak gerekiyor.
+- **Silgi çizgiyi siler, pikseli değil** — çizgiler liste olduğu sürece
+  "geri al" listenin sonunu atmak. Piksel silinse geri alma olmazdı.
+  Silgi noktalara değil doğru parçalarına bakıyor: hızlı çekilen
+  çizgide noktalar seyrek düşüyor, aradaki uzun parçaya değmek
+  sayılmalı.
+- Sürüklerken yalnız yeni parça çiziliyor, tuvalin tamamı değil; her
+  harekette state güncellemek telefonda gözle görülür takılma yapıyordu.
+
+**Şimdilik kaydedilmiyor:** çizgiler test penceresi kapanınca gidiyor.
+Sunucuya kaydetme yayına almadan önce yapılacak (YOL_HARITASI.md §4.5).

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
+import { useTopics } from "../lib/TopicsContext";
 import {
   sayfaYolu, dosyaGecerli, cevapAnahtariniCoz, sayfaSorulari, cakisanNumaralar,
 } from "../lib/soruSayfasi";
@@ -19,6 +20,7 @@ import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 // doğru cevaplar öğrenciye hiç gösterilmiyor. Eşleşmeyi yüklemeden
 // önce göstermek, kaymayı gözle yakalanabilir kılıyor.
 export default function SayfaYukle({ banka, bolumler, varOlan, color: c, onKapat, onYuklendi }) {
+  const { sinavTurleri, examSubjectsOf, topicsOf } = useTopics();
   const [dosya, setDosya]       = useState(null);
   const [onizleme, setOnizleme] = useState(null);
   const [ilkNumara, setIlkNumara] = useState((varOlan.at(-1)?.numara ?? 0) + 1);
@@ -39,6 +41,16 @@ export default function SayfaYukle({ banka, bolumler, varOlan, color: c, onKapat
   // Adres, başkasıyla değiştirildiğinde ve panel kapanırken bırakılıyor.
   useEffect(() => () => { if (onizleme) URL.revokeObjectURL(onizleme); }, [onizleme]);
 
+  // Kitabın dersine ait müfredat konuları. Ders girilmemişse o sınavın
+  // bütün derslerinin konuları birleştiriliyor — eşleştirme yine
+  // çalışsın (SoruBankasi'ndaki kitabinKonulari ile aynı gerekçe).
+  const mufredatKonulari = useMemo(() => {
+    const tur = banka.sinav_turu || sinavTurleri[0];
+    if (!tur) return [];
+    if (banka.ders) return topicsOf(tur, banka.ders);
+    return examSubjectsOf(tur).flatMap(d => topicsOf(tur, d));
+  }, [banka.sinav_turu, banka.ders, sinavTurleri, examSubjectsOf, topicsOf]);
+
   const { harfler, hata: anahtarHatasi } = useMemo(
     () => cevapAnahtariniCoz(anahtar, sikSayisi), [anahtar, sikSayisi]);
 
@@ -49,6 +61,7 @@ export default function SayfaYukle({ banka, bolumler, varOlan, color: c, onKapat
   const engel =
     !dosya                   ? "Sayfa fotoğrafı seçin."
     : dosyaHatasi            ? dosyaHatasi
+    : !konu.trim()           ? "Konu girin — test konu başına açılıyor."
     : !anahtar.trim()        ? "Cevap anahtarını girin."
     : anahtarHatasi          ? anahtarHatasi
     : cakisan.length > 0     ? `Bu kitapta ${cakisan.slice(0, 6).join(", ")} numaralı soru${cakisan.length > 6 ? " (ve dahası)" : ""} zaten var.`
@@ -144,11 +157,28 @@ export default function SayfaYukle({ banka, bolumler, varOlan, color: c, onKapat
         </label>
       </div>
 
+      {/* ── KONU TESTİN BİRİMİ ──────────────────────────────────
+          Öğrenciye test konu başına çıkıyor ve sonuç analize bu
+          konuyla yazılıyor. Bu yüzden isteğe bağlı değil.
+
+          Liste müfredattan geliyor ama alan serbest: müfredatta
+          olmayan bir konu başlığı varsa yazılabiliyor. Kapalı bir
+          açılır liste olsaydı eşleşmeyen sayfa hiç yüklenemezdi. */}
       <label style={etiket}>
-        <div style={{ marginBottom: 3 }}>Konu (isteğe bağlı)</div>
-        <input placeholder="Örn. Üslü Sayılar" value={konu} style={girdi}
+        <div style={{ marginBottom: 3 }}>Konu</div>
+        <input list="sayfa-konulari" placeholder="Örn. Üslü Sayılar" value={konu} style={girdi}
           onChange={e => setKonu(e.target.value)} />
+        <datalist id="sayfa-konulari">
+          {mufredatKonulari.map(k => <option key={k} value={k} />)}
+        </datalist>
       </label>
+      {mufredatKonulari.length > 0 && !mufredatKonulari.includes(konu.trim()) && konu.trim() && (
+        <div style={{ fontSize: YAZI.mikro, color: RENK.uyari.metin, lineHeight: 1.5 }}>
+          "{konu.trim()}" müfredat listesinde yok. Yüklenir, ama konu
+          analizinde ayrı bir başlık olarak durur — müfredattaki adıyla
+          yazmak ikisini birleştirir.
+        </div>
+      )}
 
       <label style={etiket}>
         <div style={{ marginBottom: 3 }}>Cevap anahtarı — sayfadaki soruların sırasıyla</div>

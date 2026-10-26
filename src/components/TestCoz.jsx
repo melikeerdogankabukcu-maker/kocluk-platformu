@@ -3,6 +3,7 @@ import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 import { SIKLAR, sayfalaraBol } from "../lib/soruSayfasi";
 import { imzaliUrlListesi } from "../lib/depo";
+import SayfaKaralama from "./SayfaKaralama";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Modal from "./Modal";
 
@@ -25,6 +26,11 @@ import Modal from "./Modal";
 // Koçun kendi yazdığı metin soruları (şıkları girilmiş olanlar) eskisi
 // gibi tek başına bir adım; ikisi aynı testte karışabiliyor.
 //
+// ── FOTOĞRAFIN ÜSTÜNE YAZILIYOR ─────────────────────────────────
+// Kâğıt kitapta öğrenci sayfanın üstünde işlem yapıyor; ekranda da
+// yapabiliyor (SayfaKaralama). Karalama şimdilik yalnız bu pencerede
+// duruyor, sunucuya gitmiyor.
+//
 // ── CEVAP ANINDA KAYDEDİLİYOR ───────────────────────────────────
 // Her işaretleme doğrudan veritabanına yazılıyor. Telefon kapanırsa,
 // sayfa yenilenirse ya da öğrenci yarıda bırakırsa işaretlediği yerden
@@ -43,6 +49,11 @@ export default function TestCoz({ oturumId, baslik, color: c, onKapat, onBitti }
   const [yukleniyor, setYukleniyor] = useState(true);
   const [islemde, setIslemde] = useState(false);
   const [sonuc, setSonuc] = useState(null);          // [{soru_id, numara, sonuc}]
+  // Sayfa fotoğrafı üzerindeki karalama: görsel yolu -> çizgiler.
+  // Burada (bellekte) tutuluyor ki sayfalar arasında gidip gelmek
+  // çizimi silmesin. Sunucuya KAYDEDİLMİYOR; yayına almadan önce
+  // kaydedilecek (YOL_HARITASI.md).
+  const [karalamalar, setKaralamalar] = useState({});
   const [hata, setHata] = useState(null);
 
   useEffect(() => {
@@ -77,6 +88,13 @@ export default function TestCoz({ oturumId, baslik, color: c, onKapat, onBitti }
   }, [oturumId]);
 
   const gruplar = useMemo(() => sayfalaraBol(sorular), [sorular]);
+
+  // SayfaKaralama hem değer hem güncelleyici fonksiyon gönderebiliyor
+  // (parmak kalkınca [...prev, aktif]); ikisi de karşılanıyor.
+  const karalamaYaz = useCallback((yol) => (yeni) => setKaralamalar(o => ({
+    ...o,
+    [yol]: typeof yeni === "function" ? yeni(o[yol] ?? []) : yeni,
+  })), []);
 
   const isaretle = useCallback(async (soruId, harf) => {
     // Aynı şıkka tekrar basmak işareti kaldırıyor (boş bırakmak da
@@ -214,10 +232,12 @@ export default function TestCoz({ oturumId, baslik, color: c, onKapat, onBitti }
           {g.gorsel_url && (
             imzalar[g.gorsel_url] ? (
               <>
-                <img src={imzalar[g.gorsel_url]} alt="" style={{
-                  width: "100%", borderRadius: KOSE.s, display: "block",
-                  border: `1px solid ${RENK.cizgi}`,
-                }} />
+                <SayfaKaralama
+                  src={imzalar[g.gorsel_url]}
+                  cizgiler={karalamalar[g.gorsel_url] ?? []}
+                  onCizgiler={karalamaYaz(g.gorsel_url)}
+                  color={c}
+                />
                 <a href={imzalar[g.gorsel_url]} target="_blank" rel="noreferrer" style={{
                   display: "inline-block", marginTop: 4, marginBottom: BOSLUK.s,
                   fontSize: YAZI.mikro, color: c.text,

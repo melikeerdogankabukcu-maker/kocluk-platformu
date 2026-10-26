@@ -127,6 +127,24 @@ bu zincirin dışında, boşluğa alınabilir.
 
 ---
 
+## 4.5 Yayına almadan önce (karar verilmiş, yapılacak)
+
+**Karalamanın sunucuya kaydedilmesi** (2026-10-26'da kararlaştırıldı).
+Öğrenci sayfa fotoğrafının üstüne kalemle yazabiliyor ama çizgiler
+yalnız test penceresi açık kaldığı sürece duruyor; pencere kapanınca
+gidiyor. Kullanıcı kararı: *"şimdilik bu şekilde olsun daha sonra
+yayına almadan önce sunucuya kaydedilecek şekilde düzenlenecek."*
+
+Kaydedilince ikinci bir kazanç var: öğrencinin çözüm karalaması
+**doğrulanmış çalışma kaydının** kanıtı oluyor — koç sadece sonucu
+değil, soruyu nasıl çözdüğünü de görüyor. Bugünkü hâliyle bu bilgi
+üretilip atılıyor.
+
+Gereken: oturum+görsel başına bir kayıt (`oturum_karalamalari` ya da
+`oturum_cevaplari` üzerinde JSONB), çizgiler zaten oranlı saklandığı
+için veri biçimi hazır (`src/lib/karalama.js`); koç tarafında salt
+okunur gösterim.
+
 ## 5. Tanımlanacaklar
 
 Değerlendirme bu ikisini "kapsamı belirsiz" diye işaretliyor ve haklı;

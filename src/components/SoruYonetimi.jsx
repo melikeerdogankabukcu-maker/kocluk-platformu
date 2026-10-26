@@ -86,7 +86,7 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
       sik_sayisi: form.sik_sayisi,
       siklar: form.siklar.map(s => ({ harf: s.harf, metin: s.metin.trim() })),
       dogru_cevap: form.dogru_cevap,
-      konu: form.konu || null,
+      konu: form.konu.trim() || null,
     };
     const { hata } = await calistir(
       form.id
@@ -144,7 +144,8 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
     && form.dogru_cevap
     && form.siklar.slice(0, form.sik_sayisi).every(s => s.metin.trim().length > 0);
 
-  const onayliAdet = sorular.filter(s => s.onayli).length;
+  const onayliAdet  = sorular.filter(s => s.onayli).length;
+  const konusuzAdet = sorular.filter(s => !s.konu).length;
 
   const girdi = {
     width: "100%", padding: "8px 10px", borderRadius: KOSE.s, boxSizing: "border-box",
@@ -182,6 +183,32 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
         }}>
           Hiçbir soru onaylanmamış. Test yalnız onaylı sorulardan kuruluyor;
           öğrenci şu an bu kitaptan test başlatamaz.
+        </div>
+      )}
+
+      {/* Analiz `test_sessions.subject`'i kitabın dersinden okuyor.
+          Ders boşsa sunucu 'Genel' yazıyor: test çözülüyor, puanlanıyor,
+          ama GERÇEK dersin doğruluk oranına hiç girmiyor. Sessiz kayıp,
+          bu yüzden uyarı. */}
+      {!banka.ders && sorular.length > 0 && (
+        <div style={{
+          background: RENK.uyari.zemin, color: RENK.uyari.metin, fontSize: 11.5,
+          padding: "9px 11px", borderRadius: KOSE.s, marginBottom: BOSLUK.m, lineHeight: 1.5,
+        }}>
+          Kitabın <b>dersi girilmemiş</b>. Test sonucu analize "Genel" dersi
+          olarak yazılıyor, gerçek dersin doğruluk oranına işlenmiyor.
+          Kitaplıkta kitabı düzenleyip ders seçin.
+        </div>
+      )}
+
+      {konusuzAdet > 0 && (
+        <div style={{
+          background: RENK.uyari.zemin, color: RENK.uyari.metin, fontSize: 11.5,
+          padding: "9px 11px", borderRadius: KOSE.s, marginBottom: BOSLUK.m, lineHeight: 1.5,
+        }}>
+          {konusuzAdet} sorunun <b>konusu yok</b>. Test konu başına açıldığı
+          için öğrenciye "Konusuz sorular" diye tek bir yığın hâlinde
+          çıkıyor ve konu analizine işlenmiyor.
         </div>
       )}
 
@@ -235,6 +262,15 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
               </select>
             </label>
           </div>
+
+          {/* Konu alanı forma sonradan eklendi: state'te vardı ama girdisi
+              yoktu, yani elle yazılan her soru konusuz kalıyordu ve
+              öğrenciye "Konusuz sorular" yığınında çıkıyordu. */}
+          <label style={{ fontSize: YAZI.mikro, color: RENK.metinIkincil }}>
+            <div style={{ marginBottom: 3 }}>Konu</div>
+            <input placeholder="Örn. Üslü Sayılar" value={form.konu} style={girdi}
+              onChange={e => setForm(f => ({ ...f, konu: e.target.value }))} />
+          </label>
 
           <textarea rows={3} placeholder="Soru metni" value={form.metin} style={{ ...girdi, resize: "vertical" }}
             onChange={e => setForm(f => ({ ...f, metin: e.target.value }))} />
