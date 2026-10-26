@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../supabase";
+import { calistir } from "../lib/db";
 import { useTopics } from "../lib/TopicsContext";
 import { soruLimiti, alanaGoreSuz } from "../lib/examLimits";
 import { netHesapla, netKuraliMetni } from "../lib/netHelpers";
+import { haritayiAc, kayittanDersler, ayrintiEksikMi } from "../lib/sinavKaydi";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 
@@ -11,7 +13,14 @@ import SectionTitle from "./SectionTitle";
 // tutulsaydı KPSS/DGS müfredata eklendiği hâlde sınav girişinde çıkmazdı.
 const SERBEST_TUR = "Okul Sınavı";
 
-// Öğretmenin sınav sonucu girdiği form.
+// Öğretmenin sınav sonucu girdiği form VE girdiklerinin listesi.
+//
+// ── LİSTE SONRADAN EKLENDİ ──────────────────────────────────────
+// Ekran yalnız giriş yapıyordu: koç kaydı yazıyor, bir daha
+// göremiyordu. Kayıtlar öğrencinin panelinde görünüyordu ama koçun
+// kendi girdiği veriyi okuyacağı, düzeltecek bir yer yoktu — yanlış
+// girilen bir net kalıcıydı. Veritabanı izni baştan vardı
+// (ogrencim_mi üzerinden tam yetki), eksik olan arayüzdü.
 // Her ders için yalnızca doğru/yanlış girilir; net ve boş otomatik hesaplanır
 // (boş = dersin soru sayısı − doğru − yanlış).
 // Hem yanlış hem boş sorular için ayrı ayrı konu eşleştirilir: aynı konudan
@@ -28,6 +37,55 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
   const [form, setForm] = useState({
     student_id: "", exam_name: "", exam_date: new Date().toISOString().split("T")[0], notes: "",
   });
+  const [kayitlar, setKayitlar]     = useState([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [duzenlenen, setDuzenlenen] = useState(null);   // açık kaydın kendisi
+  const [suzgec, setSuzgec]         = useState("");     // listede öğrenci süzgeci
+
+  const ogrenciIdleri = useMemo(() => students.map(s => s.id).join(","), [students]);
+
+  const yukle = useCallback(async () => {
+    const idler = ogrenciIdleri ? ogrenciIdleri.split(",") : [];
+    if (idler.length === 0) { setKayitlar([]); setYukleniyor(false); return; }
+    const { veri } = await calistir(
+      supabase.from("exam_results").select("*")
+        .in("student_id", idler)
+        .order("exam_date", { ascending: false }),
+      "Sinav kayitlari", { sessiz: true }
+    );
+    setKayitlar(veri ?? []);
+    setYukleniyor(false);
+  }, [ogrenciIdleri]);
+
+  useEffect(() => { yukle(); }, [yukle]);
+
+  const adBul = (id) => students.find(s => s.id === id)?.full_name ?? "—";
+
+  // Kaydı forma aç. Ders ayrıntısı dizi olarak saklanıyor, form adetli
+  // harita tutuyor; dönüşüm lib/sinavKaydi.js içinde ve sınanmış.
+  const duzenle = (kayit) => {
+    setDuzenlenen(kayit);
+    setExamType(kayit.exam_type ?? "TYT");
+    setForm({
+      student_id: kayit.student_id,
+      exam_name:  kayit.exam_name ?? "",
+      exam_date:  kayit.exam_date ?? new Date().toISOString().split("T")[0],
+      notes:      kayit.notes ?? "",
+    });
+    setDersler(kayittanDersler(kayit));
+    setAcikPanel(null);
+    setAcik(true);
+  };
+
+  const sil = async (kayit) => {
+    if (!confirm(`"${kayit.exam_name}" kaydı silinsin mi? Analiz ve veli raporu bu sınavı artık saymayacak.`)) return;
+    const { hata } = await calistir(
+      supabase.from("exam_results").delete().eq("id", kayit.id), "Sinav silme");
+    if (hata) return;
+    if (duzenlenen?.id === kayit.id) sifirla();
+    await yukle();
+    onKaydedildi?.();
+  };
 
   const inputStyle = {
     padding: "9px 12px", borderRadius: 10, border: "1.5px solid #f0ede8",
@@ -57,7 +115,7 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
 
   const sifirla = () => {
     setForm({ student_id: "", exam_name: "", exam_date: new Date().toISOString().split("T")[0], notes: "" });
-    setDersler({}); setAcikPanel(null); setAcik(false);
+    setDersler({}); setAcikPanel(null); setAcik(false); setDuzenlenen(null);
   };
 
   // Girilen derslerden net / toplam / kayıt verisi hesapla
@@ -74,11 +132,10 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
     const net = netHesapla(v.dogru, v.yanlis, examType);
     dersNetleri[ders] = net;
     // Adetli haritalar diziye açılır: {Türev:2} → ["Türev","Türev"]
-    const ac = (m) => Object.entries(m).flatMap(([konu, adet]) => Array(adet).fill(konu));
     dersDetaylari[ders] = {
       dogru: d, yanlis: y, bos: b, net,
-      yanlis_konular: ac(v.yanlisKonular),
-      bos_konular:    ac(v.bosKonular),
+      yanlis_konular: haritayiAc(v.yanlisKonular),
+      bos_konular:    haritayiAc(v.bosKonular),
     };
   });
   const toplamNet = Object.values(dersNetleri).reduce((s, n) => s + n, 0);
@@ -91,7 +148,7 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("exam_results").insert({
+    const satir = {
       student_id:      form.student_id,
       exam_name:       form.exam_name.trim(),
       exam_type:       examType,
@@ -100,7 +157,10 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
       subject_details: doluDersSayisi > 0 ? dersDetaylari : null,
       total_net:       doluDersSayisi > 0 ? parseFloat(toplamNet.toFixed(2)) : null,
       notes:           form.notes || null,
-    });
+    };
+    const { error } = duzenlenen
+      ? await supabase.from("exam_results").update(satir).eq("id", duzenlenen.id)
+      : await supabase.from("exam_results").insert(satir);
     setSaving(false);
     if (error) {
       console.error("Sınav kaydetme hatası:", error);
@@ -108,6 +168,7 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
       return;
     }
     sifirla();
+    await yukle();
     onKaydedildi?.();
   };
 
@@ -206,22 +267,114 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
 
   return (
     <Card>
-      <SectionTitle title="Sınav Sonucu Gir" color={c.mid} />
+      <SectionTitle title={duzenlenen ? "Sınav Kaydını Düzenle" : "Sınav Sonucu Gir"} color={c.mid} />
 
       {!acik ? (
-        <button onClick={() => setAcik(true)} style={{
-          width: "100%", padding: "11px 0", borderRadius: 12,
-          border: `1.5px dashed ${c.mid}`, background: "transparent",
-          color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
-        }}>+ Sınav Sonucu Ekle</button>
+        <>
+          <button onClick={() => setAcik(true)} style={{
+            width: "100%", padding: "11px 0", borderRadius: 12,
+            border: `1.5px dashed ${c.mid}`, background: "transparent",
+            color: c.mid, fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>+ Sınav Sonucu Ekle</button>
+
+          {/* Girilen kayıtlar. Koçun kendi yazdığı veriyi görebildiği
+              ve düzeltebildiği tek yer burası. */}
+          {/* Öğrenci süzgeci: tek öğrencide gereksiz, çok öğrencide
+              liste aranabilir olmaktan çıkıyor. */}
+          {!yukleniyor && kayitlar.length > 0 && students.length > 1 && (
+            <select value={suzgec} onChange={e => setSuzgec(e.target.value)} style={{
+              ...inputStyle, width: "100%", marginTop: 12, fontSize: 12,
+              color: suzgec ? "#222" : "#888",
+            }}>
+              <option value="">Tüm öğrenciler ({kayitlar.length} kayıt)</option>
+              {students.map(o => {
+                const adet = kayitlar.filter(k => k.student_id === o.id).length;
+                return <option key={o.id} value={o.id}>{o.full_name} ({adet})</option>;
+              })}
+            </select>
+          )}
+
+          {yukleniyor ? (
+            <div style={{ fontSize: 12, color: "#aaa", marginTop: 10 }}>Yükleniyor...</div>
+          ) : kayitlar.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#aaa", marginTop: 10, lineHeight: 1.5 }}>
+              Henüz sınav kaydı yok. Girdiğiniz sınavlar burada listelenir.
+            </div>
+          ) : (
+            <div style={{
+              display: "flex", flexDirection: "column", gap: 2,
+              marginTop: 12, maxHeight: 340, overflowY: "auto",
+            }}>
+              {(suzgec ? kayitlar.filter(k => k.student_id === suzgec) : kayitlar).map(k => (
+                <div key={k.id} style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "8px 4px", borderBottom: "1px solid #f5f2ee",
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 12.5, fontWeight: 600, color: "#333",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>{k.exam_name}</div>
+                    <div style={{
+                      fontSize: 10.5, color: "#999",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {[adBul(k.student_id), k.exam_type, k.exam_date,
+                        Object.keys(k.subject_nets ?? {}).length
+                          ? `${Object.keys(k.subject_nets).length} ders` : null,
+                      ].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+
+                  {k.total_net != null && (
+                    <span style={{
+                      flexShrink: 0, fontSize: 12, fontWeight: 700, color: c.text,
+                      background: c.light, padding: "3px 9px", borderRadius: 99,
+                    }}>{Number(k.total_net)} net</span>
+                  )}
+
+                  <button onClick={() => duzenle(k)} style={{
+                    flexShrink: 0, background: "none", border: "none", cursor: "pointer",
+                    color: c.mid, fontSize: 11,
+                  }}>düzenle</button>
+                  <button onClick={() => sil(k)} style={{
+                    flexShrink: 0, background: "none", border: "none", cursor: "pointer",
+                    color: "#A32D2D", fontSize: 11,
+                  }}>sil</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <select value={form.student_id}
+          {/* Düzenlemede öğrenci DEĞİŞTİRİLEMİYOR: kaydı başka öğrenciye
+              taşımak ayrı bir iş ve kazayla yapılması kolay. Taşımak
+              gerekiyorsa kayıt silinip yeniden girilir. */}
+          <select value={form.student_id} disabled={!!duzenlenen}
             onChange={e => setForm(f => ({ ...f, student_id: e.target.value }))}
-            style={{ ...inputStyle, color: form.student_id ? "#222" : "#aaa" }}>
+            style={{
+              ...inputStyle, color: form.student_id ? "#222" : "#aaa",
+              background: duzenlenen ? "#fafaf8" : "#fff",
+            }}>
             <option value="">Öğrenci seç...</option>
             {students.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
           </select>
+
+          {/* Eski kayıtlarda ders ayrıntısı yok, yalnız netler yazılmış.
+              Doğru/yanlış sayıları netten geriye çıkmıyor; uyarmazsak
+              koç kaydı açıp kaydedince netler sessizce silinirdi. */}
+          {ayrintiEksikMi(duzenlenen) && (
+            <div style={{
+              fontSize: 11.5, color: "#854F0B", background: "#FFF7E6",
+              padding: "9px 12px", borderRadius: 8, lineHeight: 1.5,
+            }}>
+              Bu kaydın ders ayrıntısı (doğru/yanlış sayıları) yok, yalnız
+              netleri var. Şimdi kaydederseniz <b>netler girdiğiniz
+              sayılardan yeniden hesaplanır</b>; ders sonuçlarını boş
+              bırakırsanız sınavın netleri silinir.
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {sinavSecenekleri.map(tur => (
@@ -352,7 +505,7 @@ export default function SinavGirisFormu({ students, profileMap = {}, color: c, o
               color: "#fff", fontSize: 13, fontWeight: 700,
               cursor: limitAsanlar.length > 0 ? "not-allowed" : "pointer",
               opacity: saving ? 0.7 : 1,
-            }}>{saving ? "Kaydediliyor..." : "Sınavı Kaydet"}</button>
+            }}>{saving ? "Kaydediliyor..." : duzenlenen ? "Değişikliği Kaydet" : "Sınavı Kaydet"}</button>
             <button onClick={sifirla} style={{
               padding: "11px 16px", borderRadius: 12, border: "1.5px solid #f0ede8",
               background: "#fff", color: "#888", fontSize: 13, cursor: "pointer",
