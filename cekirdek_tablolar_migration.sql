@@ -213,21 +213,14 @@ CREATE POLICY "Veli cocuk sinav sonuclarini okur" ON public.exam_results
     SELECT 1 FROM public.family_links f
      WHERE f.parent_id = auth.uid() AND f.student_id = exam_results.student_id));
 
--- ⚠ ESKİ KALIP: "görevi olan öğretmen" ölçütü. ogrencim_mi() geldikten
--- sonra gereksizleşti ama daha geniş: bir kez görev atamış her
--- öğretmene açık. Canlıda var, bu yüzden korunuyor; kaldırılacaksa
--- önce hangi akışın buna dayandığı ölçülmeli.
-DROP POLICY IF EXISTS "Öğretmen sınav sonuçlarını görür" ON public.exam_results;
-CREATE POLICY "Öğretmen sınav sonuçlarını görür" ON public.exam_results
-  FOR SELECT USING (EXISTS (
-    SELECT 1 FROM public.tasks t
-     WHERE t.student_id = exam_results.student_id AND t.teacher_id = auth.uid()));
-
-DROP POLICY IF EXISTS "Öğretmen sınav sonucu ekleyebilir" ON public.exam_results;
-CREATE POLICY "Öğretmen sınav sonucu ekleyebilir" ON public.exam_results
-  FOR INSERT WITH CHECK (EXISTS (
-    SELECT 1 FROM public.tasks t
-     WHERE t.student_id = exam_results.student_id AND t.teacher_id = auth.uid()));
+-- KALDIRILDI (31 Ekim 2026, eski_kalip_politika_temizligi.sql):
+-- "görevi olan öğretmen" ölçütlü iki politika buradaydı. Geçmişe
+-- bakıyorlardı, bugünkü bağlantıya değil: bağlantı kaldırıldıktan
+-- sonra bile bir kez görev atamış koç öğrencinin deneme sonuçlarını
+-- okuyabiliyor, üstelik yenisini EKLEYEBİLİYORDU. Ölçüldü (görev
+-- atamış her çiftin onaylı bağlantısı var, fazladan geçen kimse
+-- yok), sonra kaldırıldılar. Yetki artık yalnız aşağıdaki
+-- ogrencim_mi() politikasından geliyor.
 
 -- ------------------------------------------------------------
 -- 5) test_sessions  — çözülen testler (dijital test de buraya yazıyor)
@@ -291,12 +284,9 @@ CREATE POLICY "Veli çocuğun testlerini görür" ON public.test_sessions
     SELECT 1 FROM public.family_links f
      WHERE f.parent_id = auth.uid() AND f.student_id = test_sessions.student_id));
 
--- ⚠ ESKİ KALIP (exam_results'taki notun aynısı)
-DROP POLICY IF EXISTS "Öğretmen öğrencinin testlerini görür" ON public.test_sessions;
-CREATE POLICY "Öğretmen öğrencinin testlerini görür" ON public.test_sessions
-  FOR SELECT USING (EXISTS (
-    SELECT 1 FROM public.tasks t
-     WHERE t.student_id = test_sessions.student_id AND t.teacher_id = auth.uid()));
+-- KALDIRILDI (31 Ekim 2026, eski_kalip_politika_temizligi.sql):
+-- exam_results'taki iki politikanın test_sessions'taki eşi. Aynı
+-- gerekçe, aynı ölçüm. Yetki yalnız ogrencim_mi() politikasından.
 
 -- ------------------------------------------------------------
 -- 6) messages  — mesajlaşma

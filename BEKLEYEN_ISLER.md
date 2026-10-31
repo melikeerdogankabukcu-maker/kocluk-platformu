@@ -70,22 +70,32 @@ düzenli bir kalıpta mı duruyor — üçünü çıkarıp belgeye yazarım.
 
 ---
 
-## D. Notlanmış riskler (kod yazılmadı, bilerek)
+## D. Notlanmış riskler — 31 Ekim 2026'da KAPATILDI
 
-- **`users` tablosu giriş yapmış herkese tamamen açık.** Her öğrenci
-  bütün kullanıcıların adını, e-postasını ve rolünü okuyabiliyor.
-  Uygulama buna dayanıyor (koç arama, bağlantı kurma), o yüzden
-  dokunulmadı. Daraltmadan önce hangi ekranların kırılacağı ölçülmeli.
-- **`exam_results` ve `test_sessions` üzerinde eski kalıp politikalar.**
-  Ölçüt "bu öğrenciye bir kez görev atamış öğretmen" — `ogrencim_mi()`
-  geldikten sonra gereksizleşti ama kaldırılmadı. Bağlantısı kopmuş
-  bir koç hâlâ okuyabiliyor.
-- **Depo veri göçü yapılmadı.** Veritabanındaki eski public adresler
-  duruyor; yolun kaydı olarak okunuyorlar (`storageYolu`). Çalışıyor,
-  ama iki biçim yan yana yaşıyor.
-- **Supabase hata kontrolü taraması.** `Auth.jsx` tam da bu yüzden
-  sessizce bozulmuştu. `calistir()` yazıldı ama bütün çağrı yerleri
-  taranmadı.
+Dördü de ele alındı. Kayıt olarak duruyor; yeni bir iş değil.
+
+- ✅ **`users` e-posta sızıntısı** (`9cb5413`). Satırlar değil
+  SÜTUNLAR daraltıldı: `authenticated` artık `email` ve
+  `talep_ogrenci_email` sütunlarını seçemiyor. Dizin `kisi_dizini`
+  görünümünden maskeli adresle (`a***@gmail.com`) geliyor, maskeleme
+  sunucuda. Gerçek adres yalnız admin'e, `yonetim_kullanicilari()`
+  RPC'siyle. Satır daraltılmadı çünkü bağlantı kurmak dizin
+  gerektiriyor — dizin işin gereği, e-postanın dizinde olması değil.
+- ✅ **Eski kalıp politikalar** (`eski_kalip_politika_temizligi.sql`).
+  Ölçüldü: görev atamış her koç–öğrenci çiftinin onaylı bağlantısı
+  var, fazladan geçen kimse yok. Üç politika kaldırıldı; yetki artık
+  yalnız `ogrencim_mi()`'den geliyor, yani bağlantı kalkınca erişim
+  de kalkıyor.
+- ✅ **Depo iki biçim** (`280f8ad`). Not yanlıştı: eski kalıntı değil,
+  BÜYÜYEN bir ayrışmaydı — kova kapalı olmasına rağmen dört yer her
+  yeni yüklemede public adres yazıyordu. Artık yol yazılıyor. Eski
+  satırlara dokunulmadı ve **göç önerilmiyor**: okuma zaten iki
+  biçimi de kabul ediyor, yarısı dönmüş bir göç dosyaları büsbütün
+  erişilemez yapardı.
+- ✅ **Sessiz hatalar** (`93f5cc7`). 180 çağrının 120'si zaten
+  sarılıydı; 8 yer çıktı. Altısında hata tamamen düşüyordu, ikisi
+  boş bırakılmış `storage.remove`'du. Davranış değil İZ sorunuydu:
+  izin reddi ile "veri yok" ayırt edilemiyordu.
 
 ---
 

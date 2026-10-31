@@ -46,8 +46,13 @@ ALTER TABLE public.family_links
 -- ------------------------------------------------------------
 -- DENETİM: artık depodaki tanımla aynı mı?
 -- ------------------------------------------------------------
--- Beklenen: exam_results 6, family_links 4, tasks 3, messages 4,
--- test_sessions 7, users 6 politika.
+-- Beklenen (bu dosya çalıştığı gün): exam_results 6, family_links 4,
+-- tasks 3, messages 4, test_sessions 7, users 6 politika.
+--
+-- GÜNCEL DEĞİL: 31 Ekim 2026'da eski_kalip_politika_temizligi.sql
+-- "görevi olan öğretmen" ölçütlü üç politikayı kaldırdı →
+-- exam_results 4, test_sessions 6. Sayılar burada bilerek
+-- değiştirilmedi; bu dosya kendi günündeki durumun kaydı.
 SELECT t.tablename AS "tablo",
        (SELECT count(*) FROM pg_policies p
          WHERE p.schemaname = 'public' AND p.tablename = t.tablename) AS "politika",
