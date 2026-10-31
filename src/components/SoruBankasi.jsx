@@ -6,6 +6,7 @@ import { sayfaSayisi } from "../lib/icindekiler";
 import { sadelestir } from "../lib/konuEslestir";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import { isbnCoz, isbnYaz } from "../lib/isbn";
+import { kitapAra } from "../lib/kitapBilgisi";
 import { taramaVarMi } from "../lib/kodOkuyucu";
 import BarkodTarayici from "./BarkodTarayici";
 import CevapAnahtari from "./CevapAnahtari";
@@ -42,6 +43,8 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
   const [yeniForm, setYeniForm] = useState(null);    // null = form kapalı
   const [tarayici, setTarayici] = useState(false);   // barkod penceresi açık mı
   const [isbnHata, setIsbnHata] = useState(null);
+  const [kitapAraniyor, setKitapAraniyor] = useState(false);
+  const [kitapOnerisi, setKitapOnerisi] = useState(null);   // { ad, yayinevi, yil } | "yok"
   // Hangi bölümün cevap anahtarı açık + hangi bölümlerde anahtar var
   const [soruBanka, setSoruBanka] = useState(null);   // soru yönetimi açık mı
   const [anahtarBolum, setAnahtarBolum] = useState(null);
@@ -285,6 +288,23 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
     const tur = banka.sinav_turu || sinavTurleri[0];
     if (banka.ders) return topicsOf(tur, banka.ders);
     return examSubjectsOf(tur).flatMap(d => topicsOf(tur, d));
+  };
+
+  // ISBN'den kitap bilgisi. Gelen ad DOĞRUDAN yazılmıyor: öneri olarak
+  // gösterilip onaylanıyor. Koç zaten bir ad yazmış olabilir ve
+  // katalogdaki ad her zaman daha iyi değil (yayınevi kısaltmaları,
+  // yılı adın içine koyan kayıtlar).
+  const kitabiAra = async () => {
+    const { isbn, hata } = isbnCoz(yeniForm?.isbn);
+    if (hata || !isbn) { setIsbnHata(hata ?? "ISBN girin."); return; }
+    setKitapAraniyor(true);
+    setKitapOnerisi(null);
+    setIsbnHata(null);
+    const { kitap, hata: aramaHatasi } = await kitapAra(isbn);
+    setKitapAraniyor(false);
+    if (aramaHatasi) { setIsbnHata(aramaHatasi); return; }
+    // Bulunamamak HATA DEĞİL: sınav kaynaklarının çoğu katalogda yok.
+    setKitapOnerisi(kitap ?? "yok");
   };
 
   const girdiStil = {
@@ -620,7 +640,55 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                     color: c.text, fontSize: YAZI.ikincil, fontWeight: 600,
                   }}>Tara</button>
                 )}
+                <button onClick={kitabiAra} disabled={kitapAraniyor}
+                  title="Kitap adını ve yayınevini ISBN'den getir" style={{
+                    padding: "0 14px", borderRadius: KOSE.m, cursor: "pointer",
+                    border: `1.5px solid ${RENK.cizgi}`, background: "#fff",
+                    color: RENK.metinIkincil, fontSize: YAZI.ikincil,
+                  }}>{kitapAraniyor ? "..." : "📖 Getir"}</button>
               </div>
+
+              {/* Öneri kutusu. Katalogdan gelen ad doğrudan forma
+                  yazılmıyor; koçun yazdığını habersiz değiştirmemek
+                  için onay isteniyor. */}
+              {kitapOnerisi === "yok" && (
+                <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, lineHeight: 1.5 }}>
+                  Bu ISBN katalogda bulunamadı. Sınav kaynaklarının çoğu
+                  kataloglarda yok; adı elle yazabilirsiniz.
+                </div>
+              )}
+              {kitapOnerisi && kitapOnerisi !== "yok" && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: BOSLUK.s,
+                  padding: "8px 10px", borderRadius: KOSE.s,
+                  background: c.light, fontSize: YAZI.mikro, color: c.text, lineHeight: 1.45,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <b>{kitapOnerisi.ad}</b>
+                    {[kitapOnerisi.yayinevi, kitapOnerisi.yil].filter(Boolean).length > 0 && (
+                      <div style={{ color: c.mid }}>
+                        {[kitapOnerisi.yayinevi, kitapOnerisi.yil].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => {
+                    setYeniForm(f => ({
+                      ...f,
+                      ad: kitapOnerisi.ad,
+                      yayinevi: kitapOnerisi.yayinevi ?? f.yayinevi,
+                    }));
+                    setKitapOnerisi(null);
+                  }} style={{
+                    flexShrink: 0, padding: "5px 11px", borderRadius: KOSE.tam, border: "none",
+                    background: c.bg, color: "#fff", fontSize: YAZI.mikro,
+                    fontWeight: 700, cursor: "pointer",
+                  }}>Kullan</button>
+                  <button onClick={() => setKitapOnerisi(null)} style={{
+                    flexShrink: 0, background: "none", border: "none",
+                    cursor: "pointer", color: c.mid, fontSize: YAZI.mikro,
+                  }}>yoksay</button>
+                </div>
+              )}
               {isbnHata && (
                 <div style={{ fontSize: YAZI.mikro, color: RENK.hata.metin }}>{isbnHata}</div>
               )}

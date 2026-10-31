@@ -35,6 +35,7 @@ import SinavAnalizi from "../components/SinavAnalizi";
 import Bolum from "../components/Bolum";
 import Modal from "../components/Modal";
 import OgrenciAvatari from "../components/OgrenciAvatari";
+import useAvatarlar from "../hooks/useAvatarlar";
 import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
 import OdevOnerisi from "../components/OdevOnerisi";
@@ -98,6 +99,11 @@ export default function TeacherDashboard({ userId, userName, role }) {
   // Bu haftanın planları — öğrenci satırında plan uyumu, açılınca bloklar.
   // Öğrenci listesiyle birlikte yeniden okunuyor (students değişince).
   const { planlar: haftaPlanlari, yukle: planlariTazele } = useHaftalikPlanlar(students.map(s => s.id));
+
+  // Öğrencilerin KENDİ seçtiği avatarlar. Öğrenci simgesini seçiyor ve
+  // kendi panelinde görüyordu; koçun listesinde baş harfler kalıyordu.
+  // Veritabanı izni baştan vardı, eksik olan bu okumaydı.
+  const ogrenciAvatarlari = useAvatarlar(students.map(s => s.id));
   // Program Kütüphanesi'nden plana aktarım olunca plan panosu yeniden okusun
   const [planSurumu, setPlanSurumu] = useState(0);
   // Öğrenci başına TÜM zamanların plan blokları: satırdaki ilerleme çubuğu,
@@ -542,6 +548,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
                         padding: "10px 0", cursor: "pointer",
                       }}>
                         <OgrenciAvatari ad={s.full_name} fotoUrl={profileMap[s.id]?.photo_url}
+                          simge={ogrenciAvatarlari[s.id]}
                           boyut={36} kose={10} zemin={c.light} yazi={c.text} yaziBoyut={12} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>

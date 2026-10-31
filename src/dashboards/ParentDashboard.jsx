@@ -19,6 +19,7 @@ import SinavAnalizi from "../components/SinavAnalizi";
 import Rozetler from "../components/Rozetler";
 import SeviyeAvatar from "../components/SeviyeAvatar";
 import OgrenciAvatari from "../components/OgrenciAvatari";
+import useAvatarlar from "../hooks/useAvatarlar";
 import VeliRaporu from "../components/VeliRaporu";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import Mesajlar from "../components/Mesajlar";
@@ -33,6 +34,8 @@ export default function ParentDashboard({ userId, userName }) {
   // varsayılan paleti (bkz. lib/theme.js, paletCoz).
   const { palet: c } = useTercih("parent");
   const [child, setChild] = useState(null);
+  // Çocuğun kendi seçtiği avatar. Öğrenci simgesini seçiyor ve kendi
+  // panelinde görüyordu; veli panelinde genel aile simgesi duruyordu.
   const [tasks, setTasks] = useState([]);
   const [cocukBloklari, setCocukBloklari] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +46,9 @@ export default function ParentDashboard({ userId, userName }) {
   // Çocuğun profili — fotoğraf ve sınav hedefi buradan geliyor.
   // "Veli çocuk profili okur" politikası zaten vardı, ek yetki yok.
   const [cocukProfil, setCocukProfil] = useState(null);
+
+  // Tek çocuk için de aynı kanca: id listesi tek elemanlı.
+  const cocukAvatari = useAvatarlar(child?.id ? [child.id] : [])[child?.id];
 
   useEffect(() => {
     const load = async () => {
@@ -241,10 +247,12 @@ export default function ParentDashboard({ userId, userName }) {
                   <AlertChip type={pct >= 80 ? "success" : pct >= 40 ? "warn" : "danger"}
                     text={`Görevlerin %${pct}'i tamamlandı`} />
                 </div>
-                {/* Çocuğun fotoğrafı varsa genel aile simgesi yerine o:
-                    veli panelinin kimi anlattığı ilk bakışta belli olsun. */}
-                {cocukProfil?.photo_url ? (
-                  <OgrenciAvatari ad={child.full_name} fotoUrl={cocukProfil.photo_url}
+                {/* Çocuğun fotoğrafı ya da seçtiği avatar varsa genel aile
+                    simgesi yerine o: veli panelinin kimi anlattığı ilk
+                    bakışta belli olsun. */}
+                {(cocukProfil?.photo_url || cocukAvatari) ? (
+                  <OgrenciAvatari ad={child.full_name} fotoUrl={cocukProfil?.photo_url}
+                    simge={cocukAvatari}
                     boyut={64} kose={16} zemin="rgba(255,255,255,0.18)" yazi="#fff" />
                 ) : (
                   <div style={{
