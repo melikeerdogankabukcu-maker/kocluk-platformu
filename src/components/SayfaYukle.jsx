@@ -95,7 +95,8 @@ export default function SayfaYukle({ banka, bolumler, varOlan, color: c, onKapat
       // Satırlar yazılamadıysa fotoğraf da geri alınıyor: yoksa depoda
       // hiçbir soruya bağlı olmayan, kimsenin bir daha göremeyeceği bir
       // dosya kalırdı.
-      await supabase.storage.from("homework").remove([yol]);
+      await calistir(supabase.storage.from("homework").remove([yol]),
+        "Yarim kalan sayfa fotografini geri alma", { sessiz: true });
       setHata("Sorular kaydedilemedi, fotoğraf geri alındı.");
       setIslemde(false);
       return;

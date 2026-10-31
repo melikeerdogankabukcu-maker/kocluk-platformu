@@ -134,7 +134,8 @@ export default function SoruYonetimi({ banka, bolumler, color: c, onKapat, onDeg
     // Satırlar gittiyse fotoğrafın depoda kalması için bir sebep yok.
     // Sıra bu: dosya önce silinip satırlar sonra kalsaydı, öğrenci
     // açılamayan bir soruyla karşılaşırdı.
-    await supabase.storage.from("homework").remove([grup.gorsel_url]);
+    await calistir(supabase.storage.from("homework").remove([grup.gorsel_url]),
+      "Sayfa fotografini silme", { sessiz: true });
     await yukle();
     onDegisti?.();
   };

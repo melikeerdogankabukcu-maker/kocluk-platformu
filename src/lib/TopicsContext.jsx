@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "../supabase";
+import { calistir } from "./db";
 import { EXAM_TOPICS as YEDEK_TOPICS } from "./examTopics";
 import { STATIK_DERSLER, dersleriSirala } from "./examSubjects";
 
@@ -73,10 +74,11 @@ export function TopicsProvider({ userId, children }) {
     // çalışmadıysa) sessizce boş geçilir, taban değerler kullanılır.
     let tercih = {};
     if (userId) {
-      const { data: t } = await supabase
-        .from("ogretmen_konu_tercihi")
-        .select("exam_topic_id, aktif")
-        .eq("teacher_id", userId);
+      const { veri: t } = await calistir(
+        supabase.from("ogretmen_konu_tercihi")
+          .select("exam_topic_id, aktif")
+          .eq("teacher_id", userId),
+        "Ogretmen konu tercihi", { sessiz: true });
       (t ?? []).forEach(r => { if (r.aktif != null) tercih[r.exam_topic_id] = r.aktif; });
     }
 

@@ -51,8 +51,9 @@ export function useCalismaPlani(studentId, pazartesi) {
 
     setPlan(p ?? null);
     if (p) {
-      const { data: b } = await supabase
-        .from("calisma_bloklari").select("*").eq("plan_id", p.id);
+      const { veri: b } = await calistir(
+        supabase.from("calisma_bloklari").select("*").eq("plan_id", p.id),
+        "Plan bloklari", { sessiz: true });
       if (no !== istekNo.current) return;
       const liste = b ?? [];
       setBloklar(liste);

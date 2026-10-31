@@ -102,14 +102,16 @@ export default function OdevOnerisi({ userId, students = [], color: c, onAtandi 
     // Son haftaların plan blokları, planın haftasıyla birlikte. Tablo yoksa
     // (plan migration'ı çalışmadıysa) sessizce boş: motor plansız da çalışır.
     let planBloklari = [];
-    const { data: planlar } = await supabase
-      .from("calisma_planlari").select("id, hafta_basi")
-      .eq("student_id", id)
-      .gte("hafta_basi", tarihMetni(haftaKaydir(haftaBasi(), -PLAN_GECMIS_HAFTA)));
+    const { veri: planlar } = await calistir(
+      supabase.from("calisma_planlari").select("id, hafta_basi")
+        .eq("student_id", id)
+        .gte("hafta_basi", tarihMetni(haftaKaydir(haftaBasi(), -PLAN_GECMIS_HAFTA))),
+      "Calisma planlari", { sessiz: true });
     if (planlar?.length) {
-      const { data: bloklar } = await supabase
-        .from("calisma_bloklari").select("plan_id, ders, konu, yapildi")
-        .in("plan_id", planlar.map(x => x.id));
+      const { veri: bloklar } = await calistir(
+        supabase.from("calisma_bloklari").select("plan_id, ders, konu, yapildi")
+          .in("plan_id", planlar.map(x => x.id)),
+        "Calisma bloklari", { sessiz: true });
       const haftasi = Object.fromEntries(planlar.map(x => [x.id, x.hafta_basi]));
       planBloklari = (bloklar ?? []).map(b => ({ ...b, hafta_basi: haftasi[b.plan_id] }));
     }

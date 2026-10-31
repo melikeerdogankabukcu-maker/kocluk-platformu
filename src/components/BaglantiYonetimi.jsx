@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
+import { calistir } from "../lib/db";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import SifreSifirlaDugmesi from "./SifreSifirlaDugmesi";
@@ -43,9 +44,10 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
     // bağlı kalmıyoruz, tanımazsa sessizce boş dönerdi.
     let bransHarita = {};
     if (!ogretmenMiyim && (kisilerData ?? []).length > 0) {
-      const { data: profiller } = await supabase
-        .from("ogretmen_profilleri").select("id, brans, unvan")
-        .in("id", kisilerData.map(k => k.id));
+      const { veri: profiller } = await calistir(
+        supabase.from("ogretmen_profilleri").select("id, brans, unvan")
+          .in("id", kisilerData.map(k => k.id)),
+        "Ogretmen profilleri", { sessiz: true });
       (profiller ?? []).forEach(p => { bransHarita[p.id] = p; });
     }
 

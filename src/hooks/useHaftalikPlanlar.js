@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
+import { calistir } from "../lib/db";
 import { haftaBasi, tarihMetni } from "../lib/calismaPlani";
 
 const DILIM_SIRA = { sabah: 0, ogle: 1, aksam: 2 };
@@ -28,9 +29,10 @@ export function useHaftalikPlanlar(studentIds) {
     // öğrenci listesi etkilenmesin.
     if (error || !planlar?.length) { setHarita({}); return; }
 
-    const { data: bloklar } = await supabase
-      .from("calisma_bloklari").select("*")
-      .in("plan_id", planlar.map(p => p.id));
+    const { veri: bloklar } = await calistir(
+      supabase.from("calisma_bloklari").select("*")
+        .in("plan_id", planlar.map(p => p.id)),
+      "Haftalik plan bloklari", { sessiz: true });
 
     const blokIdleri = (bloklar ?? []).map(b => b.id);
     let testler = [];
