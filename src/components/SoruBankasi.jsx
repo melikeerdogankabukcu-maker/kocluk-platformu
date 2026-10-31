@@ -689,6 +689,18 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                   }}>yoksay</button>
                 </div>
               )}
+              {/* Destek yoksa düğme hiç çizilmiyor (yukarıda) ama sebebi
+                  yazılıyor: düğmeyi arayan koç kendi cihazını ya da
+                  uygulamayı suçlamasın. Kitap barkodu EAN-13 ve iOS'ta
+                  yerleşik çözücü yok; harici 1D çözücü birkaç yüz KB
+                  olduğu için eklenmedi, elle giriş zaten çalışıyor. */}
+              {!taramaVarMi() && (
+                <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, lineHeight: 1.5 }}>
+                  Bu cihazda kamerayla barkod okuma yok (iPhone'da hiçbir
+                  tarayıcı desteklemiyor). ISBN'i elle yazıp <b>📖 Getir</b>'e
+                  basabilirsiniz.
+                </div>
+              )}
               {isbnHata && (
                 <div style={{ fontSize: YAZI.mikro, color: RENK.hata.metin }}>{isbnHata}</div>
               )}

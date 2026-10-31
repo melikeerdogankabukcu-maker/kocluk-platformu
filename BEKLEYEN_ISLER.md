@@ -99,22 +99,35 @@ Dördü de ele alındı. Kayıt olarak duruyor; yeni bir iş değil.
 
 ---
 
-## E. Arayüz eksikleri (küçük)
+## E. Arayüz eksikleri — 31 Ekim 2026
 
-- Koç ve veli panelindeki öğrenci listesi **seçilen avatarı
-  göstermiyor** — veritabanı izni hazır, o ekranların tercihleri
-  yüklemesi yeterli.
-- **ISBN'den kitap adı getirme** (dış servis) yapılmadı; ISBN elle
-  ya da barkodla giriliyor, ad yazılıyor.
-- **Google Meet otomatik bağlantısı** — şu an elle link alanı var.
-  Calendar API + OAuth gerekiyor.
-- **iPhone'da barkod taraması yok** (`BarcodeDetector` iOS'ta
-  bulunmuyor); düğme yalnız destekleyen cihazda çıkıyor, iPhone'da
-  elle giriş. Çözülecekse jsQR (~15 KB) ölçülmeli.
+- ✅ **Avatarlar koç ve veli panelinde** (`0251735`). Öğrenci simgesini
+  seçiyor, kendi panelinde görüyordu; koçun listesinde baş harfler
+  duruyordu. Veritabanı izni baştan vardı, eksik olan okumaydı.
+  `useAvatarlar` kancası onlarca öğrencinin avatarını tek sorguda
+  okuyor (kendi tercihi için kurulu `TercihContext` tek kullanıcıya
+  bağlı, çoğaltılamaz).
+- ✅ **ISBN'den kitap adı ve yayınevi** (`0251735`). Google Books;
+  dışarı çıkan tek şey ISBN. Kendiliğinden değil düğmeyle, gelen ad
+  doğrudan yazılmıyor önerilip onaylanıyor, bulunamamak hata değil
+  (sınav kaynaklarının çoğu katalogda yok).
+- ⛔ **iPhone'da barkod taraması — ÖLÇÜLDÜ, YAPILMIYOR.** Bu maddedeki
+  "jsQR (~15 KB)" notu **yanlıştı**: jsQR QR okur, kitap barkodu ise
+  EAN-13 — 1D çözücü gerekiyor (zxing sınıfı, birkaç yüz KB). Dinamik
+  yüklemeyle maliyeti yalnız iPhone kullanıcısına yıkmak mümkün, ama
+  kazanç kitap başına bir kez 13 hane yazmaktan kurtulmak; iOS
+  Safari'nin kamera davranışı da ayrı bir iş. Yapılmadı; bunun yerine
+  destek olmayan cihazda **sebebi yazan bir satır** eklendi — düğmeyi
+  arayan koç cihazını suçlamasın.
+- ⏸ **Google Meet otomatik bağlantısı** — şu an elle link alanı var.
+  Calendar API + OAuth gerekiyor, yani Google Cloud'da proje ve onay
+  akışı: **sizin tarafta** bir adım olmadan başlanamaz.
 
 ---
 
-## F. Geri bildirim bekleyenler
+## F. Geri bildirim bekleyenler — hepsi sizin tarafta
+
+Bunlar yazılacak kod değil: ya denenmesi ya içerik girilmesi gerekiyor.
 
 - **Ödev öneri motoru** yazıldı ama hiç denenmedi. Eşikler çalışma
   tarzınıza uyuyor mu: `YETERLI_SORU=10`, `ZAYIF_ESIGI=65`,
@@ -128,17 +141,69 @@ Dördü de ele alındı. Kayıt olarak duruyor; yeni bir iş değil.
 
 ---
 
-## G. Tanımlanmamış (yazılmadan plana giremez)
+## G. Tanımsız iki modül — öneri yazıldı, karar sizde
 
-- **Kitap okuma modülü** — ne yapıyor? Kitap takibi mi, okuma süresi
-  mi, okunan kitap listesi mi, yoksa kitabın içeriğinin uygulamada
-  gösterilmesi mi? Sonuncusu telif meselesi.
-- **Kişisel gelişim katmanı** — hangi veriyi topluyor, kime
-  gösteriyor, ne kararını değiştiriyor?
+İkisi "kapsamı belirsiz" diye bekliyordu. Aşağıdakiler somut öneri;
+onaylarsanız iş planına girerler, beğenmezseniz başlangıç noktası olur.
+
+### G.1 Kitap okuma modülü
+
+Dört okunuşu vardı. Üçünü eliyorum, gerekçeleriyle:
+
+- ~~Kitabın içeriğini uygulamada göstermek~~ — telif. Soru
+  bankasında aldığımız riskin kat kat üstü ve bu sefer eser bütünüyle
+  çoğaltılıyor. Yayınevi izni olsa bile ayrı bir ürün.
+- ~~Genel "okuma süresi" sayacı~~ — çalışma planı bunu zaten yapıyor
+  (blok türü "serbest"). İkinci bir sayaç aynı veriyi iki yere yazar.
+- ~~Bağımsız kitap listesi~~ — tek başına bir liste, hiçbir kararı
+  değiştirmiyor. Rozet dışında çıktısı yok.
+
+**Öneri: "Okuma alışkanlığı" — koçluğun kendi verisine bağlı.**
+Öğrenci okuduğu kitabı (ad + yazar + sayfa sayısı) ve ilerlemesini
+giriyor; koç haftalık okuma hedefi veriyor (örn. 30 sayfa/gün) ve bu
+hedef **çalışma planında bir blok** olarak görünüyor. Kazanç: paragraf
+sorularındaki başarıyla okuma alışkanlığı yan yana konabiliyor —
+Türkçe neti düşük olan öğrenciye "paragraf çalış" demek yerine
+ölçülmüş bir alışkanlık verisi oluyor.
+
+Veri: `okuma_kayitlari` (öğrenci, kitap adı, yazar, toplam sayfa,
+okunan sayfa, başlangıç/bitiş). Mevcut plan ve rapor altyapısına
+bağlanıyor, yeni bir ekran ağacı gerekmiyor.
+
+**Kapsam dışı bıraktığım şey:** kitap önerisi/küratörlük. Yaş grubuna
+kitap önermek editoryal bir iş ve yanlış öneri veliyi karşımıza alır.
+
+### G.2 Kişisel gelişim katmanı
+
+Değerlendirmede "kişisel gelişim" diye geçiyordu ama veri, izleyici ve
+etkisi yazılmamıştı. Üçünü yazmadan bu madde plana giremez; öneri:
+
+**Öneri: çalışma alışkanlığı anketi (H'deki karara bağlı).**
+Psikolojik test yerine zaten bu kararlaştırılmıştı. 10–12 soruluk,
+puanlanmayan, tanı koymayan bir anket: öğrenme biçimi tercihi,
+kesintisiz çalışma süresi, günün hangi saatinde verimli, erteleme
+eğilimi, çalışma ortamı.
+
+- **Hangi veri:** yalnız öğrencinin kendi beyanı. Özel nitelikli veri
+  (sağlık, ruh hâli) **yok** — KVKK'da o kategoriye hiç girmiyoruz.
+- **Kime görünüyor:** öğrenciye ve koçuna. Veliye **özet bile
+  gitmiyor**; öğrenci koçuna "sabah verimsizim" diyebilmeli ve bunun
+  evde konuşulacağını düşünmemeli.
+- **Neyi değiştiriyor:** tek bir şey — çalışma planı önerisinin blok
+  süresi ve günün saati. 25 dakikada dağılan öğrenciye 90 dakikalık
+  blok önermemek. Bu olmazsa anket sadece veri toplamış olur.
+
+**Kapsam dışı:** puan, profil etiketi ("görsel öğrenen" gibi), koç
+panelinde kişilik kartı. Etiket bir kez yapışıyor ve yanlış olduğunda
+öğrenciyi takip ediyor.
 
 ---
 
-## H. Bilerek ertelenenler
+## H. Bilerek ertelenenler — gerekçeler hâlâ geçerli
+
+Bunlar "yapılacak iş" değil, **verilmiş kararlar**. Üçünün gerekçesi
+hukuki ya da kapsamsal; değişmedikçe açılmamalı. Dördüncüsü (anket)
+G.2'de öneri olarak duruyor — onay verirseniz H'den çıkıp plana girer.
 
 - **Sosyal mecra.** Kullanıcıların çoğu 18 yaş altı; moderasyon,
   raporlama, içerik denetimi ve veli onayı altyapısı kurulmadan
