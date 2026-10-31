@@ -472,8 +472,9 @@ export default function StudentDashboard({ userId, userName }) {
         const { error: yuklemeHatasi } = await supabase.storage
           .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
         if (yuklemeHatasi) throw yuklemeHatasi;
-        const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
-        yuklenen.push({ url: publicUrl, ad: dosya.name });
+        // Kova kapalı: public adres açılabilir bir bağlantı değil.
+        // Yeni kayda yolun kendisi yazılıyor (bkz. lib/depo.js).
+        yuklenen.push({ url: yol, ad: dosya.name });
       }
 
       // Düzenlemede duran görseller korunuyor, yeniler sonuna ekleniyor
@@ -576,9 +577,9 @@ export default function StudentDashboard({ userId, userName }) {
       const { error: yuklemeHatasi } = await supabase.storage
         .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
       if (yuklemeHatasi) throw yuklemeHatasi;
-      const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
+      // photo_url artık yolun kaydı; GuvenliGorsel imzalı adrese çeviriyor.
       const { error } = await supabase.from("student_profiles")
-        .upsert({ id: userId, photo_url: publicUrl, updated_at: new Date().toISOString() });
+        .upsert({ id: userId, photo_url: yol, updated_at: new Date().toISOString() });
       if (error) throw error;
       await loadAll();
     } catch (err) {

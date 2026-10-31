@@ -86,8 +86,9 @@ export default function TamamlaDiyalogu({ blok, test, studentId, saatFarki = 0, 
           const { error } = await supabase.storage
             .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
           if (error) throw error;
-          const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
-          yuklenen.push({ url: publicUrl, ad: dosya.name });
+          // Kova kapalı: public adres açılabilir bir bağlantı değil.
+          // Yeni kayda yolun kendisi yazılıyor (bkz. lib/depo.js).
+          yuklenen.push({ url: yol, ad: dosya.name });
         }
         dosyalar = [...mevcut, ...yuklenen];
       }

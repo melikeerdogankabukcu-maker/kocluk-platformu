@@ -60,8 +60,11 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
         const { error } = await supabase.storage
           .from("homework").upload(yol, d, { upsert: true, contentType: d.type });
         if (error) throw error;
-        const { data: { publicUrl } } = supabase.storage.from("homework").getPublicUrl(yol);
-        yuklenen.push({ url: publicUrl, ad: d.name });
+        // Kova KAPALI: public adres açılabilir bir bağlantı değil,
+        // yalnızca yolun uzun yazılmış hâli. Yeni kayıtlara doğrudan
+        // YOL yazılıyor; okuyan taraf (depo.js/yolaCevir) ikisini de
+        // kabul ediyor, eski satırlara dokunmak gerekmiyor.
+        yuklenen.push({ url: yol, ad: d.name });
       }
       const { hata } = await gonder(secili, metin, yuklenen);
       if (!hata) { setMetin(""); setEkler([]); }
