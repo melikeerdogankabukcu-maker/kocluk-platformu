@@ -38,6 +38,7 @@ import SinavHedefi from "../components/SinavHedefi";
 import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
 import Testlerim from "../components/Testlerim";
+import Envanterlerim from "../components/Envanterlerim";
 import { HaftalikSoruGrafigi, CalismaSerisi, DogrulukTrendi, DersDagilimi, CalismaSuresiGrafigi } from "../components/CalismaGrafikleri";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
@@ -1406,6 +1407,10 @@ export default function StudentDashboard({ userId, userName }) {
           // hiç test yoksa kart kendini göstermiyor.
           { ad: "Testler", id: "bolum-testler",
             icerik: <Testlerim color={c} /> },
+          // Gelişim envanterleri: platformun hazır envanterleri +
+          // koçun kendi yüklediği envanterler.
+          { ad: "Envanterler", id: "bolum-envanter",
+            icerik: <Envanterlerim userId={userId} color={c} /> },
         ]} />
       </>}
     />

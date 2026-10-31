@@ -10,6 +10,7 @@ import { odevDosyalari } from "../lib/odevDosyalari";
 import { fmtTime } from "../lib/lessonHelpers";
 import { testOzetMetni } from "../lib/testHelpers";
 import SinavGirisFormu from "../components/SinavGirisFormu";
+import EnvanterYonetimi from "../components/EnvanterYonetimi";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import VeliBaglantilari from "../components/VeliBaglantilari";
@@ -1235,6 +1236,10 @@ export default function TeacherDashboard({ userId, userName, role }) {
               ? <HaftalikOzet students={students} color={c} yenilenebilir baslik="Haftalık Gelişim" />
               : null },
           { ad: "Son Testler", id: "bolum-test", rozet: recentTests.length, icerik: sonTestKarti },
+          // Envanter bu bölümde: sınav ve test gibi ÖLÇME işi, ayrı bir
+          // bölüm açmak paneli bir kart daha uzatırdı.
+          { ad: "Envanterler", id: "bolum-envanter",
+            icerik: <EnvanterYonetimi userId={userId} students={students} color={c} /> },
         ]} />
 
         {/* Ödev önerisi — kaynakların hemen üstünde: öneriler o
