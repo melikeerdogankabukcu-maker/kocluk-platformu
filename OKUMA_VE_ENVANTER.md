@@ -153,10 +153,63 @@ elediğimiz kurguydu.
 
 ---
 
+## 3.5 Koçun kendi envanteri
+
+İstek: koç kendi envanterini sisteme yükleyip öğrencisine atabilsin;
+soru bankasındaki gibi tek tek girmek zor olduğu için **şablon**
+üzerinden, Word ya da Google Dokümanlar'da.
+
+### Dosya değil YAPIŞTIRMA — gerekçe
+
+- **.docx ayrıştırma kırılgan.** Zip içinde XML; metni çıkarmak
+  mümkün ama hangi satırın soru olduğu koçun biçimlendirmeyi harfiyen
+  uygulamasına bağlı. Bir satır birleşse içe aktarma **sessizce**
+  yanlış envanter üretir. Üstelik zip okuyucu yeni bağımlılık.
+- **Google Dokümanlar OAuth istiyor** — Calendar tam bu yüzden
+  ertelendi.
+
+Tabloyu kopyalayıp yapıştırmak ikisini de kapsıyor: Word, Google
+Dokümanlar, Excel ve Sheets tablo kopyalarken sekmeyle ayrılmış metin
+veriyor. İçindekiler aktarmada aynı desen zaten kullanılıyor.
+
+### Şablon
+
+| soru | tür | boyut | ters |
+|---|---|---|---|
+| Çalışırken telefonum elimin altında olur | sıklık | dikkat | evet |
+| Hangi derste kendini zayıf görüyorsun? | açık | | |
+
+`tür` = sıklık (1–5 ölçek) ya da açık (yazarak). Açık uçlu cevap
+ortalamaya girmiyor, koça olduğu gibi gösteriliyor.
+
+### KARAR: şablon yorum metni istemiyor
+
+Hazır envanterler kendiliğinden öneri üretiyor çünkü yorum metinlerini
+biz yazdık. Koçun envanterinde bu istenmedi: her boyut için üç metin
+yazmak şablonu üç katına çıkarır, ilk envanteri yüklemek bir saat
+sürerdi. Sistem bu yüzden **yorum uydurmuyor** — boyut ortalamasını
+gösterip değerlendirmeyi koça bırakıyor. Veliye giden şey de zaten
+koçun değerlendirmesi.
+
+İkinci aşamada istenirse yorum metinli şablon eklenebilir; veri modeli
+buna hazır (`tanim` JSONB).
+
+### Cevaplanmış envanterin soruları değişmiyor
+
+Cevaplar `s1, s2...` kodlarıyla saklanıyor. Soru sırası sonradan
+değişirse eski cevaplar başka soruya denk gelir ve bunun hiçbir izi
+olmaz. Ad ve açıklama serbest, tanım kilitli; değiştirmek isteyen yeni
+envanter oluşturuyor.
+
+---
+
 ## 4. Sıra
 
-1. `src/lib/envanterler.js` — içerik + saf değerlendirme (sınanabilir)
-2. `envanter_migration.sql` — sonuçlar, RLS, veli özeti görünümü
-3. `kitap_okuma_migration.sql` — kitaplar, atamalar, kapak izni
-4. Arayüz: envanter doldurma → koç görünümü → okuma kartı → koç okuma yönetimi
-5. (sonra) önerilerin çalışma planına bağlanması
+1. ✅ `src/lib/envanterler.js` — içerik + saf değerlendirme (28 sınama)
+2. ✅ `src/lib/envanterSablonu.js` — şablon ayrıştırma (30 sınama)
+3. ✅ `envanter_migration.sql` — sonuçlar, RLS, veli özeti görünümü
+4. ✅ `koc_envanteri_migration.sql` — koçun kendi envanteri
+5. ✅ `kitap_okuma_migration.sql` + `kitap_kapagi_depo_migration.sql`
+6. ⏳ Arayüz: envanter doldurma → koç görünümü → şablon içe aktarma →
+   okuma kartı → koç okuma yönetimi
+7. ⏳ (sonra) önerilerin çalışma planına bağlanması
