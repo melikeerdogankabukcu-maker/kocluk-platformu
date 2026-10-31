@@ -11,6 +11,7 @@ import { fmtTime } from "../lib/lessonHelpers";
 import { testOzetMetni } from "../lib/testHelpers";
 import SinavGirisFormu from "../components/SinavGirisFormu";
 import EnvanterYonetimi from "../components/EnvanterYonetimi";
+import OkumaYonetimi from "../components/OkumaYonetimi";
 import KonuYonetimi from "../components/KonuYonetimi";
 import BaglantiYonetimi from "../components/BaglantiYonetimi";
 import VeliBaglantilari from "../components/VeliBaglantilari";
@@ -1240,6 +1241,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
           // bölüm açmak paneli bir kart daha uzatırdı.
           { ad: "Envanterler", id: "bolum-envanter",
             icerik: <EnvanterYonetimi userId={userId} students={students} color={c} /> },
+          { ad: "Okuma", id: "bolum-okuma",
+            icerik: <OkumaYonetimi userId={userId} students={students} color={c} /> },
         ]} />
 
         {/* Ödev önerisi — kaynakların hemen üstünde: öneriler o

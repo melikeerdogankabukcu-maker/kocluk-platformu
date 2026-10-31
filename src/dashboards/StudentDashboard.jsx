@@ -39,6 +39,7 @@ import GuvenliBaglanti from "../components/GuvenliBaglanti";
 import SoruBankasi from "../components/SoruBankasi";
 import Testlerim from "../components/Testlerim";
 import Envanterlerim from "../components/Envanterlerim";
+import OkumaKartim from "../components/OkumaKartim";
 import { HaftalikSoruGrafigi, CalismaSerisi, DogrulukTrendi, DersDagilimi, CalismaSuresiGrafigi } from "../components/CalismaGrafikleri";
 import { useProgramAtama } from "../hooks/useProgramAtama";
 import { programTakvimOgeleri, atamaProgrami } from "../lib/studyPrograms";
@@ -1411,6 +1412,10 @@ export default function StudentDashboard({ userId, userName }) {
           // koçun kendi yüklediği envanterler.
           { ad: "Envanterler", id: "bolum-envanter",
             icerik: <Envanterlerim userId={userId} color={c} /> },
+          // Okuma: koçun verdiği kitaplar, kalan gün, sayfa ilerlemesi.
+          // Ataması olmayan öğrencide kart kendini göstermiyor.
+          { ad: "Okuma", id: "bolum-okuma",
+            icerik: <OkumaKartim userId={userId} color={c} /> },
         ]} />
       </>}
     />

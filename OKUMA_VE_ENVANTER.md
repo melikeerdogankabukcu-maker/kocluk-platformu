@@ -210,6 +210,9 @@ envanter oluşturuyor.
 3. ✅ `envanter_migration.sql` — sonuçlar, RLS, veli özeti görünümü
 4. ✅ `koc_envanteri_migration.sql` — koçun kendi envanteri
 5. ✅ `kitap_okuma_migration.sql` + `kitap_kapagi_depo_migration.sql`
-6. ⏳ Arayüz: envanter doldurma → koç görünümü → şablon içe aktarma →
-   okuma kartı → koç okuma yönetimi
-7. ⏳ (sonra) önerilerin çalışma planına bağlanması
+6. ✅ `src/lib/okuma.js` — gün hesabı (39 sınama: saat dilimi, ay/yıl
+   sınırı, artık yıl, başlangıç günü sayımı)
+7. ✅ Arayüz: `EnvanterDoldur`, `Envanterlerim`, `EnvanterIceAktar`,
+   `EnvanterYonetimi`, `OkumaKartim`, `OkumaYonetimi` — ikisi de
+   öğrenci ve koç panelinde sekme olarak
+8. ⏳ (sonra) önerilerin çalışma planına bağlanması
