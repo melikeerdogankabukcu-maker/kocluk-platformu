@@ -18,7 +18,7 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
 
   const [acik, setAcik]       = useState(false);
   const [baglar, setBaglar]   = useState([]);   // teacher_students satırları
-  const [kisiler, setKisiler] = useState({});   // id -> {full_name, email}
+  const [kisiler, setKisiler] = useState({});   // id -> {full_name, eposta_maskeli}
   const [adaylar, setAdaylar] = useState([]);   // teklif gönderilebilecek kişiler
   const [secilen, setSecilen] = useState("");
   const [islemde, setIslemde] = useState(false);
@@ -31,7 +31,7 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
 
     // Karşı taraftaki herkesin adı (aday listesi + görünen ad için)
     const { data: kisilerData, error: kisiHatasi } = await supabase
-      .from("users").select("id, full_name, email")
+      .from("kisi_dizini").select("id, full_name, eposta_maskeli")
       .eq("role", karsiRol)
       // Onaylanmamış hesaplar aday listesinde çıkmasın: yönetici kabul
       // etmeden kimse bağlantı kurulabilir hale gelmemeli.
@@ -173,7 +173,7 @@ export default function BaglantiYonetimi({ userId, rol, color: c, onDegisti }) {
                           )}
                         </div>
                         {k?.unvan && <div style={{ fontSize: 10.5, color: "#888" }}>{k.unvan}</div>}
-                        {k?.email && <div style={{ fontSize: 10.5, color: "#aaa" }}>{k.email}</div>}
+                        {k?.eposta_maskeli && <div style={{ fontSize: 10.5, color: "#aaa" }}>{k.eposta_maskeli}</div>}
                       </div>
                       {/* Şifre sıfırlama yalnızca öğretmen tarafında: öğrenci
                           kendi öğretmeninin şifresini sıfırlayamaz. Sunucu da

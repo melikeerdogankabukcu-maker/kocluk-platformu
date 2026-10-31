@@ -32,12 +32,12 @@ export default function RolYonetimi({ userId, color: c }) {
   const yukle = useCallback(async () => {
     setLoading(true);
     const [{ veri }, { veri: kl }] = await Promise.all([
-      calistir(
-        supabase.from("users")
-          .select("id, full_name, email, role, talep_rol, onay_durumu, talep_ogrenci_email, kurum_id, kurum_rolu, created_at")
-          .order("created_at", { ascending: false }),
-        "Kullanici listesi", { sessiz: true }
-      ),
+      // Gerçek e-posta artık tablodan okunamıyor (sütun izni kalktı).
+      // Bu ekran ona muhtaç: velinin bildirdiği adresi öğrencininkiyle
+      // eşleştiriyor, maskeli adresle o eşleşme yapılamaz. RPC yalnız
+      // admin'e açık ve yetkiyi sunucuda denetliyor.
+      calistir(supabase.rpc("yonetim_kullanicilari"),
+        "Kullanici listesi", { sessiz: true }),
       calistir(supabase.from("kurumlar").select("id, ad").order("ad"),
         "Kurum listesi", { sessiz: true }),
     ]);

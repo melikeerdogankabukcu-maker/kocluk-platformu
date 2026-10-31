@@ -116,14 +116,14 @@ export default function TeacherDashboard({ userId, userName, role }) {
     let studentData = [];
     if (bagHata) {
       const { data, error } = await supabase
-        .from("users").select("id, full_name, email").eq("role", "student").eq("onay_durumu", "onaylandi");
+        .from("users").select("id, full_name").eq("role", "student").eq("onay_durumu", "onaylandi");
       if (error) console.error("[Ogrenci listesi]", error);
       studentData = data ?? [];
     } else {
       const ids = (baglar ?? []).map(b => b.student_id);
       if (ids.length > 0) {
         const { data, error } = await supabase
-          .from("users").select("id, full_name, email").in("id", ids);
+          .from("users").select("id, full_name").in("id", ids);
         if (error) console.error("[Bagli ogrenciler]", error);
         studentData = data ?? [];
       }

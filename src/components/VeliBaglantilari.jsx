@@ -41,11 +41,11 @@ export default function VeliBaglantilari({ userId, rol, color: c }) {
       izinliIdler = (veri ?? []).map(s => s.student_id);
     }
 
-    const ogrenciSorgusu = supabase.from("users")
-      .select("id, full_name, email").eq("role", "student");
+    const ogrenciSorgusu = supabase.from("kisi_dizini")
+      .select("id, full_name, eposta_maskeli").eq("role", "student");
     const sonuclar = await Promise.all([
       supabase.from("family_links").select("parent_id, student_id"),
-      supabase.from("users").select("id, full_name, email")
+      supabase.from("kisi_dizini").select("id, full_name, eposta_maskeli")
         .eq("role", "parent").eq("onay_durumu", "onaylandi"),
       izinliIdler === null
         ? ogrenciSorgusu
@@ -157,7 +157,7 @@ export default function VeliBaglantilari({ userId, rol, color: c }) {
               <select value={secVeli} onChange={e => setSecVeli(e.target.value)}
                 style={{ ...selectStil, color: secVeli ? "#222" : "#aaa" }}>
                 <option value="">{veliler.length ? "Veli seç..." : "Onaylı veli yok"}</option>
-                {veliler.map(v => <option key={v.id} value={v.id}>{v.full_name} · {v.email}</option>)}
+                {veliler.map(v => <option key={v.id} value={v.id}>{v.full_name} · {v.eposta_maskeli}</option>)}
               </select>
               <select value={secOgrenci} onChange={e => setSecOgrenci(e.target.value)}
                 style={{ ...selectStil, color: secOgrenci ? "#222" : "#aaa" }}>
