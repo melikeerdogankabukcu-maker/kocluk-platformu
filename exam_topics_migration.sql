@@ -271,7 +271,7 @@ INSERT INTO exam_topics (exam_type, subject, topic, sira) VALUES
   ('AYT', 'Fizik', 'Vektörler', 0),
   ('AYT', 'Fizik', 'Hareket', 1),
   ('AYT', 'Fizik', 'Newton’un Hareket Yasaları', 2),
-  ('AYT', 'Fizik', 'Bir Boyutta Savit İvmeli Hareket', 3),
+  ('AYT', 'Fizik', 'Bir Boyutta Sabit İvmeli Hareket', 3),
   ('AYT', 'Fizik', 'Atışlar', 4),
   ('AYT', 'Fizik', 'İş, Güç ve Enerji II', 5),
   ('AYT', 'Fizik', 'İtme ve Momentum', 6),

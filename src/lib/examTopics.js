@@ -264,7 +264,7 @@ export const EXAM_TOPICS = {
       "Vektörler",
       "Hareket",
       "Newton’un Hareket Yasaları",
-      "Bir Boyutta Savit İvmeli Hareket",
+      "Bir Boyutta Sabit İvmeli Hareket",
       "Atışlar",
       "İş, Güç ve Enerji II",
       "İtme ve Momentum",

@@ -33,35 +33,38 @@ ALTER TABLE kurumlar ADD COLUMN IF NOT EXISTS logo_url TEXT;
 CREATE OR REPLACE FUNCTION public.marka_kurumum()
 RETURNS TABLE (kurum_id UUID, ad TEXT, logo_url TEXT)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
-DECLARE ben UUID := auth.uid(); k UUID;
+DECLARE ben UUID := auth.uid(); rolum TEXT; k UUID;
 BEGIN
   IF ben IS NULL THEN RETURN; END IF;
+  SELECT u.role INTO rolum FROM users u WHERE u.id = ben;
 
-  -- 1) Kendi kurumum (koç / kurum personeli)
-  SELECT u.kurum_id INTO k FROM users u WHERE u.id = ben;
+  -- ÇÖZÜM ROLE GÖRE. İlk sürüm önce `users.kurum_id`e bakıyordu ve
+  -- öğrencinin kendi kurum alanı herhangi bir sebeple doluysa
+  -- koçunun kurumuna HİÇ bakmıyordu. Öğrenci için anlamlı marka her
+  -- zaman koçunun kurumu.
+  IF rolum IN ('teacher', 'admin') THEN
+    SELECT u.kurum_id INTO k FROM users u WHERE u.id = ben;
 
-  -- 2) Öğrenciysem koçumun kurumu. Birden fazla koç olabiliyor;
-  --    LOGOSU OLAN kurum tercih ediliyor, yoksa en eski bağ. Sıra
-  --    belirsiz bırakılsaydı aynı öğrenci her açılışta başka marka
-  --    görebilirdi.
-  IF k IS NULL THEN
-    SELECT kr.id INTO k
+  ELSIF rolum = 'student' THEN
+    -- Birden fazla koç olabiliyor; LOGOSU OLAN kurum tercih ediliyor,
+    -- eşitlikte en eski bağ. Sıra belirsiz bırakılsaydı aynı öğrenci
+    -- her açılışta başka marka görebilirdi.
+    SELECT koc.kurum_id INTO k
       FROM teacher_students ts
-      JOIN users koc  ON koc.id = ts.teacher_id
-      JOIN kurumlar kr ON kr.id = koc.kurum_id
+      JOIN users koc ON koc.id = ts.teacher_id
+      LEFT JOIN kurumlar kr ON kr.id = koc.kurum_id
      WHERE ts.student_id = ben AND ts.durum = 'onaylandi'
+       AND koc.kurum_id IS NOT NULL
      ORDER BY (kr.logo_url IS NULL), ts.created_at
      LIMIT 1;
-  END IF;
 
-  -- 3) Veliysem çocuğumun koçunun kurumu
-  IF k IS NULL THEN
-    SELECT kr.id INTO k
+  ELSIF rolum = 'parent' THEN
+    SELECT koc.kurum_id INTO k
       FROM family_links fl
       JOIN teacher_students ts ON ts.student_id = fl.student_id AND ts.durum = 'onaylandi'
-      JOIN users koc  ON koc.id = ts.teacher_id
-      JOIN kurumlar kr ON kr.id = koc.kurum_id
-     WHERE fl.parent_id = ben
+      JOIN users koc ON koc.id = ts.teacher_id
+      LEFT JOIN kurumlar kr ON kr.id = koc.kurum_id
+     WHERE fl.parent_id = ben AND koc.kurum_id IS NOT NULL
      ORDER BY (kr.logo_url IS NULL), ts.created_at
      LIMIT 1;
   END IF;
@@ -233,11 +236,18 @@ BEGIN
   END IF;
   gecen := gecen + 1;
 
-  -- c) OGRENCI kocunun kurumunu goruyor (kendi kurum_id'si yok)
+  -- c) OGRENCI kocunun kurumunu goruyor
   PERFORM set_config('request.jwt.claims', json_build_object('sub', ogr)::text, true);
   SELECT * INTO r FROM marka_kurumum();
   IF r.kurum_id IS DISTINCT FROM kurum THEN
-    RAISE EXCEPTION 'SINAMA c: ogrenci kocunun kurumunu goremedi';
+    -- Hata mesaji NE BULDUGUNU soyluyor: "goremedi" tek basina
+    -- sebebi aramak icin yeterli degil.
+    RAISE EXCEPTION 'SINAMA c: ogrenci markasi yanlis. donen=% beklenen=% ogrenci_rolu=% ogrenci_kurumu=% koc_kurumu=% bag_sayisi=%',
+      COALESCE(r.kurum_id::text, 'YOK'), kurum,
+      (SELECT role FROM users WHERE id = ogr),
+      COALESCE((SELECT kurum_id::text FROM users WHERE id = ogr), 'NULL'),
+      COALESCE((SELECT kurum_id::text FROM users WHERE id = koc), 'NULL'),
+      (SELECT count(*) FROM teacher_students WHERE student_id = ogr AND durum = 'onaylandi');
   END IF;
   IF r.logo_url IS DISTINCT FROM yol THEN
     RAISE EXCEPTION 'SINAMA c2: logo adresi gelmedi';
