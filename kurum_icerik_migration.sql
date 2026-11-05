@@ -143,7 +143,7 @@ CREATE TEMP TABLE _sinama_sonucu (sonuc TEXT);
 DO $test$
 DECLARE
   koc UUID; meslektas UUID; kurum UUID; env UUID; kitap UUID;
-  sayi INTEGER; yeni UUID; gecen INTEGER := 0;
+  sayi INTEGER; yeni UUID; yonetici UUID; gecen INTEGER := 0;
   eski_k UUID; eski_m UUID;
   ornek JSONB := '{"sorular":[{"kod":"s1","metin":"soru bir","tur":"siklik","boyut":"a","ters":false}],"boyutlar":{"a":"A"}}'::jsonb;
 BEGIN
@@ -157,6 +157,16 @@ BEGIN
 
   SELECT kurum_id INTO eski_k FROM users WHERE id = koc;
   SELECT kurum_id INTO eski_m FROM users WHERE id = meslektas;
+
+  -- Kurum değişiklikleri PLATFORM YÖNETİCİSİ kimliğiyle yapılıyor:
+  -- users_rol_koru tablo sahibine de işliyor ve SQL Editor'da
+  -- auth.uid() boş olduğu için düz UPDATE reddediliyor.
+  SELECT u.id INTO yonetici FROM users u WHERE u.role = 'admin' LIMIT 1;
+  IF yonetici IS NULL THEN
+    INSERT INTO _sinama_sonucu VALUES ('ATLANDI - platform yoneticisi yok');
+    RETURN;
+  END IF;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
 
   INSERT INTO kurumlar (ad, tur) VALUES ('__SINAMA_ICERIK__', 'okul') RETURNING id INTO kurum;
   UPDATE users SET kurum_id = kurum WHERE id IN (koc, meslektas);
@@ -197,6 +207,7 @@ BEGIN
 
   -- d) BASKA kurumdaki goremiyor
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
   UPDATE users SET kurum_id = NULL WHERE id = meslektas;
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', json_build_object('sub', meslektas)::text, true);
@@ -221,11 +232,12 @@ BEGIN
   DELETE FROM soru_bankalari WHERE id = yeni;
   gecen := gecen + 1;
 
-  PERFORM set_config('request.jwt.claims', '', true);
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
   DELETE FROM koc_envanterleri WHERE id = env;
   DELETE FROM okuma_kitaplari  WHERE id = kitap;
   UPDATE users SET kurum_id = eski_k WHERE id = koc;
   UPDATE users SET kurum_id = eski_m WHERE id = meslektas;
+  PERFORM set_config('request.jwt.claims', '', true);
   DELETE FROM kurumlar WHERE id = kurum;
 
   INSERT INTO _sinama_sonucu VALUES (format('GECTI - %s davranis sinamasi', gecen));

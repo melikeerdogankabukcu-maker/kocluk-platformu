@@ -16,6 +16,72 @@
 -- users_rol_koru içindeki kurum yöneticisi izni hiç devreye girmiyor.
 
 -- ------------------------------------------------------------
+-- 0) users_rol_koru GENİŞLETİLİYOR
+-- ------------------------------------------------------------
+-- Tetikleyici kurum yöneticisine yalnız "kendi kurumuna ALMA" izni
+-- veriyordu: `NEW.kurum_id = kurumum()`. Çıkarma (`kurum_id = NULL`)
+-- bu koşulu sağlamadığı için reddediliyordu — yani aşağıdaki
+-- `kurumdan_koc_cikar` çalışma anında patlardı. Aynı şekilde yeni
+-- üyeye `kurum_rolu` yazmak da takılıyordu, çünkü o dal
+-- `OLD.kurum_id = kurumum()` istiyor ve yeni üyenin eski kurumu NULL.
+--
+-- Eksik olan yetki değil, kuralın yarısıydı: "üye al" yazılmış,
+-- "üye çıkar" yazılmamış.
+--
+-- Bu genişletme istemciye yeni bir kapı AÇMIYOR: `users` üzerinde
+-- UPDATE zaten yalnız kendi satırına ve platform yöneticisine açık.
+-- Buradaki izin yalnız SECURITY DEFINER fonksiyonların önünü açıyor.
+--
+-- Ayrıca baştaki yorumda yazan ama koda geçmemiş kural artık
+-- işletiliyor: KİMSE KENDİ kurumunu değiştiremiyor. Yoksa bir
+-- yönetici kendini kurumdan çıkarıp kurumu yöneticisiz bırakabilirdi.
+CREATE OR REPLACE FUNCTION users_rol_koru()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role THEN
+    IF NOT admin_mi() THEN
+      RAISE EXCEPTION 'Rol degistirilemez. Ogretmen yetkisi yalnizca yonetici tarafindan verilir.';
+    END IF;
+    IF NEW.role NOT IN ('student', 'parent', 'teacher') THEN
+      RAISE EXCEPTION 'Bu rol uygulamadan atanamaz: %', NEW.role;
+    END IF;
+  END IF;
+
+  IF NEW.onay_durumu IS DISTINCT FROM OLD.onay_durumu AND NOT admin_mi() THEN
+    RAISE EXCEPTION 'Hesap onayi yalnizca yonetici tarafindan degistirilebilir.';
+  END IF;
+
+  IF NEW.kurum_id IS DISTINCT FROM OLD.kurum_id THEN
+    IF admin_mi() THEN
+      NULL;                                  -- platform yöneticisi serbest
+    ELSIF NEW.id = auth.uid() THEN
+      RAISE EXCEPTION 'Kendi kurumunuzu degistiremezsiniz.';
+    ELSIF kurum_yoneticisi_mi() AND (
+            NEW.kurum_id = kurumum()                               -- üye alma
+         OR (OLD.kurum_id = kurumum() AND NEW.kurum_id IS NULL)    -- üye çıkarma
+          ) THEN
+      NULL;
+    ELSE
+      RAISE EXCEPTION 'Kurum degisikligi yalnizca yonetici tarafindan yapilabilir.';
+    END IF;
+  END IF;
+
+  IF NEW.kurum_rolu IS DISTINCT FROM OLD.kurum_rolu THEN
+    -- Kurum rolü, üyenin kuruma GİRERKEN de yazılabilmeli: o anda
+    -- OLD.kurum_id henüz NULL.
+    IF NOT (admin_mi() OR (kurum_yoneticisi_mi()
+            AND (OLD.kurum_id = kurumum() OR NEW.kurum_id = kurumum()))) THEN
+      RAISE EXCEPTION 'Kurum rolu yalnizca yonetici tarafindan degistirilebilir.';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END $fn$;
+
+REVOKE ALL ON FUNCTION public.users_rol_koru() FROM PUBLIC, anon, authenticated;
+
+-- ------------------------------------------------------------
 -- Ortak kapı
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.kurum_kapisi()
@@ -228,6 +294,7 @@ DECLARE
   mudur UUID; uye UUID; ogr UUID; kurum UUID;
   sayi INTEGER; red BOOLEAN; r RECORD; gecen INTEGER := 0;
   eski_kurum_m UUID; eski_rol_m TEXT; eski_kurum_u UUID; ogr_eposta TEXT;
+  yonetici UUID;
 BEGIN
   SELECT teacher_id, student_id INTO mudur, ogr
     FROM teacher_students WHERE durum = 'onaylandi' LIMIT 1;
@@ -237,6 +304,15 @@ BEGIN
   END IF;
   SELECT u.id INTO uye FROM users u
    WHERE u.role IN ('teacher','admin') AND u.id <> mudur LIMIT 1;
+
+  -- Kurulum PLATFORM YÖNETİCİSİ kimliğiyle yapılıyor. users_rol_koru
+  -- tablo sahibine de işliyor ve SQL Editor'da auth.uid() boş; düz
+  -- UPDATE "kurum degisikligi yalnizca yonetici" diye reddediliyor.
+  SELECT u.id INTO yonetici FROM users u WHERE u.role = 'admin' LIMIT 1;
+  IF yonetici IS NULL THEN
+    INSERT INTO _sinama_sonucu VALUES ('ATLANDI - platform yoneticisi yok');
+    RETURN;
+  END IF;
 
   -- Sınama kurumu; sonunda eski değerler geri yazılıyor.
   SELECT kurum_id, kurum_rolu INTO eski_kurum_m, eski_rol_m FROM users WHERE id = mudur;
@@ -250,6 +326,8 @@ BEGIN
   SELECT email INTO ogr_eposta FROM users WHERE id = ogr;
 
   INSERT INTO kurumlar (ad, tur) VALUES ('__SINAMA_KURUM__', 'okul') RETURNING id INTO kurum;
+
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
   UPDATE users SET kurum_id = kurum, kurum_rolu = 'yonetici' WHERE id = mudur;
 
   SET LOCAL ROLE authenticated;
@@ -297,6 +375,7 @@ BEGIN
   -- g) ogrencisi olan koc cikarilamiyor
   IF uye IS NOT NULL THEN
     RESET ROLE;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
     UPDATE users SET kurum_id = kurum, kurum_rolu = 'uye' WHERE id = uye;
     SET LOCAL ROLE authenticated;
     PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
@@ -331,6 +410,7 @@ BEGIN
 
   -- k) YONETICI OLMAYAN cagiramiyor
   RESET ROLE;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
   UPDATE users SET kurum_rolu = 'uye' WHERE id = mudur;
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
@@ -342,11 +422,13 @@ BEGIN
 
   -- Temizlik: eski degerler geri
   RESET ROLE;
-  PERFORM set_config('request.jwt.claims', '', true);
+  -- Temizlik de yönetici kimliğiyle: tetikleyici burada da işliyor.
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
   UPDATE users SET kurum_id = eski_kurum_m, kurum_rolu = eski_rol_m WHERE id = mudur;
   IF uye IS NOT NULL THEN
     UPDATE users SET kurum_id = eski_kurum_u WHERE id = uye;
   END IF;
+  PERFORM set_config('request.jwt.claims', '', true);
   DELETE FROM kurumlar WHERE id = kurum;
 
   INSERT INTO _sinama_sonucu VALUES (format('GECTI - %s davranis sinamasi', gecen));
