@@ -104,10 +104,19 @@ export default function RolYonetimi({ userId, color: c }) {
     yukle();
   };
 
+  // Kurum değiştirirken KURUM ROLÜ SIFIRLANIYOR.
+  //
+  // Bir kullanıcı öğretmen yapılınca kendi bireysel kurumunun
+  // yöneticisi oluyor. Rol sıfırlanmasaydı o koç bir okula
+  // taşındığında yöneticiliği üstünde kalır ve okula taşınan HER koç
+  // o okulun yöneticisi olurdu — birbirini kurumdan çıkarabilecek
+  // durumda. Yöneticiyi Kurumlar ekranından bilerek seçmek gerekiyor.
   const kurumDegistir = async (kisi, kurumId) => {
     setIslemde(kisi.id);
     const { hata } = await calistir(
-      supabase.from("users").update({ kurum_id: kurumId || null }).eq("id", kisi.id),
+      supabase.from("users")
+        .update({ kurum_id: kurumId || null, kurum_rolu: "uye" })
+        .eq("id", kisi.id),
       "Kurum degistirme"
     );
     setIslemde(null);
