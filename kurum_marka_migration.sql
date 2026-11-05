@@ -215,7 +215,17 @@ BEGIN
     INSERT INTO _sinama_sonucu VALUES ('ATLANDI - onayli koc-ogrenci cifti yok');
     RETURN;
   END IF;
-  SELECT fl.parent_id INTO veli FROM family_links fl WHERE fl.student_id = ogr LIMIT 1;
+  -- Veli sınaması için PERSONEL OLMAYAN bir veli gerekiyor. Kendi
+  -- kurumu olan bir koç aynı zamanda veliyse kendi kurumunun
+  -- markasını görüyor ve bu DOĞRU davranış: o kişi personel. Böyle
+  -- birini seçmek fonksiyonu değil sınamanın varsayımını ölçerdi.
+  SELECT fl.parent_id INTO veli
+    FROM family_links fl
+    JOIN users u ON u.id = fl.parent_id
+   WHERE fl.student_id = ogr
+     AND u.role = 'parent'
+     AND u.kurum_id IS NULL
+   LIMIT 1;
 
   SELECT kurum_id, kurum_rolu INTO e_kurum, e_rol FROM users WHERE id = koc;
 
@@ -280,7 +290,7 @@ BEGIN
 
   -- f) VELI de goruyor
   IF veli IS NULL THEN
-    atlanan := atlanan || 'veli markasi (cocugu olan veli yok); ';
+    atlanan := atlanan || 'veli markasi (kurumsuz, salt veli rolunde kimse yok); ';
   ELSE
     PERFORM set_config('request.jwt.claims', json_build_object('sub', veli)::text, true);
     SELECT * INTO r FROM marka_kurumum();
