@@ -3,6 +3,7 @@ import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 import { imzaliUrlListesi } from "../lib/depo";
 import { dosyaGecerli } from "../lib/soruSayfasi";
+import { gorseliKucult } from "../lib/gorselKucult";
 import { sureMetni, kalanGun, ilerlemeYuzdesi, geridemi } from "../lib/okuma";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Card from "./Card";
@@ -80,10 +81,12 @@ export default function OkumaYonetimi({ userId, students = [], color: c, baslik 
 
     // 2) Kapak (varsa) ve 3) adresin yazılması
     if (form.dosya && veri?.id) {
-      const uzanti = (form.dosya.name.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? ".jpg").toLowerCase();
+      // Kapak küçük bir dikdörtgende gösteriliyor; 800 piksel fazlasıyla yeter.
+      const kapak = await gorseliKucult(form.dosya, { enBuyuk: 800 });
+      const uzanti = (kapak.name.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? ".jpg").toLowerCase();
       const yol = `kitaplar/${veri.id}/kapak${uzanti}`;
       const { error: depoHatasi } = await supabase.storage
-        .from("homework").upload(yol, form.dosya, { upsert: true, contentType: form.dosya.type });
+        .from("homework").upload(yol, kapak, { upsert: true, contentType: kapak.type });
       if (depoHatasi) {
         // Kitap kaydı duruyor, yalnız kapak yok: kullanıcıya söylenip
         // bırakılıyor. Kitabı silmek, girilen bilgiyi de çöpe atardı.

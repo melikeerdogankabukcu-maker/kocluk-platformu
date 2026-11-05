@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "../supabase";
 import { TURLER, blokAltBilgi, saatAraligi, sureMetni, testDenetle, sayacGecen } from "../lib/calismaPlani";
 import { odevDosyalari, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
+import { listeyiKucult } from "../lib/gorselKucult";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Modal from "./Modal";
 import GuvenliBaglanti from "./GuvenliBaglanti";
@@ -47,6 +48,9 @@ export default function TamamlaDiyalogu({ blok, test, studentId, saatFarki = 0, 
   const [yeniler, setYeniler] = useState([]);
   const [gorselDegisti, setGorselDegisti] = useState(false);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  // Yükleme sırasında "Hazırlanıyor 2/5" / "Yükleniyor 3/5" yazıyor;
+  // değişmeyen bir "Kaydediliyor..." donma gibi görünüyordu.
+  const [yuklemeDurumu, setYuklemeDurumu] = useState(null);
 
   const testSorulur = TEST_SORULAN.has(blok.tur);
   const denetim = testSorulur ? testDenetle({ soru, dogru, yanlis }) : { gecerli: true, bos: true };
@@ -80,8 +84,14 @@ export default function TamamlaDiyalogu({ blok, test, studentId, saatFarki = 0, 
       if (gorselDegisti) {
         const damga = Date.now();
         const yuklenen = [];
-        for (let i = 0; i < yeniler.length; i++) {
-          const dosya = yeniler[i];
+        // Fotoğraflar yüklemeden ÖNCE küçültülüyor: telefon kamerası
+        // 3-8 MB üretiyor ve zayıf bağlantıda bu "donuyor" diye
+        // bildirilen bekleme demekti (bkz. lib/gorselKucult.js).
+        const hazir = await listeyiKucult(yeniler,
+          (bitti, toplam) => setYuklemeDurumu(bitti < toplam ? `Hazırlanıyor ${bitti + 1}/${toplam}` : null));
+        for (let i = 0; i < hazir.length; i++) {
+          const dosya = hazir[i];
+          setYuklemeDurumu(`Yükleniyor ${i + 1}/${hazir.length}`);
           const yol = yeniDosyaYolu(studentId, `plan-${blok.id}`, dosya.name, i, damga);
           const { error } = await supabase.storage
             .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
@@ -108,6 +118,7 @@ export default function TamamlaDiyalogu({ blok, test, studentId, saatFarki = 0, 
       alert("Görsel yüklenemedi: " + err.message);
     } finally {
       setKaydediliyor(false);
+      setYuklemeDurumu(null);
     }
   };
 
@@ -239,7 +250,7 @@ export default function TamamlaDiyalogu({ blok, test, studentId, saatFarki = 0, 
           padding: "12px 0", borderRadius: KOSE.m, border: "none",
           background: gecerli ? c.bg : "#ddd", color: "#fff",
           fontSize: YAZI.govde, fontWeight: 700, cursor: gecerli ? "pointer" : "not-allowed",
-        }}>{kaydediliyor ? "Kaydediliyor..." : blok.yapildi ? "✓ Güncelle" : "✓ Kaydet ve koça gönder"}</button>
+        }}>{kaydediliyor ? (yuklemeDurumu ?? "Kaydediliyor...") : blok.yapildi ? "✓ Güncelle" : "✓ Kaydet ve koça gönder"}</button>
 
         {blok.yapildi && onGeriAl && (
           <button onClick={async () => {

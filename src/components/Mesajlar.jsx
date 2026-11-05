@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabase";
 import { useMesajlar } from "../hooks/useMesajlar";
 import { odevDosyalari, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
+import { listeyiKucult } from "../lib/gorselKucult";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import GuvenliBaglanti from "./GuvenliBaglanti";
@@ -54,8 +55,12 @@ export default function Mesajlar({ userId, kisiler = [], color: c, baslik = "Mes
       // bulamazdı.
       const damga = Date.now();
       const yuklenen = [];
-      for (let i = 0; i < ekler.length; i++) {
-        const d = ekler[i];
+      // Fotoğraflar yüklemeden ÖNCE küçültülüyor: telefon kamerası
+      // 3-8 MB üretiyor ve zayıf bağlantıda bu bekleme "donma" diye
+      // bildirilmişti (bkz. lib/gorselKucult.js).
+      const hazirEkler = await listeyiKucult(ekler);
+      for (let i = 0; i < hazirEkler.length; i++) {
+        const d = hazirEkler[i];
         const yol = yeniDosyaYolu(userId, "mesaj", d.name, i, damga);
         const { error } = await supabase.storage
           .from("homework").upload(yol, d, { upsert: true, contentType: d.type });

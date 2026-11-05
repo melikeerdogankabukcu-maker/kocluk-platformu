@@ -3,6 +3,7 @@ import { supabase } from "../supabase";
 import { calistir, hatalariBildir } from "../lib/db";
 import { branslariEkle, kocEtiketi } from "../lib/branslar";
 import { odevDosyalari, yeniDosyaYolu, DOSYA_SINIRI, BOYUT_SINIRI_MB } from "../lib/odevDosyalari";
+import { gorseliKucult, listeyiKucult } from "../lib/gorselKucult";
 import { useTercih } from "../lib/TercihContext";
 import { avatarSimgesi } from "../lib/avatarlar";
 import { useTopics } from "../lib/TopicsContext";
@@ -128,6 +129,10 @@ export default function StudentDashboard({ userId, userName }) {
   // Test formu
   const [showTestForm,  setShowTestForm]  = useState(false);
   const [savingTest,    setSavingTest]    = useState(false);
+  // Yükleme sırasında ekranda ne olduğu yazıyor. Eskiden yalnız
+  // "Kaydediliyor..." vardı ve beş fotoğraf dakikalarca sürerken
+  // ekran hiç değişmediği için uygulama donmuş görünüyordu.
+  const [yuklemeDurumu, setYuklemeDurumu] = useState(null);
   const [testForm,      setTestForm]      = useState({
     exam_type: "TYT", subject: "", topic: "",
     custom_subject: "", custom_topic: "",
@@ -468,8 +473,14 @@ export default function StudentDashboard({ userId, userName }) {
       // kendi anahtarına yazılmalı, yoksa üst üste binerler.
       const damga = Date.now();
       const yuklenen = [];
-      for (let i = 0; i < testFiles.length; i++) {
-        const dosya = testFiles[i];
+      // Fotoğraflar yüklemeden ÖNCE küçültülüyor: telefon kamerası
+      // 3-8 MB üretiyor ve zayıf bağlantıda bu "donuyor" diye
+      // bildirilen bekleme demekti (bkz. lib/gorselKucult.js).
+      const hazir = await listeyiKucult(testFiles,
+        (bitti, toplam) => setYuklemeDurumu(bitti < toplam ? `Hazırlanıyor ${bitti + 1}/${toplam}` : null));
+      for (let i = 0; i < hazir.length; i++) {
+        const dosya = hazir[i];
+        setYuklemeDurumu(`Yükleniyor ${i + 1}/${hazir.length}`);
         const yol = yeniDosyaYolu(userId, `test`, dosya.name, i, damga);
         const { error: yuklemeHatasi } = await supabase.storage
           .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
@@ -510,6 +521,7 @@ export default function StudentDashboard({ userId, userName }) {
       alert("Test kaydedilemedi: " + err.message);
     } finally {
       setSavingTest(false);
+      setYuklemeDurumu(null);
     }
   };
 
@@ -574,10 +586,13 @@ export default function StudentDashboard({ userId, userName }) {
     }
     setFotoYukleniyor(true);
     try {
-      const uzanti = (dosya.name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      // Profil fotoğrafı da küçültülüyor; 40 piksellik bir dairede
+      // gösterilen görselin 4 MB olmasının bir anlamı yok.
+      const kucuk = await gorseliKucult(dosya, { enBuyuk: 512 });
+      const uzanti = (kucuk.name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
       const yol = `${userId}/profil/${Date.now()}.${uzanti}`;
       const { error: yuklemeHatasi } = await supabase.storage
-        .from("homework").upload(yol, dosya, { upsert: true, contentType: dosya.type });
+        .from("homework").upload(yol, kucuk, { upsert: true, contentType: kucuk.type });
       if (yuklemeHatasi) throw yuklemeHatasi;
       // photo_url artık yolun kaydı; GuvenliGorsel imzalı adrese çeviriyor.
       const { error } = await supabase.from("student_profiles")
@@ -1155,7 +1170,7 @@ export default function StudentDashboard({ userId, userName }) {
                     )}
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={handleTestSave} disabled={savingTest} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: "none", background: c.bg, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: savingTest ? 0.7 : 1 }}>
-                        {savingTest ? "Kaydediliyor..." : duzenlenenTest ? "Değişikliği kaydet" : "Kaydet"}
+                        {savingTest ? (yuklemeDurumu ?? "Kaydediliyor...") : duzenlenenTest ? "Değişikliği kaydet" : "Kaydet"}
                       </button>
                       <button onClick={testFormuKapat} style={{ padding: "11px 16px", borderRadius: 12, border: "1.5px solid #f0ede8", background: "#fff", color: "#888", fontSize: 13, cursor: "pointer" }}>İptal</button>
                     </div>

@@ -5,6 +5,7 @@ import { useTopics } from "../lib/TopicsContext";
 import {
   sayfaYolu, dosyaGecerli, cevapAnahtariniCoz, sayfaSorulari, cakisanNumaralar,
 } from "../lib/soruSayfasi";
+import { gorseliKucult } from "../lib/gorselKucult";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 
 // Bir sayfa fotoğrafını konuyla eşleştirip yükleme paneli.
@@ -72,10 +73,14 @@ export default function SayfaYukle({ banka, bolumler, varOlan, color: c, onKapat
     if (engel) return;
     setIslemde(true);
     setHata(null);
-    const yol = sayfaYolu(banka.id, dosya.name);
+    // Soru sayfası öğrenciye OKUTULUYOR; 1600 piksel küçük yazıyı
+    // bozabilir. Sınır burada bilerek yüksek (2400) — görüntü işleme
+    // tarafındaki HEDEF_GENISLIK ile aynı.
+    const kucuk = await gorseliKucult(dosya, { enBuyuk: 2400, kalite: 0.85 });
+    const yol = sayfaYolu(banka.id, kucuk.name);
 
     const { error: depoHatasi } = await supabase.storage
-      .from("homework").upload(yol, dosya, { upsert: false, contentType: dosya.type });
+      .from("homework").upload(yol, kucuk, { upsert: false, contentType: kucuk.type });
     if (depoHatasi) {
       console.error("[Soru sayfasi yukleme]", depoHatasi);
       setHata("Fotoğraf yüklenemedi: " + depoHatasi.message);

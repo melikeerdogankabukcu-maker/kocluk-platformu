@@ -125,6 +125,23 @@ Dördü de ele alındı. Kayıt olarak duruyor; yeni bir iş değil.
 
 ---
 
+## E.2 Paket bölme (5 Kasım 2026'da listeye alındı)
+
+Ana paket **971 KB** (gzip ~280 KB). Ağır olanlar (pdfjs, tesseract)
+zaten geç yükleniyor; kalan, uygulamanın kendisi.
+
+Neden önemli: zayıf mobil bağlantıda transferin yarıda kesilme
+ihtimalini doğrudan artırıyor — 5 Kasım'da iki öğrencide görülen
+"Safari sayfayı açamıyor" hatasının zeminini bu hazırlıyor. Servis
+çalışanı artık ikinci açılışı kurtarıyor ama **ilk açılış** hâlâ bu
+tek büyük dosyaya bağlı.
+
+Yapılacak: rotaya göre bölme (koç paneli / öğrenci paneli / veli
+paneli ayrı parçalar) ve yalnız açıldığında gereken bileşenlerin
+tembel yüklenmesi. Ölçüt: ilk açılışta inen JavaScript.
+
+---
+
 ## F. Geri bildirim bekleyenler — hepsi sizin tarafta
 
 Bunlar yazılacak kod değil: ya denenmesi ya içerik girilmesi gerekiyor.
