@@ -65,13 +65,23 @@ export default function Bolum({ baslik, sekmeler, color: c, id, varsayilan = 0 }
         )}
 
         {!tek && (
-          // Dar ekranda sekmeler alt alta düşmek yerine YATAY KAYIYOR:
-          // sarmalayınca başlık şeridi üç sıraya çıkıyor ve içerik
-          // ekrandan aşağı itiliyordu.
+          // ── YATAY KAYDIRMADAN SARMALAMAYA DÖNÜLDÜ (5 Kasım 2026) ──
+          // Önceki karar "dar ekranda alt alta düşmesin, yatay kaysın"
+          // idi; gerekçesi başlık şeridinin üç sıraya çıkması ve
+          // içeriği aşağı itmesiydi.
+          //
+          // Uygulamada bu karar daha kötü çıktı: şeritte kaydırma
+          // çubuğu gizli olduğu için (scrollbarWidth: none) sığmayan
+          // sekmelerin VAR OLDUĞU anlaşılmıyordu. Kullanıcı "Denetim"
+          // sekmesinin kenardan kesildiğini görüyor ama oraya nasıl
+          // gideceğini bilmiyor; sekme fiilen kaybolmuş oluyor.
+          //
+          // Görünmeyen bir sekme, bir sıra fazla yerden kötüdür.
+          // Sarmalama ayrıca kaydırma gerektirmiyor: hepsi tek
+          // bakışta.
           <div style={{
-            display: "flex", gap: BOSLUK.xs,
-            overflowX: "auto", paddingBottom: BOSLUK.s,
-            scrollbarWidth: "none",
+            display: "flex", gap: BOSLUK.xs, flexWrap: "wrap",
+            paddingBottom: BOSLUK.s,
           }}>
             {aktifSekmeler.map((s, i) => {
               const aktif = i === gecerli;

@@ -187,10 +187,12 @@ export default function KurumPaneli({ color: c, baslik = "Kurum Yönetimi" }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 340, overflowY: "auto" }}>
               {ogrenciler.map(o => (
                 <div key={`${o.ogrenci_id}-${o.koc_id}`} style={{
-                  display: "flex", alignItems: "center", gap: 6,
+                  display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
                   padding: "7px 2px", borderBottom: `1px solid ${RENK.cizgiSolgun}`,
                 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Taban genişlik: yanındaki açılır liste daralmayınca
+                      isim sıfıra ezilip harf harf kırılıyordu. */}
+                  <div style={{ flex: "1 1 120px", minWidth: 120 }}>
                     <div style={{ fontSize: YAZI.kucuk, color: RENK.metin }}>{o.ad}</div>
                     <div style={{ fontSize: YAZI.mikro, color: RENK.metinSoluk }}>{o.koc_adi}</div>
                   </div>
@@ -200,7 +202,7 @@ export default function KurumPaneli({ color: c, baslik = "Kurum Yönetimi" }) {
                       <select value={devir[o.ogrenci_id] ?? ""}
                         onChange={e => setDevir(d => ({ ...d, [o.ogrenci_id]: e.target.value }))}
                         style={{
-                          flexShrink: 0, maxWidth: 140, padding: "4px 6px", borderRadius: KOSE.s,
+                          flexShrink: 1, minWidth: 96, maxWidth: 140, padding: "4px 6px", borderRadius: KOSE.s,
                           border: `1.5px solid ${RENK.cizgi}`, fontSize: YAZI.mikro,
                           fontFamily: "inherit", color: devir[o.ogrenci_id] ? RENK.metin : RENK.metinSilik,
                         }}>

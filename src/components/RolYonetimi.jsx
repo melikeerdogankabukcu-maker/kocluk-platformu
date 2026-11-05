@@ -184,7 +184,12 @@ export default function RolYonetimi({ userId, color: c }) {
       borderBottom: vurgulu ? "none" : "1px solid #fafaf8",
     }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, flexWrap: "wrap" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* minWidth 0 DEĞİL: kurum açılır listesi flexShrink 0 ve kurum
+          adı kadar geniş olabiliyor. Dar ekranda isim bloğu sıfıra
+          kadar eziliyor ve "Yağmur Eren" harf harf alt alta
+          diziliyordu. Taban genişlik verince satır sarmalanıyor ve
+          isim bütün kalıyor. */}
+      <div style={{ flex: "1 1 140px", minWidth: 140 }}>
         <div style={{ color: "#333", fontWeight: vurgulu ? 600 : 400 }}>{k.full_name}</div>
         <div style={{ fontSize: 10, color: "#aaa" }}>{k.email}</div>
       </div>
@@ -232,7 +237,7 @@ export default function RolYonetimi({ userId, color: c }) {
           disabled={islemde === k.id}
           title="Bağlı olduğu kurum"
           style={{
-            flexShrink: 0, maxWidth: 150, fontSize: 10, padding: "3px 6px",
+            flexShrink: 1, minWidth: 90, maxWidth: 150, fontSize: 10, padding: "3px 6px",
             borderRadius: 8, border: "1px solid #f0ede8", background: "#fff",
             color: k.kurum_id ? "#666" : "#c66",
           }}
