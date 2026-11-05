@@ -90,23 +90,56 @@ tarayıcıya indirmemek için.
 
 ---
 
+## 3.5 Görünürlük zinciri (çıkarıldı, 5 Kasım)
+
+İçerik paylaşımını yazmadan önce canlıdaki zincir baştan sona
+çıkarıldı. İlk tasarım bu yapılmadığı için yanlıştı.
+
+```
+kurumda_gorunur_mu(sahip)            ← müfredat, hazır programlar
+  = sahip NULL | sahip = ben | admin | AYNI KURUM
+    | onaylı koçum | çocuğumun koçu
+
+banka_sahibi_gorunur_mu(sahip)       ← soru bankası, bölümler
+  = kurumda_gorunur_mu(sahip) | öğrencim | çocuğum
+
+soru_bankalari SELECT
+  = banka_sahibi_gorunur_mu(sahip)
+    AND (sahibi | admin | PERSONEL | öğrenciye atanmış | veliye)
+```
+
+Buradan iki şey çıktı:
+
+1. **Politika eklemek erişimi genişletir, daraltmaz.** "Seçmeli"
+   davranış ancak fonksiyonun içindeki kurum dalı koşullu hâle
+   getirilerek olur. İlk tasarım yeni bir politika ekliyordu ve
+   hiçbir şeyi kısıtlamazdı.
+2. **Kurum dalı `kurumda_gorunur_mu` içinde** ve onu müfredat ile
+   hazır programlar da kullanıyor. Doğrudan değiştirmek onları
+   bozardı.
+
 ## 4. İçerik paylaşımı — KARAR: seçmeli
 
 Koç her envanteri / kitabı / soru bankasını oluştururken "kuruma
 açık" işaretleyebiliyor.
 
-**Soru bankasında dikkat:** bugün kurum içinde **kendiliğinden**
-paylaşılıyor (`kurumda_gorunur_mu`). Seçmeli yapmak var olan
-kitaplıkları meslektaşlardan gizlerdi. Bu yüzden `kuruma_acik`
-kolonu soru bankalarına **var olan satırlar için `true`** olarak
-ekleniyor; yalnız bundan sonra açılanlar varsayılan olarak kapalı.
-Kimsenin bugün gördüğü bir şey kaybolmuyor.
+**Uygulama:** fonksiyon davranış değiştirmeden ikiye ayrılıyor.
 
-Envanter ve okuma kitabı bugün koça özel olduğu için onlarda
-varsayılan `false` — kimsenin beklentisi değişmiyor.
+- `ayni_kurumda_mi(sahip)` — yalnız kurum dalı
+- `kurum_disi_gorunur_mu(sahip)` — diğer bütün yollar
+- `kurumda_gorunur_mu(sahip)` = ikisinin birleşimi → **müfredat ve
+  hazır programlar için hiçbir şey değişmiyor**
+- `banka_sahibi_gorunur_mu(sahip, acik)` — kurum dalı bayrağa bağlı
 
-`kurumda_gorunur_mu()` fonksiyonuna **dokunulmuyor**: müfredat ve
-hazır programlar da onu kullanıyor, davranışları değişmemeli.
+**Soru bankasında dikkat:** bugün kurum içinde kendiliğinden
+paylaşılıyor. Seçmeli yapmak var olan kitaplıkları meslektaşlardan
+gizlerdi; bu yüzden kolon **var olan satırlar için `true`** olarak
+ekleniyor, yalnız bundan sonra açılanlar kapalı başlıyor.
+
+Envanter ve okuma kitabı bugün koça özel, onlarda varsayılan `false`.
+
+**Asıl risk** kurum dalını koşullu yaparken öğrenci ve veli
+yollarının kopması; sınama bunu ayrıca denetliyor.
 
 ---
 

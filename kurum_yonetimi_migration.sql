@@ -283,85 +283,97 @@ GRANT EXECUTE ON FUNCTION public.ogrenci_devret(UUID, UUID, UUID) TO authenticat
 
 NOTIFY pgrst, 'reload schema';
 
+
 -- ------------------------------------------------------------
 -- DAVRANIŞ SINAMASI
 -- ------------------------------------------------------------
+-- ── SINAMA ORTAMI VARSAYMIYOR, KEŞFEDİYOR ───────────────────
+-- Önceki sürümler ortam hakkında sessiz varsayımlar yapıyordu ve üç
+-- kez kendi varsayımını ölçtü:
+--   • müdür seçilen koç aynı zamanda PLATFORM yöneticisiydi; "üye
+--     çağıramaz" sınaması haklı olarak geçti, çünkü admin_mi() kurum
+--     kapısını zaten açıyor,
+--   • ikinci koçun kendi öğrencileri vardı; "devredince çıkarılır"
+--     sınaması haklı olarak düştü,
+--   • devir doğrulaması müdür rolünde yapıldı ve RLS satırı gizledi.
+--
+-- Bu sürüm her adımın ön koşulunu ÖNCE arıyor; bulamazsa adımı
+-- atlayıp SEBEBİNİ sonuca yazıyor. "Geçti" ile "sınanamadı" artık
+-- birbirine karışmıyor.
 DROP TABLE IF EXISTS _sinama_sonucu;
 CREATE TEMP TABLE _sinama_sonucu (sonuc TEXT);
 
 DO $test$
 DECLARE
-  mudur UUID; uye UUID; ogr UUID; kurum UUID;
-  sayi INTEGER; red BOOLEAN; r RECORD; gecen INTEGER := 0;
-  eski_kurum_m UUID; eski_rol_m TEXT; eski_kurum_u UUID; ogr_eposta TEXT;
-  uye_kendi_ogrencisi INTEGER := 0;
-  yonetici UUID;
+  yonetici UUID; mudur UUID; uye UUID; ogr UUID; kurum UUID;
+  mudur_admin_mi BOOLEAN; uye_bos_mu BOOLEAN;
+  e_kurum_m UUID; e_rol_m TEXT; e_kurum_u UUID; ogr_eposta TEXT;
+  sayi INTEGER; red BOOLEAN; r RECORD;
+  gecen INTEGER := 0; atlanan TEXT := '';
 BEGIN
-  SELECT teacher_id, student_id INTO mudur, ogr
-    FROM teacher_students WHERE durum = 'onaylandi' LIMIT 1;
-  IF ogr IS NULL THEN
-    INSERT INTO _sinama_sonucu VALUES ('ATLANDI - onayli koc-ogrenci cifti yok');
-    RETURN;
-  END IF;
-  -- İkinci koç tercihen ÖĞRENCİSİ OLMAYAN biri: "devrettikten sonra
-  -- çıkarılabiliyor" sınaması ancak o zaman anlamlı. Yoksa koçun kendi
-  -- öğrencileri yüzünden çıkarma haklı olarak reddediliyor ve sınama
-  -- fonksiyonu değil kendi varsayımını ölçmüş oluyor.
-  SELECT u.id INTO uye FROM users u
-   WHERE u.role IN ('teacher','admin') AND u.id <> mudur
-     AND NOT EXISTS (SELECT 1 FROM teacher_students ts
-                      WHERE ts.teacher_id = u.id AND ts.durum = 'onaylandi')
-   LIMIT 1;
-  IF uye IS NULL THEN
-    SELECT u.id INTO uye FROM users u
-     WHERE u.role IN ('teacher','admin') AND u.id <> mudur LIMIT 1;
-  END IF;
-  IF uye IS NOT NULL THEN
-    SELECT count(*) INTO uye_kendi_ogrencisi FROM teacher_students ts
-     WHERE ts.teacher_id = uye AND ts.durum = 'onaylandi';
-  END IF;
-
-  -- Kurulum PLATFORM YÖNETİCİSİ kimliğiyle yapılıyor. users_rol_koru
-  -- tablo sahibine de işliyor ve SQL Editor'da auth.uid() boş; düz
-  -- UPDATE "kurum degisikligi yalnizca yonetici" diye reddediliyor.
+  -- ── Ortamı keşfet ────────────────────────────────────────
   SELECT u.id INTO yonetici FROM users u WHERE u.role = 'admin' LIMIT 1;
   IF yonetici IS NULL THEN
     INSERT INTO _sinama_sonucu VALUES ('ATLANDI - platform yoneticisi yok');
     RETURN;
   END IF;
 
-  -- Sınama kurumu; sonunda eski değerler geri yazılıyor.
-  SELECT kurum_id, kurum_rolu INTO eski_kurum_m, eski_rol_m FROM users WHERE id = mudur;
-  IF uye IS NOT NULL THEN
-    SELECT kurum_id INTO eski_kurum_u FROM users WHERE id = uye;
+  -- Müdür tercihen ADMIN OLMAYAN bir koç: admin_mi() kurum kapısını
+  -- zaten açtığı için yetki reddi ancak böyle sınanabiliyor.
+  SELECT ts.teacher_id, ts.student_id INTO mudur, ogr
+    FROM teacher_students ts
+    JOIN users u ON u.id = ts.teacher_id
+   WHERE ts.durum = 'onaylandi' AND u.role = 'teacher'
+   LIMIT 1;
+  IF mudur IS NULL THEN
+    SELECT ts.teacher_id, ts.student_id INTO mudur, ogr
+      FROM teacher_students ts WHERE ts.durum = 'onaylandi' LIMIT 1;
+  END IF;
+  IF mudur IS NULL THEN
+    INSERT INTO _sinama_sonucu VALUES ('ATLANDI - onayli koc-ogrenci cifti yok');
+    RETURN;
+  END IF;
+  SELECT (u.role = 'admin') INTO mudur_admin_mi FROM users u WHERE u.id = mudur;
+
+  -- İkinci koç tercihen ÖĞRENCİSİ OLMAYAN biri.
+  SELECT u.id INTO uye FROM users u
+   WHERE u.role IN ('teacher','admin') AND u.id <> mudur
+     AND NOT EXISTS (SELECT 1 FROM teacher_students ts
+                      WHERE ts.teacher_id = u.id AND ts.durum = 'onaylandi')
+   LIMIT 1;
+  uye_bos_mu := uye IS NOT NULL;
+  IF uye IS NULL THEN
+    SELECT u.id INTO uye FROM users u
+     WHERE u.role IN ('teacher','admin') AND u.id <> mudur LIMIT 1;
   END IF;
 
-  -- E-posta SAHİP olarak okunuyor: authenticated rolünde o sütunda
-  -- izin yok (users_sutun_izni_migration) ve sınama izin hatasıyla
-  -- değil, fonksiyonun kendi reddiyle bitmeli.
+  SELECT kurum_id, kurum_rolu INTO e_kurum_m, e_rol_m FROM users WHERE id = mudur;
+  IF uye IS NOT NULL THEN SELECT kurum_id INTO e_kurum_u FROM users WHERE id = uye; END IF;
   SELECT email INTO ogr_eposta FROM users WHERE id = ogr;
 
+  -- ── Kurulum: PLATFORM YÖNETİCİSİ kimliğiyle ──────────────
+  -- users_rol_koru tablo sahibine de işliyor ve SQL Editor'da
+  -- auth.uid() boş; düz UPDATE reddedilirdi.
   INSERT INTO kurumlar (ad, tur) VALUES ('__SINAMA_KURUM__', 'okul') RETURNING id INTO kurum;
-
   PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
   UPDATE users SET kurum_id = kurum, kurum_rolu = 'yonetici' WHERE id = mudur;
 
   SET LOCAL ROLE authenticated;
   PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
 
-  -- a) mudur kendi kurumunun koclarini goruyor
+  -- a) kurum koclari listesi
   SELECT count(*) INTO sayi FROM kurum_koclari();
   IF sayi < 1 THEN RAISE EXCEPTION 'SINAMA a: koc listesi bos'; END IF;
   gecen := gecen + 1;
 
-  -- b) ogrenci sayisi dogru geliyor
+  -- b) ogrenci sayisi dogru
   SELECT * INTO r FROM kurum_koclari() WHERE koc_id = mudur;
   IF r.ogrenci_sayisi < 1 THEN
     RAISE EXCEPTION 'SINAMA b: ogrenci sayisi % (en az 1 bekleniyordu)', r.ogrenci_sayisi;
   END IF;
   gecen := gecen + 1;
 
-  -- c) ogrenci listesi geliyor
+  -- c) ogrenci listesi
   SELECT count(*) INTO sayi FROM kurum_ogrencileri() WHERE ogrenci_id = ogr;
   IF sayi <> 1 THEN RAISE EXCEPTION 'SINAMA c: ogrenci listede yok'; END IF;
   gecen := gecen + 1;
@@ -380,89 +392,92 @@ BEGIN
   IF NOT red THEN RAISE EXCEPTION 'SINAMA e: olmayan e-posta kabul edildi'; END IF;
   gecen := gecen + 1;
 
-  -- f) OGRENCI e-postasi eklenemiyor (ogretmen degil)
+  -- f) ogretmen olmayan eklenemiyor
   red := false;
-  BEGIN
-    PERFORM kuruma_koc_ekle(ogr_eposta);
+  BEGIN PERFORM kuruma_koc_ekle(ogr_eposta);
   EXCEPTION WHEN raise_exception THEN red := true; END;
   IF NOT red THEN RAISE EXCEPTION 'SINAMA f: ogrenci koc olarak eklendi'; END IF;
   gecen := gecen + 1;
 
-  -- g) ogrencisi olan koc cikarilamiyor
-  IF uye IS NOT NULL THEN
+  IF uye IS NULL THEN
+    atlanan := atlanan || 'devir ve cikarma (ikinci ogretmen yok); ';
+  ELSE
     RESET ROLE;
     PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
     UPDATE users SET kurum_id = kurum, kurum_rolu = 'uye' WHERE id = uye;
     SET LOCAL ROLE authenticated;
     PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
 
-    -- h) devir: ogrenci uyeye gecsin
+    -- g) devir
     PERFORM ogrenci_devret(ogr, mudur, uye);
-
-    -- Dogrulama SAHIP olarak: teacher_students politikasi yalniz
-    -- TARAFLARI geciriyor ve devirden sonra satirin taraflari uye ile
-    -- ogrenci. Mudur rolunde bakilsa satir gorunmez ve devir olmamis
-    -- gibi okunurdu -- oysa olmustur.
+    -- Doğrulama SAHİP olarak: teacher_students politikası yalnız
+    -- TARAFLARI geçiriyor; müdür devredilen satırı göremez ve sonuç
+    -- "devir olmadı" diye okunurdu.
     RESET ROLE;
     SELECT count(*) INTO sayi FROM teacher_students
      WHERE teacher_id = uye AND student_id = ogr AND durum = 'onaylandi';
-    IF sayi <> 1 THEN RAISE EXCEPTION 'SINAMA h: devir olmadi'; END IF;
+    IF sayi <> 1 THEN RAISE EXCEPTION 'SINAMA g: devir olmadi'; END IF;
     SELECT count(*) INTO sayi FROM teacher_students
      WHERE teacher_id = mudur AND student_id = ogr;
-    IF sayi <> 0 THEN RAISE EXCEPTION 'SINAMA h2: eski bag duruyor'; END IF;
+    IF sayi <> 0 THEN RAISE EXCEPTION 'SINAMA g2: eski bag duruyor'; END IF;
     SET LOCAL ROLE authenticated;
     PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
     gecen := gecen + 1;
 
-    -- i) ogrencisi olan koc cikarilamiyor
+    -- h) ogrencisi olan koc cikarilamiyor
     red := false;
     BEGIN PERFORM kurumdan_koc_cikar(uye);
     EXCEPTION WHEN raise_exception THEN red := true; END;
-    IF NOT red THEN RAISE EXCEPTION 'SINAMA i: ogrencisi olan koc cikarildi'; END IF;
+    IF NOT red THEN RAISE EXCEPTION 'SINAMA h: ogrencisi olan koc cikarildi'; END IF;
     gecen := gecen + 1;
 
     -- geri devret
     PERFORM ogrenci_devret(ogr, uye, mudur);
     gecen := gecen + 1;
 
-    -- j) artik ogrencisi yok, cikarilabiliyor
-    --    Yalniz ikinci kocun BASKA ogrencisi yoksa sinanabiliyor;
-    --    varsa cikarma zaten dogru olarak reddedilir.
-    IF uye_kendi_ogrencisi = 0 THEN
+    -- i) ogrencisi kalmayan koc cikarilabiliyor
+    IF uye_bos_mu THEN
       PERFORM kurumdan_koc_cikar(uye);
       RESET ROLE;
       SELECT count(*) INTO sayi FROM users WHERE id = uye AND kurum_id = kurum;
-      IF sayi <> 0 THEN RAISE EXCEPTION 'SINAMA j: koc cikarilmadi'; END IF;
+      IF sayi <> 0 THEN RAISE EXCEPTION 'SINAMA i: koc cikarilmadi'; END IF;
       SET LOCAL ROLE authenticated;
       PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
       gecen := gecen + 1;
+    ELSE
+      atlanan := atlanan || 'bos koc cikarma (ikinci kocun kendi ogrencileri var); ';
     END IF;
   END IF;
 
-  -- k) YONETICI OLMAYAN cagiramiyor
-  RESET ROLE;
-  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
-  UPDATE users SET kurum_rolu = 'uye' WHERE id = mudur;
-  SET LOCAL ROLE authenticated;
-  PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
-  red := false;
-  BEGIN PERFORM count(*) FROM kurum_koclari();
-  EXCEPTION WHEN insufficient_privilege THEN red := true; END;
-  IF NOT red THEN RAISE EXCEPTION 'SINAMA k: uye kurum listesini aldi'; END IF;
-  gecen := gecen + 1;
-
-  -- Temizlik: eski degerler geri
-  RESET ROLE;
-  -- Temizlik de yönetici kimliğiyle: tetikleyici burada da işliyor.
-  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
-  UPDATE users SET kurum_id = eski_kurum_m, kurum_rolu = eski_rol_m WHERE id = mudur;
-  IF uye IS NOT NULL THEN
-    UPDATE users SET kurum_id = eski_kurum_u WHERE id = uye;
+  -- j) YONETICI OLMAYAN cagiramiyor
+  --    Müdür aynı zamanda PLATFORM yöneticisiyse sınanamıyor:
+  --    admin_mi() kurum kapısını açıyor ve bu DOĞRU davranış.
+  IF mudur_admin_mi THEN
+    atlanan := atlanan || 'yetki reddi (secilen koc ayni zamanda platform yoneticisi); ';
+  ELSE
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
+    UPDATE users SET kurum_rolu = 'uye' WHERE id = mudur;
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
+    red := false;
+    BEGIN PERFORM count(*) FROM kurum_koclari();
+    EXCEPTION WHEN insufficient_privilege THEN red := true; END;
+    IF NOT red THEN RAISE EXCEPTION 'SINAMA j: uye kurum listesini aldi'; END IF;
+    gecen := gecen + 1;
   END IF;
+
+  -- ── Temizlik ─────────────────────────────────────────────
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', yonetici)::text, true);
+  UPDATE users SET kurum_id = e_kurum_m, kurum_rolu = e_rol_m WHERE id = mudur;
+  IF uye IS NOT NULL THEN UPDATE users SET kurum_id = e_kurum_u WHERE id = uye; END IF;
   PERFORM set_config('request.jwt.claims', '', true);
   DELETE FROM kurumlar WHERE id = kurum;
 
-  INSERT INTO _sinama_sonucu VALUES (format('GECTI - %s davranis sinamasi', gecen));
+  INSERT INTO _sinama_sonucu VALUES (
+    format('GECTI - %s davranis sinamasi%s', gecen,
+           CASE WHEN atlanan = '' THEN '' ELSE ' | ATLANAN: ' || atlanan END));
 END $test$;
 
 SELECT sonuc AS "kurum_yonetimi" FROM _sinama_sonucu;
