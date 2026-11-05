@@ -1,15 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { supabase } from "./supabase";
 import { calistir } from "./lib/db";
-import Auth from "./Auth";
 import TopBar from "./components/TopBar";
+import ParcaSinir from "./components/ParcaSinir";
 import SifreBelirle from "./components/SifreBelirle";
 import { servisiUyandir } from "./hooks/useAnaliz";
 import { TopicsProvider } from "./lib/TopicsContext";
 import { TercihSaglayici } from "./lib/TercihContext";
-import StudentDashboard from "./dashboards/StudentDashboard";
-import TeacherDashboard from "./dashboards/TeacherDashboard";
-import ParentDashboard from "./dashboards/ParentDashboard";
+// ── PANELLER AYRI PARÇALARDA ────────────────────────────────────
+// Bir kullanıcı üç panelden yalnız BİRİNİ açıyor; üçü birden tek
+// dosyada olunca öğrenci koç panelini de indiriyordu. Ana paket
+// 971 KB'a çıkmıştı ve zayıf mobil bağlantıda transferin yarıda
+// kesilmesinin zeminini bu hazırlıyordu (5 Kasım'da iki öğrencide
+// "Safari sayfayı açamıyor" hatası görüldü).
+//
+// Giriş ekranı da ayrı: giriş yapmış kullanıcı onu hiç indirmiyor,
+// giriş yapmamış kullanıcı da panelleri indirmiyor.
+const Auth             = lazy(() => import("./Auth"));
+const StudentDashboard = lazy(() => import("./dashboards/StudentDashboard"));
+const TeacherDashboard = lazy(() => import("./dashboards/TeacherDashboard"));
+const ParentDashboard  = lazy(() => import("./dashboards/ParentDashboard"));
 
 async function fetchUserProfile(userId) {
   // Bu okuma sessizce basarisiz olursa rol "student"a duser ve ogretmen
@@ -88,25 +98,17 @@ export default function App() {
     setSifreDegistir(false);
   };
 
-  if (loading) return (
-    <div style={{
-      minHeight: "100vh", background: "#f7f4ef",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{
-          width: 44, height: 44, borderRadius: 12,
-          background: "#0F6E56", display: "flex", alignItems: "center",
-          justifyContent: "center", fontWeight: 700, fontSize: 22,
-          color: "#fff", margin: "0 auto 14px",
-        }}>K</div>
-        <div style={{ fontSize: 14, color: "#aaa" }}>Yükleniyor...</div>
-      </div>
-    </div>
-  );
+  if (loading) return <YuklemeEkrani />;
 
-  if (!user) return <Auth onLogin={handleLogin} />;
+  // Suspense yedeği oturum beklerkenki ekranın AYNISI: parça inerken
+  // ekranın değişmesi "bir şey ters gitti" izlenimi verirdi.
+  if (!user) return (
+    <ParcaSinir>
+      <Suspense fallback={<YuklemeEkrani />}>
+        <Auth onLogin={handleLogin} />
+      </Suspense>
+    </ParcaSinir>
+  );
 
   // Onay kapısı: yönetici onaylayana kadar panel açılmıyor. Reddedilen de
   // aynı yerde duruyor ama farklı mesajla — hesabın ne durumda olduğunu
@@ -163,12 +165,49 @@ export default function App() {
       <TercihSaglayici userId={user.id} rol={role}>
         <TopBar role={role} userName={userName} userId={user.id} onLogout={handleLogout} />
         <TopicsProvider userId={user.id}>
-          {role === "student" && <StudentDashboard userId={user.id} userName={userName} />}
-          {/* Admin öğretmenin üst kümesi: aynı paneli görür */}
-          {(role === "teacher" || role === "admin") && <TeacherDashboard userId={user.id} userName={userName} role={role} />}
-          {role === "parent"  && <ParentDashboard  userId={user.id} userName={userName} />}
+          {/* Yedek yalnız panel parçası inerken görünüyor; üst bar
+              zaten çizilmiş durumda, o yüzden tam ekran değil. */}
+          <ParcaSinir>
+            <Suspense fallback={<PanelYedegi />}>
+              {role === "student" && <StudentDashboard userId={user.id} userName={userName} />}
+              {/* Admin öğretmenin üst kümesi: aynı paneli görür */}
+              {(role === "teacher" || role === "admin") && <TeacherDashboard userId={user.id} userName={userName} role={role} />}
+              {role === "parent"  && <ParentDashboard  userId={user.id} userName={userName} />}
+            </Suspense>
+          </ParcaSinir>
         </TopicsProvider>
       </TercihSaglayici>
     </div>
+  );
+}
+
+// Oturum beklenirken ve tembel parçalar inerken aynı ekran.
+function YuklemeEkrani() {
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#f7f4ef",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
+    }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: 12,
+          background: "#0F6E56", display: "flex", alignItems: "center",
+          justifyContent: "center", fontWeight: 700, fontSize: 22,
+          color: "#fff", margin: "0 auto 14px",
+        }}>K</div>
+        <div style={{ fontSize: 14, color: "#aaa" }}>Yükleniyor...</div>
+      </div>
+    </div>
+  );
+}
+
+function PanelYedegi() {
+  return (
+    <div style={{
+      padding: "60px 20px", textAlign: "center",
+      fontSize: 14, color: "#aaa",
+      fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
+    }}>Yükleniyor...</div>
   );
 }

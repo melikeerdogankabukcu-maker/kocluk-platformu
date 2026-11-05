@@ -125,20 +125,32 @@ Dördü de ele alındı. Kayıt olarak duruyor; yeni bir iş değil.
 
 ---
 
-## E.2 Paket bölme (5 Kasım 2026'da listeye alındı)
+## E.2 Paket bölme — ✅ 5 Kasım 2026
 
-Ana paket **971 KB** (gzip ~280 KB). Ağır olanlar (pdfjs, tesseract)
-zaten geç yükleniyor; kalan, uygulamanın kendisi.
+**İlk açılışta inen JavaScript: ~280 KB → ~117 KB gzip (%58 azalma).**
 
-Neden önemli: zayıf mobil bağlantıda transferin yarıda kesilme
-ihtimalini doğrudan artırıyor — 5 Kasım'da iki öğrencide görülen
-"Safari sayfayı açamıyor" hatasının zeminini bu hazırlıyor. Servis
-çalışanı artık ikinci açılışı kurtarıyor ama **ilk açılış** hâlâ bu
-tek büyük dosyaya bağlı.
+Üç panel ve giriş ekranı ayrı parçalara alındı (`React.lazy`). Bir
+kullanıcı zaten yalnız birini açıyor; üçü tek dosyadayken öğrenci koç
+panelini de indiriyordu.
 
-Yapılacak: rotaya göre bölme (koç paneli / öğrenci paneli / veli
-paneli ayrı parçalar) ve yalnız açıldığında gereken bileşenlerin
-tembel yüklenmesi. Ölçüt: ilk açılışta inen JavaScript.
+| | önce | sonra |
+|---|---|---|
+| giriş ekranı açılana kadar | ~280 KB | **117 KB** |
+| öğrenci panelinin tamamı | ~280 KB | 117 + 131 KB (aşamalı) |
+
+Önemli olan ilk sütun: "sayfa hiç açılmıyor" arızası orada yaşanıyordu.
+Panel parçaları uygulama ekrana geldikten sonra iniyor.
+
+**Tembel yükleme yeni bir kırılma noktası açtı** ve kapatıldı: parça
+inemezse React çöküp beyaz ekran bırakıyordu. `ParcaSinir` hata sınırı
+"Bu bölüm yüklenemedi / Tekrar dene" gösteriyor; yenileme değil, yalnız
+durumu sıfırlayıp parçayı yeniden istiyor.
+
+**Daha fazlası YAPILMADI, gerekçesiyle:** kalan en büyük parça (57 KB
+gzip) hazır çalışma programlarının verisi. `atamaProgrami()` takvimi
+çizerken onu eşzamanlı istiyor; ayırmak bu zinciri asenkrona çevirmeyi
+gerektiriyor. Maliyeti, uygulama zaten ekrana geldikten sonraki bir
+kazanç için fazla.
 
 ---
 
