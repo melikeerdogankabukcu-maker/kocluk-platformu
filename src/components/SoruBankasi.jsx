@@ -143,6 +143,7 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
     const { hata } = await calistir(
       supabase.from("soru_bankalari").update({
         hak_durumu: duzenlenen.hak_durumu ?? "deneme",
+        kuruma_acik: !!duzenlenen.kuruma_acik,
         ad:         duzenlenen.ad.trim(),
         yayinevi:   duzenlenen.yayinevi?.trim() || null,
         sinav_turu: duzenlenen.sinav_turu || null,
@@ -496,6 +497,19 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                         <input value={duzenlenen.yayinevi} placeholder="Yayınevi"
                           onChange={e => setDuzenlenen(d => ({ ...d, yayinevi: e.target.value }))}
                           style={girdiStil} />
+                        {/* Kurum içi paylaşım SEÇMELİ. Bu migration'dan
+                            ÖNCE açılmış kitaplar açık geldi; yeni
+                            açılanlar kapalı başlıyor. */}
+                        <label style={{
+                          display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                          fontSize: YAZI.mikro, color: RENK.metinIkincil, lineHeight: 1.5,
+                        }}>
+                          <input type="checkbox" checked={!!duzenlenen.kuruma_acik}
+                            onChange={e => setDuzenlenen(d => ({ ...d, kuruma_acik: e.target.checked }))}
+                            style={{ width: 16, height: 16, flexShrink: 0, cursor: "pointer" }} />
+                          <span>Kurumumdaki diğer koçlar da görebilsin</span>
+                        </label>
+
                         <label style={{ fontSize: YAZI.mikro, color: RENK.metinIkincil }}>
                           <div style={{ marginBottom: 3 }}>Soruların durumu</div>
                           <select value={duzenlenen.hak_durumu ?? "deneme"}
@@ -576,6 +590,7 @@ export default function SoruBankasi({ userId, students = [], color: c, rol = "te
                         // Mevcut durum forma taşınmazsa düzenleme her
                         // seferinde kitabı sessizce 'deneme'ye çevirirdi.
                         hak_durumu: b.hak_durumu ?? "deneme",
+                        kuruma_acik: !!b.kuruma_acik,
                       })} style={{
                         alignSelf: "flex-start", background: "none", border: "none", padding: 0,
                         color: c.mid, fontSize: YAZI.kucuk, fontWeight: 600, cursor: "pointer",

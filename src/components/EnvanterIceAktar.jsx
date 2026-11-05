@@ -22,6 +22,7 @@ export default function EnvanterIceAktar({ userId, color: c, onKapat, onEklendi 
   const [ad, setAd] = useState("");
   const [aciklama, setAciklama] = useState("");
   const [metin, setMetin] = useState("");
+  const [kurumaAcik, setKurumaAcik] = useState(false);
   const [islemde, setIslemde] = useState(false);
   const [hata, setHata] = useState(null);
 
@@ -56,6 +57,7 @@ export default function EnvanterIceAktar({ userId, color: c, onKapat, onEklendi 
         ad: ad.trim(),
         aciklama: aciklama.trim() || null,
         tanim: { sorular: cozum.sorular, boyutlar: cozum.boyutlar },
+        kuruma_acik: kurumaAcik,
       }),
       "Envanter ekleme"
     );
@@ -161,6 +163,20 @@ export default function EnvanterIceAktar({ userId, color: c, onKapat, onEklendi 
           {cozum.uyarilar.map((u, i) => <div key={i}>• {u}</div>)}
         </div>
       )}
+
+
+      {/* Kurum içi paylaşım SEÇMELİ: işaretlenmedikçe yalnız siz
+          görüyorsunuz. Kendiliğinden paylaşmak, koçun kişisel
+          notlarını meslektaşlarına açmak olurdu. */}
+      <label style={{
+        display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+        fontSize: YAZI.mikro, color: RENK.metinIkincil, lineHeight: 1.5,
+      }}>
+        <input type="checkbox" checked={kurumaAcik}
+          onChange={e => setKurumaAcik(e.target.checked)}
+          style={{ width: 16, height: 16, flexShrink: 0, cursor: "pointer" }} />
+        <span>Kurumumdaki diğer koçlar da görebilsin</span>
+      </label>
 
       {(engel || hata) && (
         <div style={{

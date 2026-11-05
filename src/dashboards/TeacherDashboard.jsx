@@ -25,6 +25,8 @@ import Mesajlar from "../components/Mesajlar";
 import DenetimKaydi from "../components/DenetimKaydi";
 import RolYonetimi from "../components/RolYonetimi";
 import KurumYonetimi from "../components/KurumYonetimi";
+import KurumPaneli from "../components/KurumPaneli";
+import useKurumRolu from "../hooks/useKurumRolu";
 import { useGruplar } from "../hooks/useGruplar";
 import ProgramDuzenleyici from "../components/ProgramDuzenleyici";
 import { useAnalizCache } from "../hooks/useAnaliz";
@@ -106,6 +108,10 @@ export default function TeacherDashboard({ userId, userName, role }) {
   // kendi panelinde görüyordu; koçun listesinde baş harfler kalıyordu.
   // Veritabanı izni baştan vardı, eksik olan bu okumaydı.
   const ogrenciAvatarlari = useAvatarlar(students.map(s => s.id));
+
+  // Kurum paneli YALNIZ kurum yöneticisinde. Kararı panel verseydi
+  // sekme listede durup boş açılırdı (Testler sekmesindeki hata).
+  const { yonetici: kurumYoneticisi } = useKurumRolu(userId);
   // Program Kütüphanesi'nden plana aktarım olunca plan panosu yeniden okusun
   const [planSurumu, setPlanSurumu] = useState(0);
   // Öğrenci başına TÜM zamanların plan blokları: satırdaki ilerleme çubuğu,
@@ -1274,6 +1280,8 @@ export default function TeacherDashboard({ userId, userName, role }) {
             dört sekmeli bir kart olarak çıkıyor. */}
         <Bolum baslik="Profil ve Yönetim" color={c} sekmeler={[
           { ad: "Profilim", icerik: <OgretmenProfili userId={userId} color={c} /> },
+          { ad: "Kurumum", id: "bolum-kurum",
+            icerik: kurumYoneticisi ? <KurumPaneli color={c} /> : null },
           { ad: "Kurumlar", icerik: role === "admin" ? <KurumYonetimi color={c} /> : null },
           { ad: "Kullanıcılar", id: "bolum-rol",
             icerik: role === "admin" ? <RolYonetimi userId={userId} color={c} /> : null },

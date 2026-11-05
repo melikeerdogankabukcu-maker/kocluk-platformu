@@ -74,6 +74,7 @@ export default function OkumaYonetimi({ userId, students = [], color: c, baslik 
         sahip_id: userId, ad,
         yazar: form.yazar.trim() || null,
         toplam_sayfa: form.toplam_sayfa ? Number(form.toplam_sayfa) : null,
+        kuruma_acik: !!form.kuruma_acik,
       }).select("id").single(),
       "Kitap ekleme"
     );
@@ -162,7 +163,7 @@ export default function OkumaYonetimi({ userId, students = [], color: c, baslik 
           {kitaplar.length} kitap · {atamalar.filter(a => a.durum === "devam").length} devam eden
         </span>
         {!form && (
-          <button onClick={() => setForm({ ad: "", yazar: "", toplam_sayfa: "", dosya: null })} style={{
+          <button onClick={() => setForm({ ad: "", yazar: "", toplam_sayfa: "", dosya: null, kuruma_acik: false })} style={{
             flexShrink: 0, padding: "6px 14px", borderRadius: KOSE.tam, border: "none",
             background: c.bg, color: "#fff", fontSize: YAZI.mikro, fontWeight: 700, cursor: "pointer",
           }}>+ Kitap ekle</button>
@@ -189,6 +190,17 @@ export default function OkumaYonetimi({ userId, students = [], color: c, baslik 
             <input type="file" accept="image/jpeg,image/png,image/webp" style={{ ...girdi, padding: 7 }}
               onChange={e => setForm(f => ({ ...f, dosya: e.target.files?.[0] ?? null }))} />
           </label>
+          {/* Kurum içi paylaşım SEÇMELİ. */}
+          <label style={{
+            display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+            fontSize: YAZI.mikro, color: RENK.metinIkincil, lineHeight: 1.5,
+          }}>
+            <input type="checkbox" checked={!!form.kuruma_acik}
+              onChange={e => setForm(f => ({ ...f, kuruma_acik: e.target.checked }))}
+              style={{ width: 16, height: 16, flexShrink: 0, cursor: "pointer" }} />
+            <span>Kurumumdaki diğer koçlar da görebilsin</span>
+          </label>
+
           <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, lineHeight: 1.5 }}>
             Sayfa sayısı girilirse öğrenci ilerlemesini sayfa sayarak
             bildiriyor ve günlük hedefi görüyor; girilmezse yalnız
