@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
+import { imzaliUrl } from "../lib/depo";
+import { gorseliKucult } from "../lib/gorselKucult";
+import { dosyaGecerli } from "../lib/soruSayfasi";
 import { RENK, BOSLUK, KOSE, YAZI } from "../lib/tasarim";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
@@ -26,10 +29,10 @@ export default function KurumPaneli({ color: c, kurum, baslik }) {
     return <KurumUyeGorunumu color={c} kurum={kurum}
       baslik={baslik ?? "Kurumum"} />;
   }
-  return <KurumYoneticiPaneli color={c} baslik={baslik ?? "Kurum Yönetimi"} />;
+  return <KurumYoneticiPaneli color={c} kurum={kurum} baslik={baslik ?? "Kurum Yönetimi"} />;
 }
 
-function KurumYoneticiPaneli({ color: c, baslik }) {
+function KurumYoneticiPaneli({ color: c, baslik, kurum }) {
   const [koclar, setKoclar] = useState([]);
   const [ogrenciler, setOgrenciler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -115,6 +118,8 @@ function KurumYoneticiPaneli({ color: c, baslik }) {
           <div style={{ fontSize: YAZI.ikincil, color: RENK.metinIkincil, marginBottom: BOSLUK.m }}>
             {koclar.length} koç · {ogrenciler.length} öğrenci
           </div>
+
+          <KurumLogosu kurumId={kurum?.kurumId} kurumAdi={kurum?.kurumAdi} color={c} />
 
           {/* Koç ekleme */}
           <div style={{ display: "flex", gap: BOSLUK.s, marginBottom: 6 }}>
@@ -335,5 +340,124 @@ function KurumUyeGorunumu({ color: c, kurum, baslik }) {
         ve onların verileri kurumla paylaşılmıyor.
       </div>
     </Card>
+  );
+}
+
+// Kurum logosu — yükleme ve kaldırma.
+//
+// Logo üst barda kurumun koçlarına, onların öğrencilerine ve
+// velilerine görünüyor. Kurum rengi BİLEREK yok: kişiselleştirme yeni
+// eklendi ve kurum rengi kullanıcının seçtiği paleti sessizce geri
+// almış olurdu.
+function KurumLogosu({ kurumId, kurumAdi, color: c }) {
+  const [adres, setAdres] = useState(null);
+  const [yol, setYol] = useState(null);
+  const [islemde, setIslemde] = useState(false);
+  const [hata, setHata] = useState(null);
+
+  const yukle = useCallback(async () => {
+    if (!kurumId) return;
+    const { veri } = await calistir(
+      supabase.from("kurumlar").select("logo_url").eq("id", kurumId).maybeSingle(),
+      "Kurum logosu", { sessiz: true });
+    const l = veri?.logo_url ?? null;
+    setYol(l);
+    setAdres(l ? await imzaliUrl(l) : null);
+  }, [kurumId]);
+
+  useEffect(() => { yukle(); }, [yukle]);
+
+  const sec = async (dosya) => {
+    if (!dosya) return;
+    const dosyaHatasi = dosyaGecerli(dosya);
+    if (dosyaHatasi) { setHata(dosyaHatasi); return; }
+    setIslemde(true);
+    setHata(null);
+
+    // Logo küçük bir karede duruyor; 256 piksel fazlasıyla yetiyor.
+    const kucuk = await gorseliKucult(dosya, { enBuyuk: 256, esik: 0 });
+    // Zaman damgası: sabit ad kullanılsaydı yeni logo yüklendiğinde
+    // tarayıcı eskisini önbellekten göstermeye devam ederdi.
+    const uzanti = (kucuk.name.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? ".jpg").toLowerCase();
+    const yeniYol = `kurum/${kurumId}/logo-${Date.now()}${uzanti}`;
+
+    const { error } = await supabase.storage
+      .from("homework").upload(yeniYol, kucuk, { upsert: true, contentType: kucuk.type });
+    if (error) {
+      setIslemde(false);
+      setHata("Logo yüklenemedi: " + error.message);
+      return;
+    }
+    const { hata: h } = await calistir(
+      supabase.from("kurumlar").update({ logo_url: yeniYol }).eq("id", kurumId),
+      "Logo adresi");
+    if (!h && yol) {
+      // Eski dosya artık hiçbir yerden gösterilmiyor.
+      await calistir(supabase.storage.from("homework").remove([yol]),
+        "Eski logoyu silme", { sessiz: true });
+    }
+    setIslemde(false);
+    if (h) { setHata("Logo kaydedilemedi."); return; }
+    await yukle();
+  };
+
+  const kaldir = async () => {
+    if (!confirm("Kurum logosu kaldırılsın mı? Üst barda platform markası görünür.")) return;
+    setIslemde(true);
+    const { hata: h } = await calistir(
+      supabase.from("kurumlar").update({ logo_url: null }).eq("id", kurumId), "Logo kaldirma");
+    if (!h && yol) {
+      await calistir(supabase.storage.from("homework").remove([yol]),
+        "Logoyu silme", { sessiz: true });
+    }
+    setIslemde(false);
+    await yukle();
+  };
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: BOSLUK.s,
+      padding: BOSLUK.m, borderRadius: KOSE.m, border: `1px solid ${RENK.cizgi}`,
+      marginBottom: BOSLUK.m,
+    }}>
+      <div style={{
+        width: 48, height: 48, borderRadius: KOSE.s, flexShrink: 0, overflow: "hidden",
+        background: RENK.yuzey, display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        {adres
+          ? <img src={adres} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+          : <span style={{ fontSize: 18 }}>🏫</span>}
+      </div>
+
+      <div style={{ flex: "1 1 160px", minWidth: 160 }}>
+        <div style={{ fontSize: YAZI.ikincil, fontWeight: 600, color: RENK.metin }}>
+          {kurumAdi ?? "Kurum"} logosu
+        </div>
+        <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, lineHeight: 1.5 }}>
+          Üst barda kurumunuzun koçlarına, öğrencilerine ve velilerine
+          görünür. Renk kişisel seçim olarak kalıyor.
+        </div>
+        {hata && (
+          <div style={{ fontSize: 11.5, color: RENK.hata.metin, marginTop: 4 }}>{hata}</div>
+        )}
+      </div>
+
+      <label style={{
+        flexShrink: 0, padding: "6px 13px", borderRadius: KOSE.tam, cursor: "pointer",
+        border: `1.5px solid ${c.mid}`, background: "#fff", color: c.text,
+        fontSize: YAZI.mikro, fontWeight: 600,
+      }}>
+        {islemde ? "..." : adres ? "Değiştir" : "Logo yükle"}
+        <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }}
+          disabled={islemde}
+          onChange={e => { const d = e.target.files?.[0]; e.target.value = ""; sec(d); }} />
+      </label>
+      {adres && (
+        <button onClick={kaldir} disabled={islemde} style={{
+          flexShrink: 0, background: "none", border: "none", cursor: "pointer",
+          color: RENK.hata.metin, fontSize: YAZI.mikro,
+        }}>kaldır</button>
+      )}
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import { avatarSimgesi } from "../lib/avatarlar";
 import { useDarEkran } from "../lib/ekran";
 import BildirimZili from "./BildirimZili";
 import Gorunum from "./Gorunum";
+import useMarka from "../hooks/useMarka";
 
 // Üst bar.
 //
@@ -24,6 +25,9 @@ export default function TopBar({ role, userName, userId, onLogout }) {
   const [gorunum, setGorunum] = useState(false);
   const simge = avatarSimgesi(tercih.avatar);
   const dar = useDarEkran(560);
+  // Kurum markası: koçun, öğrencisinin ve velisinin gördüğü logo ve ad.
+  // Yoksa platformun kendi markası kalıyor.
+  const marka = useMarka(userId);
 
   // Dar ekranda yalnızca ilk ad: tam ad rozeti tek başına barın yarısını
   // yiyor ve asıl işlevsel öğeleri dışarı itiyordu.
@@ -37,15 +41,28 @@ export default function TopBar({ role, userName, userId, onLogout }) {
       gap: 8,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 0 }}>
+        {/* Kurum logosu varsa o, yoksa platformun "K" karesi. Logo
+            beyaz zemine oturuyor: kurum logoları çoğunlukla renkli ve
+            saydam değil; bar renginin üstünde doğrudan dursa
+            okunmuyordu. */}
         <div style={{
-          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-          background: "rgba(255,255,255,0.22)",
+          width: 28, height: 28, borderRadius: 8, flexShrink: 0, overflow: "hidden",
+          background: marka?.logo ? "#fff" : "rgba(255,255,255,0.22)",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontWeight: 700, fontSize: 14, color: "#fff",
-        }}>K</div>
+        }}>
+          {marka?.logo
+            ? <img src={marka.logo} alt="" style={{
+                width: "100%", height: "100%", objectFit: "contain", display: "block",
+              }} />
+            : "K"}
+        </div>
         {!dar && (
-          <span style={{ color: "#fff", fontWeight: 600, fontSize: 15, letterSpacing: "-0.3px" }}>
-            Koçluk Platformu
+          <span style={{
+            color: "#fff", fontWeight: 600, fontSize: 15, letterSpacing: "-0.3px",
+            maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {marka?.ad ?? "Koçluk Platformu"}
           </span>
         )}
       </div>

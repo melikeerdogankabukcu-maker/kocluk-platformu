@@ -149,5 +149,21 @@ yollarının kopması; sınama bunu ayrıca denetliyor.
 2. `kurum_icerik_migration.sql` — `kuruma_acik` ve politikalar
 3. Arayüz: `KurumPaneli` (koç listesi, ekleme, devir, rapor) +
    envanter/kitap/banka formlarına "kuruma açık" anahtarı
-4. (sonra) kurum markası — ad ve logo; satış için cazip, işlevsel
-   değil
+4. ✅ Kurum markası (`kurum_marka_migration.sql`) — üst barda kurum
+   logosu ve adı.
+
+   **Kim görüyor:** kurumun koçları, onların öğrencileri ve velileri.
+   Satış değeri burada: dershane velisine kendi markasını gösteriyor.
+   Öğrencide kurum doğrudan yazılı olmadığı için "koçumun kurumu"
+   sunucuda çözülüyor (`marka_kurumum`).
+
+   **Anahtar logonun varlığı, kurum türü değil.** Tek kişilik bireysel
+   kurumda da görünüyor: kendi markasıyla çalışan bir koç için doğru
+   davranış. Logo yoksa platformun markası kalıyor.
+
+   **Renk BİLEREK yok.** Kişiselleştirme (palet seçimi) yeni eklendi;
+   kurum rengi kullanıcının seçimini sessizce geri almış olurdu. Karar
+   kullanıcının: "yalnız logo".
+
+   Öğrenci `kurumlar` tablosunu hâlâ okuyamıyor — yalnız marka için
+   gereken üç alan RPC'den dönüyor, kurum kaydının tamamı açılmıyor.
