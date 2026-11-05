@@ -382,12 +382,20 @@ BEGIN
 
     -- h) devir: ogrenci uyeye gecsin
     PERFORM ogrenci_devret(ogr, mudur, uye);
+
+    -- Dogrulama SAHIP olarak: teacher_students politikasi yalniz
+    -- TARAFLARI geciriyor ve devirden sonra satirin taraflari uye ile
+    -- ogrenci. Mudur rolunde bakilsa satir gorunmez ve devir olmamis
+    -- gibi okunurdu -- oysa olmustur.
+    RESET ROLE;
     SELECT count(*) INTO sayi FROM teacher_students
      WHERE teacher_id = uye AND student_id = ogr AND durum = 'onaylandi';
     IF sayi <> 1 THEN RAISE EXCEPTION 'SINAMA h: devir olmadi'; END IF;
     SELECT count(*) INTO sayi FROM teacher_students
      WHERE teacher_id = mudur AND student_id = ogr;
     IF sayi <> 0 THEN RAISE EXCEPTION 'SINAMA h2: eski bag duruyor'; END IF;
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
     gecen := gecen + 1;
 
     -- i) ogrencisi olan koc cikarilamiyor
@@ -403,8 +411,11 @@ BEGIN
 
     -- j) artik ogrencisi yok, cikarilabiliyor
     PERFORM kurumdan_koc_cikar(uye);
+    RESET ROLE;
     SELECT count(*) INTO sayi FROM users WHERE id = uye AND kurum_id = kurum;
     IF sayi <> 0 THEN RAISE EXCEPTION 'SINAMA j: koc cikarilmadi'; END IF;
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
     gecen := gecen + 1;
   END IF;
 
