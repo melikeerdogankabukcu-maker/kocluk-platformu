@@ -294,6 +294,7 @@ DECLARE
   mudur UUID; uye UUID; ogr UUID; kurum UUID;
   sayi INTEGER; red BOOLEAN; r RECORD; gecen INTEGER := 0;
   eski_kurum_m UUID; eski_rol_m TEXT; eski_kurum_u UUID; ogr_eposta TEXT;
+  uye_kendi_ogrencisi INTEGER := 0;
   yonetici UUID;
 BEGIN
   SELECT teacher_id, student_id INTO mudur, ogr
@@ -302,8 +303,23 @@ BEGIN
     INSERT INTO _sinama_sonucu VALUES ('ATLANDI - onayli koc-ogrenci cifti yok');
     RETURN;
   END IF;
+  -- İkinci koç tercihen ÖĞRENCİSİ OLMAYAN biri: "devrettikten sonra
+  -- çıkarılabiliyor" sınaması ancak o zaman anlamlı. Yoksa koçun kendi
+  -- öğrencileri yüzünden çıkarma haklı olarak reddediliyor ve sınama
+  -- fonksiyonu değil kendi varsayımını ölçmüş oluyor.
   SELECT u.id INTO uye FROM users u
-   WHERE u.role IN ('teacher','admin') AND u.id <> mudur LIMIT 1;
+   WHERE u.role IN ('teacher','admin') AND u.id <> mudur
+     AND NOT EXISTS (SELECT 1 FROM teacher_students ts
+                      WHERE ts.teacher_id = u.id AND ts.durum = 'onaylandi')
+   LIMIT 1;
+  IF uye IS NULL THEN
+    SELECT u.id INTO uye FROM users u
+     WHERE u.role IN ('teacher','admin') AND u.id <> mudur LIMIT 1;
+  END IF;
+  IF uye IS NOT NULL THEN
+    SELECT count(*) INTO uye_kendi_ogrencisi FROM teacher_students ts
+     WHERE ts.teacher_id = uye AND ts.durum = 'onaylandi';
+  END IF;
 
   -- Kurulum PLATFORM YÖNETİCİSİ kimliğiyle yapılıyor. users_rol_koru
   -- tablo sahibine de işliyor ve SQL Editor'da auth.uid() boş; düz
@@ -410,13 +426,17 @@ BEGIN
     gecen := gecen + 1;
 
     -- j) artik ogrencisi yok, cikarilabiliyor
-    PERFORM kurumdan_koc_cikar(uye);
-    RESET ROLE;
-    SELECT count(*) INTO sayi FROM users WHERE id = uye AND kurum_id = kurum;
-    IF sayi <> 0 THEN RAISE EXCEPTION 'SINAMA j: koc cikarilmadi'; END IF;
-    SET LOCAL ROLE authenticated;
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
-    gecen := gecen + 1;
+    --    Yalniz ikinci kocun BASKA ogrencisi yoksa sinanabiliyor;
+    --    varsa cikarma zaten dogru olarak reddedilir.
+    IF uye_kendi_ogrencisi = 0 THEN
+      PERFORM kurumdan_koc_cikar(uye);
+      RESET ROLE;
+      SELECT count(*) INTO sayi FROM users WHERE id = uye AND kurum_id = kurum;
+      IF sayi <> 0 THEN RAISE EXCEPTION 'SINAMA j: koc cikarilmadi'; END IF;
+      SET LOCAL ROLE authenticated;
+      PERFORM set_config('request.jwt.claims', json_build_object('sub', mudur)::text, true);
+      gecen := gecen + 1;
+    END IF;
   END IF;
 
   -- k) YONETICI OLMAYAN cagiramiyor
