@@ -38,17 +38,27 @@ BEGIN
   IF ben IS NULL THEN RETURN; END IF;
   SELECT u.role INTO rolum FROM users u WHERE u.id = ben;
 
-  -- ÇÖZÜM ROLE GÖRE. İlk sürüm önce `users.kurum_id`e bakıyordu ve
-  -- öğrencinin kendi kurum alanı herhangi bir sebeple doluysa
-  -- koçunun kurumuna HİÇ bakmıyordu. Öğrenci için anlamlı marka her
-  -- zaman koçunun kurumu.
+  -- ── SIRAYLA DENİYOR, DIŞLAYICI DEĞİL ─────────────────────
+  -- İki sürüm bu yüzden düştü:
+  --   1) Önce `users.kurum_id`e bakılıyordu; öğrencinin kendi kurum
+  --      alanı doluysa koçununkine hiç bakılmıyordu.
+  --   2) Sonra role göre DIŞLAYICI dallara ayrıldı; aynı kişi hem koç
+  --      hem veli olabildiği için veli, "öğretmen" dalına düşüp orada
+  --      kalıyordu.
+  --
+  -- Gerçek kural tek bir rol değil: kişinin kuruma BAĞLANMA YOLU.
+  -- Üç yol sırayla deneniyor, ilk dolu olan kazanıyor.
+
+  -- 1) Personelsem kendi kurumum
   IF rolum IN ('teacher', 'admin') THEN
     SELECT u.kurum_id INTO k FROM users u WHERE u.id = ben;
+  END IF;
 
-  ELSIF rolum = 'student' THEN
-    -- Birden fazla koç olabiliyor; LOGOSU OLAN kurum tercih ediliyor,
-    -- eşitlikte en eski bağ. Sıra belirsiz bırakılsaydı aynı öğrenci
-    -- her açılışta başka marka görebilirdi.
+  -- 2) Birinin öğrencisiysem koçumun kurumu.
+  --    Birden fazla koç olabiliyor; LOGOSU OLAN kurum tercih ediliyor,
+  --    eşitlikte en eski bağ. Sıra belirsiz bırakılsaydı aynı öğrenci
+  --    her açılışta başka marka görebilirdi.
+  IF k IS NULL THEN
     SELECT koc.kurum_id INTO k
       FROM teacher_students ts
       JOIN users koc ON koc.id = ts.teacher_id
@@ -57,8 +67,10 @@ BEGIN
        AND koc.kurum_id IS NOT NULL
      ORDER BY (kr.logo_url IS NULL), ts.created_at
      LIMIT 1;
+  END IF;
 
-  ELSIF rolum = 'parent' THEN
+  -- 3) Birinin velisiysem çocuğumun koçunun kurumu
+  IF k IS NULL THEN
     SELECT koc.kurum_id INTO k
       FROM family_links fl
       JOIN teacher_students ts ON ts.student_id = fl.student_id AND ts.durum = 'onaylandi'
@@ -273,7 +285,11 @@ BEGIN
     PERFORM set_config('request.jwt.claims', json_build_object('sub', veli)::text, true);
     SELECT * INTO r FROM marka_kurumum();
     IF r.kurum_id IS DISTINCT FROM kurum THEN
-      RAISE EXCEPTION 'SINAMA f: veli cocugunun kurumunu goremedi';
+      RAISE EXCEPTION 'SINAMA f: veli markasi yanlis. donen=% beklenen=% veli_rolu=% veli_kurumu=% cocuk_bagi=%',
+        COALESCE(r.kurum_id::text, 'YOK'), kurum,
+        (SELECT role FROM users WHERE id = veli),
+        COALESCE((SELECT kurum_id::text FROM users WHERE id = veli), 'NULL'),
+        (SELECT count(*) FROM family_links WHERE parent_id = veli);
     END IF;
     gecen := gecen + 1;
   END IF;
