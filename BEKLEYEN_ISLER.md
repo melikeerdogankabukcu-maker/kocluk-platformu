@@ -1,11 +1,35 @@
 # Bekleyen İşler
 
-31 Ekim 2026'da, o güne kadar konuşulan her şeyden çıkarıldı:
-`YOL_HARITASI.md`, `DIJITAL_TEST.md`, `OCR.md`, `PLAY_STORE.md` ve
-oturum notları.
+31 Ekim 2026'da çıkarıldı, **5 Kasım 2026'da güncellendi**. Kaynak:
+`YOL_HARITASI.md`, `DIJITAL_TEST.md`, `KURUM_ALTYAPISI.md`,
+`OKUMA_VE_ENVANTER.md`, `OCR.md`, `PLAY_STORE.md` ve oturum notları.
 
 Sıralama öncelik değil, **ne tarafından engellendiği**. Çünkü bu
 listede tıkanmaların çoğu kod değil: izin, hesap, bütçe ve karar.
+
+---
+
+## ✅ 5 Kasım 2026'da bitenler
+
+Bu listeye bir şey eklemiyorlar, çıkarıyorlar — kayıt için.
+
+**Üç arıza.** Zayıf bağlantıda "Safari sayfayı açamıyor" (servis
+çalışanı artık sayfa isteğini de yakalıyor, önce ağ); açılışta yanlış
+renk sıçraması (tercih cihazda da tutuluyor); "dosya yüklerken
+donuyor" (fotoğraflar yüklemeden önce küçültülüyor + ilerleme yazısı).
+
+**Paket bölme** — ilk açılış 280 → 117 KB gzip. Ayrıntı: E.2.
+
+**Kurumsal altyapı** — kurum yöneticisi paneli (koç/öğrenci listesi,
+e-postayla koç ekleme, çıkarma, öğrenci devri, kurum raporu), üyeye
+salt okuma görünümü, seçmeli içerik paylaşımı (`kuruma_acik`), kurum
+logosu üst barda. Ayrıntı: `KURUM_ALTYAPISI.md`.
+
+**İki yerleşim hatası** — kullanıcı isimlerinin harf harf kırılması,
+sığmayan sekmelerin görünmez olması.
+
+**Müfredat yazım hatası** — AYT Fizik "Savit" → "Sabit"; canlıdaki
+satır da düzeltildi, bağlı kayıtlar yerinde güncellendi.
 
 ---
 
@@ -167,13 +191,27 @@ Bunlar yazılacak kod değil: ya denenmesi ya içerik girilmesi gerekiyor.
   belirgin biçimde işe yarar. Aktarılmış bölümlerde OCR kalıntısı da
   var (tuhaf aralıklar, geriye giden sayfa numaraları).
 - **Dijital testi bitirme + sunucu puanlaması** uçtan uca denenmedi.
+- **Okuma modülü ve envanterler** yazıldı ama uçtan uca denenmedi:
+  kitap atama → öğrencide kapak ve günlük hedef; envanter doldurma →
+  koçta değerlendirme → öğrencide görünmesi.
+- **Kurum logosu** yüklenmedi; Faraday Kurs için denenecek.
 
 ---
 
-## G. Tanımsız iki modül — öneri yazıldı, karar sizde
+## G. Tanımsız iki modül — ✅ İKİSİ DE YAPILDI (31 Ekim – 5 Kasım)
 
-İkisi "kapsamı belirsiz" diye bekliyordu. Aşağıdakiler somut öneri;
-onaylarsanız iş planına girerler, beğenmezseniz başlangıç noktası olur.
+Öneri yazıldı, onaylandı, uygulandı. Ayrıntı `OKUMA_VE_ENVANTER.md`.
+
+- **Kitap okuma modülü** — koç kapak + süre + öğrenci veriyor, sistem
+  kalan günü sayıyor; öğrenci sayfa ilerlemesini bildiriyor. Koç
+  "geride" uyarısı görüyor.
+- **Gelişim envanterleri** — platformun hazır "Çalışma Alışkanlığı
+  Envanteri" (13 soru / 6 boyut, puanlamayan, etiket yapıştırmayan) +
+  koçun kendi envanterini **şablondan yapıştırarak** yüklemesi.
+  Sonucu öğrenci ve koç görüyor; veli yalnız koçun değerlendirmesini.
+
+Aşağıdaki özgün öneri metni, kapsamın neden böyle çizildiğini
+anlatmak için duruyor.
 
 ### G.1 Kitap okuma modülü
 
