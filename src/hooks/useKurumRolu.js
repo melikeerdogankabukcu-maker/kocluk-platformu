@@ -2,7 +2,10 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import { calistir } from "../lib/db";
 
-const BOS = { kurumId: null, yonetici: false, tur: null, uyeSayisi: 0, panelGerekli: false, yuklendi: false };
+const BOS = {
+  kurumId: null, kurumAdi: null, yonetici: false, tur: null,
+  uyeSayisi: 0, yoneticiVar: false, kurumGorunsun: false, yuklendi: false,
+};
 
 // Kişinin kendi kurum bilgisi: kuruma bağlı mı, yöneticisi mi, kurum
 // gerçekten çok kişili mi.
@@ -13,11 +16,19 @@ const BOS = { kurumId: null, yonetici: false, tur: null, uyeSayisi: 0, panelGere
 // tıklanınca boş açılırdı — "Testler" sekmesinde tam olarak bu
 // olmuştu. Sekmeyi EKLEYİP EKLEMEME kararı panelden önce verilmeli.
 //
-// ── TEK ÜYELİ BİREYSEL KURUMDA SEKME YOK ────────────────────────
-// Her koç öğretmen yapıldığında kendi bireysel kurumu açılıyor ve
-// yöneticisi oluyor. Yani kural yalnız "yönetici mi" olsaydı sekme
-// HERKESTE çıkardı ve tek başına çalışan koç, içinde yalnız kendisi
-// olan bir "kurum yönetimi" ekranı görürdü.
+// ── SEKME ÜYEYE DE AÇIK ─────────────────────────────────────────
+// İlk sürümde sekme yalnız YÖNETİCİDE çıkıyordu ve kuruma eklenen
+// koçlar kurumla ilgili hiçbir şey görmüyordu — bağlı oldukları
+// kurumun adını bile. Üstelik kuruma taşınan koçun rolü 'uye'ye
+// sıfırlandığı için, yönetici atanmadığı sürece sekme HİÇ KİMSEDE
+// çıkmıyordu.
+//
+// Artık sekme kurumun bütün üyelerinde var; içerik role göre
+// değişiyor (yönetici yönetiyor, üye görüyor).
+//
+// ── TEK ÜYELİ BİREYSEL KURUMDA YİNE YOK ─────────────────────────
+// Her koç öğretmen yapıldığında kendi bireysel kurumu açılıyor. Tek
+// kişilik bireysel kurumda gösterecek bir şey yok.
 //
 // Okul türü kurumda üye sayısına BAKILMIYOR: bir okul tek koçla
 // başlayabilir ve panel tam da içeri koç almak için gerekiyor.
@@ -43,21 +54,26 @@ export default function useKurumRolu(userId) {
       if (!kurumId) { setDurum({ ...BOS, yuklendi: true }); return; }
 
       const [{ veri: kurum }, { veri: uyeler }] = await Promise.all([
-        calistir(supabase.from("kurumlar").select("tur").eq("id", kurumId).maybeSingle(),
-          "Kurum turu", { sessiz: true }),
-        calistir(supabase.from("users").select("id").eq("kurum_id", kurumId),
-          "Kurum uye sayisi", { sessiz: true }),
+        calistir(supabase.from("kurumlar").select("ad, tur").eq("id", kurumId).maybeSingle(),
+          "Kurum bilgisi", { sessiz: true }),
+        calistir(supabase.from("users").select("id, kurum_rolu").eq("kurum_id", kurumId),
+          "Kurum uyeleri", { sessiz: true }),
       ]);
       if (iptal) return;
 
       const tur = kurum?.tur ?? null;
-      const uyeSayisi = (uyeler ?? []).length;
-      // Tek üyeli BİREYSEL kurum: panelin gösterecek bir şeyi yok.
+      const liste = uyeler ?? [];
+      const uyeSayisi = liste.length;
       const tekKisilikBireysel = tur === "bireysel" && uyeSayisi <= 1;
 
       setDurum({
-        kurumId, yonetici, tur, uyeSayisi,
-        panelGerekli: yonetici && !tekKisilikBireysel,
+        kurumId,
+        kurumAdi: kurum?.ad ?? null,
+        yonetici, tur, uyeSayisi,
+        // Yöneticisiz kurum kilitli; üyenin bunu görmesi gerekiyor ki
+        // sebebini bilsin ve yöneticiye başvursun.
+        yoneticiVar: liste.some(u => u.kurum_rolu === "yonetici"),
+        kurumGorunsun: !tekKisilikBireysel,
         yuklendi: true,
       });
     })();

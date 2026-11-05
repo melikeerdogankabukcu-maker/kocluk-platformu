@@ -18,7 +18,18 @@ import SectionTitle from "./SectionTitle";
 // ── KOÇ E-POSTAYLA EKLENİYOR ────────────────────────────────────
 // E-posta artık istemciye hiç inmiyor, dolayısıyla seçilebilecek bir
 // liste yok: yönetici adresi yazıyor, SUNUCU çözüyor.
-export default function KurumPaneli({ color: c, baslik = "Kurum Yönetimi" }) {
+export default function KurumPaneli({ color: c, kurum, baslik }) {
+  // Üye görünümü ayrı bileşende: yöneticinin RPC'lerini üye zaten
+  // çağıramıyor (kurum_kapisi reddediyor) ve çağırmaya kalkmak her
+  // açılışta iki başarısız istek demek olurdu.
+  if (!kurum?.yonetici) {
+    return <KurumUyeGorunumu color={c} kurum={kurum}
+      baslik={baslik ?? "Kurumum"} />;
+  }
+  return <KurumYoneticiPaneli color={c} baslik={baslik ?? "Kurum Yönetimi"} />;
+}
+
+function KurumYoneticiPaneli({ color: c, baslik }) {
   const [koclar, setKoclar] = useState([]);
   const [ogrenciler, setOgrenciler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -232,6 +243,97 @@ export default function KurumPaneli({ color: c, baslik = "Kurum Yönetimi" }) {
           </div>
         </>
       )}
+    </Card>
+  );
+}
+
+
+// Üyenin gördüğü kurum ekranı.
+//
+// ── NEDEN SADECE OKUMA ──────────────────────────────────────────
+// Koç ekleme, çıkarma ve öğrenci devri kurum yöneticisinin işi; üye
+// o RPC'leri zaten çağıramıyor. Buradaki amaç yönetmek değil
+// GÖRÜNÜRLÜK: koç hangi kuruma bağlı olduğunu, kimlerle aynı kurumda
+// olduğunu ve paylaşılan içeriğin ne anlama geldiğini görmeli.
+//
+// İlk sürümde bu ekran yoktu ve kuruma eklenen koç bağlı olduğu
+// kurumun adını bile göremiyordu.
+function KurumUyeGorunumu({ color: c, kurum, baslik }) {
+  const [meslektaslar, setMeslektaslar] = useState([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+
+  useEffect(() => {
+    let iptal = false;
+    if (!kurum?.kurumId) { setYukleniyor(false); return; }
+    calistir(
+      supabase.from("users")
+        .select("id, full_name, role, kurum_rolu")
+        .eq("kurum_id", kurum.kurumId),
+      "Kurum meslektaslari", { sessiz: true }
+    ).then(({ veri }) => {
+      if (iptal) return;
+      setMeslektaslar((veri ?? []).filter(u => u.role === "teacher" || u.role === "admin"));
+      setYukleniyor(false);
+    });
+    return () => { iptal = true; };
+  }, [kurum?.kurumId]);
+
+  return (
+    <Card id="bolum-kurum">
+      <SectionTitle title={baslik} color={c.mid} />
+
+      <div style={{
+        padding: "11px 13px", borderRadius: KOSE.m, background: c.light,
+        color: c.text, marginBottom: BOSLUK.m,
+      }}>
+        <div style={{ fontSize: YAZI.ikincil, fontWeight: 700 }}>{kurum?.kurumAdi ?? "Kurum"}</div>
+        <div style={{ fontSize: YAZI.mikro, color: c.mid, marginTop: 2 }}>
+          Bu kurumun üyesisiniz
+        </div>
+      </div>
+
+      {!kurum?.yoneticiVar && (
+        <div style={{
+          background: RENK.uyari.zemin, color: RENK.uyari.metin, fontSize: 11.5,
+          padding: "9px 11px", borderRadius: KOSE.s, marginBottom: BOSLUK.m, lineHeight: 1.5,
+        }}>
+          Bu kurumun henüz <b>yöneticisi atanmamış</b>. Yönetici atanana kadar
+          kuruma koç eklenemiyor ve öğrenci devredilemiyor; platform
+          yöneticisinden atama yapmasını isteyin.
+        </div>
+      )}
+
+      <div style={{ fontSize: YAZI.mikro, fontWeight: 700, color: RENK.metinSoluk, marginBottom: 6 }}>
+        KURUMDAKİ KOÇLAR
+      </div>
+      {yukleniyor ? (
+        <div style={{ fontSize: YAZI.ikincil, color: RENK.metinSoluk }}>Yükleniyor...</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {meslektaslar.map(u => (
+            <div key={u.id} style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "6px 2px", borderBottom: `1px solid ${RENK.cizgiSolgun}`,
+              fontSize: YAZI.kucuk, color: RENK.metin,
+            }}>
+              <span style={{ flex: "1 1 140px", minWidth: 140 }}>{u.full_name}</span>
+              {u.kurum_rolu === "yonetici" && (
+                <span style={{
+                  flexShrink: 0, fontSize: 9.5, fontWeight: 700, padding: "2px 7px",
+                  borderRadius: KOSE.tam, background: c.light, color: c.text,
+                }}>yönetici</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontSize: YAZI.mikro, color: RENK.metinSilik, lineHeight: 1.55, marginTop: BOSLUK.m }}>
+        Soru bankası, envanter ve okuma kitaplarınızdan <b>"kurumumdaki diğer
+        koçlar da görebilsin"</b> işaretlediklerinizi buradaki koçlar
+        görüyor. İşaretlemedikleriniz yalnız sizde kalıyor. Öğrencileriniz
+        ve onların verileri kurumla paylaşılmıyor.
+      </div>
     </Card>
   );
 }

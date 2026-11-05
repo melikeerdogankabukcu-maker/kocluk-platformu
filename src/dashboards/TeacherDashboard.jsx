@@ -115,7 +115,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
   // yalnız kendisi olan bir kurum ekranı görürdü. Kararı panel
   // verseydi sekme listede durup boş açılırdı (Testler sekmesindeki
   // hata).
-  const { panelGerekli: kurumYoneticisi } = useKurumRolu(userId);
+  const kurum = useKurumRolu(userId);
   // Program Kütüphanesi'nden plana aktarım olunca plan panosu yeniden okusun
   const [planSurumu, setPlanSurumu] = useState(0);
   // Öğrenci başına TÜM zamanların plan blokları: satırdaki ilerleme çubuğu,
@@ -1285,7 +1285,7 @@ export default function TeacherDashboard({ userId, userName, role }) {
         <Bolum baslik="Profil ve Yönetim" color={c} sekmeler={[
           { ad: "Profilim", icerik: <OgretmenProfili userId={userId} color={c} /> },
           { ad: "Kurumum", id: "bolum-kurum",
-            icerik: kurumYoneticisi ? <KurumPaneli color={c} /> : null },
+            icerik: kurum.kurumGorunsun ? <KurumPaneli color={c} kurum={kurum} /> : null },
           { ad: "Kurumlar", icerik: role === "admin" ? <KurumYonetimi color={c} /> : null },
           { ad: "Kullanıcılar", id: "bolum-rol",
             icerik: role === "admin" ? <RolYonetimi userId={userId} color={c} /> : null },
