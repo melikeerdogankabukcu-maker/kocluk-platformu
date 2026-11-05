@@ -109,9 +109,13 @@ export default function TeacherDashboard({ userId, userName, role }) {
   // Veritabanı izni baştan vardı, eksik olan bu okumaydı.
   const ogrenciAvatarlari = useAvatarlar(students.map(s => s.id));
 
-  // Kurum paneli YALNIZ kurum yöneticisinde. Kararı panel verseydi
-  // sekme listede durup boş açılırdı (Testler sekmesindeki hata).
-  const { yonetici: kurumYoneticisi } = useKurumRolu(userId);
+  // Kurum paneli yalnız ÇOK KİŞİLİ bir kurumun yöneticisinde. Her koç
+  // kendi bireysel kurumunun yöneticisi olduğu için yalnız "yönetici
+  // mi" sorulsaydı sekme herkeste çıkar, tek başına çalışan koç içinde
+  // yalnız kendisi olan bir kurum ekranı görürdü. Kararı panel
+  // verseydi sekme listede durup boş açılırdı (Testler sekmesindeki
+  // hata).
+  const { panelGerekli: kurumYoneticisi } = useKurumRolu(userId);
   // Program Kütüphanesi'nden plana aktarım olunca plan panosu yeniden okusun
   const [planSurumu, setPlanSurumu] = useState(0);
   // Öğrenci başına TÜM zamanların plan blokları: satırdaki ilerleme çubuğu,
