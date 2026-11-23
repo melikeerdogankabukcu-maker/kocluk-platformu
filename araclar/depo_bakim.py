@@ -88,6 +88,12 @@ KALITE = 80
 VARSAYILAN_SINIR = 400 * 1024
 
 GORSEL_UZANTI = (".jpg", ".jpeg", ".png", ".webp")
+# Küçültülmeyecekleri saymak, görselleri saymaktan güvenilir çıktı:
+# uygulama bir dönem dosyaları uzantısız yüklemiş (23 MB'ı uzantısız
+# fotoğraf). Uzantıya bakıp "görsel değil" demek onları atlıyordu.
+# Pillow açamadığı dosyayı zaten atlıyor, bu yüzden karar ona bırakıldı.
+GORSEL_OLMAYAN_UZANTI = (".pdf", ".doc", ".docx", ".xls", ".xlsx",
+                         ".zip", ".rar", ".txt", ".csv", ".mp4", ".mp3")
 
 # Dosya adresi tutan her yer. Biri unutulursa o dosyalar "sahipsiz"
 # görünür ve SİLİNİR — bu yüzden liste şemayla birlikte güncellenmeli.
@@ -406,7 +412,7 @@ def main():
         d for d in dosyalar
         if d["yol"] in kullanilan
         and d["boyut"] > a.sinir
-        and d["yol"].lower().endswith(GORSEL_UZANTI)
+        and not d["yol"].lower().endswith(GORSEL_OLMAYAN_UZANTI)
     ]
 
     # Saklama süresi: yaşı geçmiş ve kalıcı olmayan dosyalar.
