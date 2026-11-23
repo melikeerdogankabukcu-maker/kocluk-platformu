@@ -3,6 +3,7 @@ import { supabase } from "./supabase";
 import { calistir } from "./lib/db";
 import TopBar from "./components/TopBar";
 import ParcaSinir from "./components/ParcaSinir";
+import AnaEkranaEkle from "./components/AnaEkranaEkle";
 import SifreBelirle from "./components/SifreBelirle";
 import { servisiUyandir } from "./hooks/useAnaliz";
 import { TopicsProvider } from "./lib/TopicsContext";
@@ -164,6 +165,13 @@ export default function App() {
           renkte kalır. */}
       <TercihSaglayici userId={user.id} rol={role}>
         <TopBar role={role} userName={userName} userId={user.id} onLogout={handleLogout} />
+        {/* iPhone'da ana ekrana ekleme yönlendirmesi: iOS, siteye 7 gün
+            girilmezse servis çalışanını ve önbelleğini siliyor, yani
+            "ağ koptuğunda uygulamayı önbellekten ver" düzeltmesi çoğu
+            zaman devreye giremiyor. Ana ekrana eklenince o veri
+            kalıcı oluyor. Yalnız iOS Safari'de ve zaten kurulu
+            değilse çıkıyor. */}
+        <AnaEkranaEkle />
         <TopicsProvider userId={user.id}>
           {/* Yedek yalnız panel parçası inerken görünüyor; üst bar
               zaten çizilmiş durumda, o yüzden tam ekran değil. */}
