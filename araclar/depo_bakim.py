@@ -6,6 +6,8 @@
 Seçenekler
     --sadece-sahipsiz   yalnız sahipsiz dosyaları sil, küçültme yapma
     --sadece-kucult     yalnız küçült, silme yapma
+    --eski-sil GUN      GUN günden eski ödev/test/mesaj fotoğraflarını sil
+                        ve kayıttaki bağlantılarını temizle (saklama süresi)
     --yedeksiz          özgün dosyaları diske yedekleme (ÖNERİLMEZ)
     --yedek KLASOR      yedek klasörü (varsayılan: ./depo_yedek)
     --sinir BAYT        bu boyutun altındaki dosyaya dokunma (varsayılan 400 KB)
@@ -27,6 +29,22 @@ hâlde kalırsa kayıtları kırık bağlantılara bağlı bırakırdı.
 Özgün dosya diske yazılmadan üzerine yazılmıyor. İşlem geri
 alınamaz; yedek, "küçülttük ama okunmuyor" durumunda tek çıkış yolu.
 
+── SAKLAMA SÜRESİ (--eski-sil) ───────────────────────────────────
+Küçültme birikme hızını onda bire indiriyor ama sıfırlamıyor. Belli
+bir yaştan eski ödev/test/plan/mesaj fotoğrafları siliniyor ve
+kayıttaki bağlantıları temizleniyor.
+
+Kayıt SİLİNMİYOR: çözülen soru sayısı, net, süre, koç onayı yerinde
+kalıyor — yalnız fotoğraf gidiyor. Veli raporundaki "fotoğraflı
+kayıt" sayısı eski dönemler için düşer; beklenen davranış bu.
+
+Bağlantı da temizleniyor, yoksa arayüz olmayan bir fotoğrafı
+göstermeye çalışır ve kullanıcı dosyanın bozulduğunu sanır.
+
+İÇERİK DOSYALARINA DOKUNULMUYOR: soru sayfaları (sorular/), kitap
+kapakları (kitaplar/), kurum logoları (kurum/) ve profil
+fotoğrafları. Bunlar kanıt değil içerik; eskimiyorlar.
+
 ── KALDIĞI YERDEN DEVAM ──────────────────────────────────────────
 Her dosya bitince durum dosyasına işleniyor. Yarıda kesilirse aynı
 komut kaldığı yerden sürüyor; 539 dosyayı baştan indirmiyor.
@@ -41,7 +59,17 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+# Windows konsolu cp1254 ile açılıyor ve kutu çizgisi gibi karakterler
+# UnicodeEncodeError veriyor. Çıktı akışı UTF-8'e alınıyor; alınamazsa
+# yazılamayan karakter yerine '?' konuyor, betik yine de çalışıyor.
+for _akis in (sys.stdout, sys.stderr):
+    try:
+        _akis.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 try:
     from PIL import Image
@@ -158,7 +186,8 @@ class Depo:
                 # id dolu = gerçek dosya; boş = klasör
                 if g.get("id"):
                     boyut = ((g.get("metadata") or {}).get("size")) or 0
-                    bulunan.append({"yol": tam, "boyut": int(boyut)})
+                    bulunan.append({"yol": tam, "boyut": int(boyut),
+                                    "tarih": g.get("created_at") or ""})
                 else:
                     bulunan.extend(self.dosyalari_listele(tam + "/"))
             if len(girisler) < 100:
@@ -177,6 +206,10 @@ class Depo:
     def sil(self, yollar):
         return self._cagir(f"/storage/v1/object/{KOVA}", "DELETE",
                            {"prefixes": yollar})
+
+    def satir_guncelle(self, tablo, kimlik, alanlar):
+        return self._cagir(f"/rest/v1/{tablo}?id=eq.{kimlik}", "PATCH",
+                           alanlar, ustbilgi={"Prefer": "return=minimal"})
 
     def tablo(self, ad, kolonlar):
         durum, govde = self._cagir(
@@ -220,6 +253,61 @@ def kullanilan_yollar(depo):
     return kullanilan
 
 
+# ── Saklama süresi ───────────────────────────────────────────────
+# Kalıcı içerik: eskimiyor, saklama süresinin dışında.
+KALICI_ONEKLER = ("sorular/", "kitaplar/", "kurum/")
+
+# Süresi dolan dosyanın bağlantısını taşıyan tablolar. Kalıcı içeriğin
+# tabloları (sorular, okuma_kitaplari, kurumlar, student_profiles) burada
+# YOK: onların dosyaları hiç silinmiyor.
+REFERANSLI_TABLOLAR = [
+    ("homework_submissions", ["dosyalar", "file_url"]),
+    ("test_sessions",        ["dosyalar", "file_url"]),
+    ("messages",             ["dosyalar"]),
+]
+
+
+def suresi_dolabilir_mi(yol):
+    """Bu dosya saklama süresine tabi mi?"""
+    if yol.startswith(KALICI_ONEKLER):
+        return False
+    if "/profil/" in yol:          # profil fotoğrafı kişinin kendisi
+        return False
+    return True
+
+
+def referansi_temizle(depo, tablo, kolonlar, silinecek):
+    """Silinen dosyaların bağlantılarını kayıtlardan çıkarır.
+
+    Kayıt silinmiyor, yalnız dosya alanları temizleniyor. Bağlantı
+    kalsaydı arayüz olmayan bir fotoğrafı göstermeye çalışır ve
+    kullanıcı dosyanın bozulduğunu sanardı.
+    """
+    satirlar = depo.tablo(tablo, ["id"] + kolonlar)
+    degisen = 0
+    for satir in satirlar:
+        yama = {}
+        for kolon in kolonlar:
+            deger = satir.get(kolon)
+            if deger is None:
+                continue
+            if isinstance(deger, list):
+                kalan = [d for d in deger
+                         if yola_indir((d or {}).get("url")) not in silinecek]
+                if len(kalan) != len(deger):
+                    yama[kolon] = kalan
+            else:
+                if yola_indir(deger) in silinecek:
+                    yama[kolon] = None
+        if yama:
+            kod, govde = depo.satir_guncelle(tablo, satir["id"], yama)
+            if kod not in (200, 204):
+                print(f"  HATA {tablo} {satir['id']}: {kod} {govde[:120]}")
+            else:
+                degisen += 1
+    return degisen
+
+
 # ── Küçültme ─────────────────────────────────────────────────────
 def kucult(veri, en_buyuk, kalite):
     """Döndürür: (yeni_bayt, bilgi) — küçültülemezse (None, sebep)."""
@@ -260,7 +348,7 @@ def durum_oku():
             return json.loads(DURUM_DOSYASI.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return {"kuculttu": [], "sildi": []}
+    return {"kuculttu": [], "sildi": [], "eski_sildi": []}
 
 
 def durum_yaz(d):
@@ -277,6 +365,8 @@ def main():
     ap.add_argument("--uygula", action="store_true", help="gercekten degistir")
     ap.add_argument("--sadece-sahipsiz", action="store_true")
     ap.add_argument("--sadece-kucult", action="store_true")
+    ap.add_argument("--eski-sil", type=int, metavar="GUN",
+                    help="GUN gunden eski odev/test/mesaj fotograflarini sil")
     ap.add_argument("--yedeksiz", action="store_true")
     ap.add_argument("--yedek", default="depo_yedek")
     ap.add_argument("--sinir", type=int, default=VARSAYILAN_SINIR)
@@ -319,19 +409,46 @@ def main():
         and d["yol"].lower().endswith(GORSEL_UZANTI)
     ]
 
+    # Saklama süresi: yaşı geçmiş ve kalıcı olmayan dosyalar.
+    eskiler = []
+    if a.eski_sil:
+        sinir_tarih = datetime.now(timezone.utc) - timedelta(days=a.eski_sil)
+        # Sahipsizler zaten silinecek; iki listede de olursa kazanc iki
+        # kez sayilirdi.
+        sahipsiz_yollar = {d["yol"] for d in sahipsiz}
+        for d in dosyalar:
+            if d["yol"] in sahipsiz_yollar:
+                continue
+            if not suresi_dolabilir_mi(d["yol"]):
+                continue
+            ham = (d.get("tarih") or "").replace("Z", "+00:00")
+            try:
+                t = datetime.fromisoformat(ham)
+            except ValueError:
+                continue                    # tarihi okunamayan dosyaya dokunma
+            if t < sinir_tarih:
+                eskiler.append(d)
+        # Süresi dolan dosya küçültülmeyecek: birazdan silinecek.
+        eski_yollar = {d["yol"] for d in eskiler}
+        kucultulecek = [d for d in kucultulecek if d["yol"] not in eski_yollar]
+
     sahipsiz_b = sum(d["boyut"] for d in sahipsiz)
     kucult_b = sum(d["boyut"] for d in kucultulecek)
     # 250 kB: 5 Kasim sonrasi kucultulmus dosyalarin olculen ortalamasi.
     tahmin = len(kucultulecek) * 250 * 1024
 
-    print("── PLAN ─────────────────────────────────────────")
+    print("-- PLAN " + "-" * 40)
     if not a.sadece_kucult:
         print(f"  Silinecek (sahipsiz) : {len(sahipsiz):4d} dosya  {mb(sahipsiz_b)}")
     if not a.sadece_sahipsiz:
         print(f"  Kucultulecek         : {len(kucultulecek):4d} dosya  {mb(kucult_b)}"
               f"  ->  ~{mb(tahmin)}")
     kazanc = (0 if a.sadece_kucult else sahipsiz_b) + \
-             (0 if a.sadece_sahipsiz else max(0, kucult_b - tahmin))
+             (0 if a.sadece_sahipsiz else max(0, kucult_b - tahmin)) + \
+             sum(d["boyut"] for d in eskiler)
+    if a.eski_sil:
+        print(f"  Suresi dolan ({a.eski_sil}g)  : {len(eskiler):4d} dosya  "
+              f"{mb(sum(d['boyut'] for d in eskiler))}")
     print(f"  Beklenen kazanc      : ~{mb(kazanc)}")
     print(f"  Kalan (tahmini)      : ~{mb(toplam - kazanc)}")
     print("─────────────────────────────────────────────────\n")
@@ -356,6 +473,54 @@ def main():
             durum["sildi"].extend(obek)
             durum_yaz(durum)
             print(f"  {min(i + 100, len(kalan))}/{len(kalan)}")
+
+    # ── Suresi dolanlari sil ──
+    # Once dosya silinir, sonra kayittaki baglanti temizlenir. Ters sira
+    # daha kotu olurdu: baglanti gider, dosya diskte kalir ve bir daha
+    # bulunamaz. Bu sirada silinip temizlenmeyen yollar durum dosyasinda
+    # bekler, boylece arada kesilse de sonraki calismada temizlenir.
+    if a.eski_sil:
+        bekleyen = set(durum.get("eski_sildi", []))
+        if eskiler:
+            print(f"\n{a.eski_sil} gunden eski dosyalar siliniyor "
+                  f"({len(eskiler)})...")
+            yollar = [d["yol"] for d in eskiler]
+
+            # ÖNCE YEDEK: silme geri alınamaz. İndirilemeyen dosya
+            # silinmiyor — yedeksiz silmek tek yönlü kapı olurdu.
+            if not a.yedeksiz:
+                print("  yedekleniyor...")
+                yedekli = []
+                for yol in yollar:
+                    kod, veri = depo.indir(yol)
+                    if kod != 200 or not isinstance(veri, bytes):
+                        print(f"  ATLANDI indirilemedi ({kod}) {yol}")
+                        continue
+                    hedef = yedek_kok / yol
+                    hedef.parent.mkdir(parents=True, exist_ok=True)
+                    hedef.write_bytes(veri)
+                    yedekli.append(yol)
+                yollar = yedekli
+                print(f"  {len(yollar)} dosya {yedek_kok}/ altina yedeklendi")
+
+            for i in range(0, len(yollar), 100):
+                obek = yollar[i:i + 100]
+                kod, govde = depo.sil(obek)
+                if kod not in (200, 204):
+                    print(f"  HATA {kod}: {govde[:160]}")
+                    break
+                bekleyen.update(obek)
+                durum["eski_sildi"] = sorted(bekleyen)
+                durum_yaz(durum)
+                print(f"  {min(i + 100, len(yollar))}/{len(yollar)}")
+
+        if bekleyen:
+            print("Kayitlardaki baglantilar temizleniyor...")
+            for tablo, kolonlar in REFERANSLI_TABLOLAR:
+                n = referansi_temizle(depo, tablo, kolonlar, bekleyen)
+                print(f"  {tablo}: {n} kayit guncellendi")
+            durum["eski_sildi"] = []        # temizlendi, bir daha gerekmez
+            durum_yaz(durum)
 
     # ── Kucult ──
     if not a.sadece_sahipsiz and kucultulecek:
