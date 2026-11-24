@@ -284,6 +284,61 @@ G.2'de öneri olarak duruyor — onay verirseniz H'den çıkıp plana girer.
 
 ---
 
+## I. Depo ve saklama süresi — 24 Kasım 2026
+
+**Ne oldu.** Ücretsiz plan depo kotası aşıldı (1476 MB / 539 dosya) ve
+proje bütün servisleriyle kısıtlandı — REST, Storage, Auth hepsi 402
+döndü. Dosyaların tamamı 5 Kasım öncesinde, yükleme öncesi küçültme
+eklenmeden yüklenmiş telefon fotoğraflarıydı (ortalama 2,8 MB).
+
+Ölçülüp kaydedilen iki şey:
+
+- **SQL ile depo dosyası silmenin yolu yok.** `storage.protect_delete()`
+  tetikleyicisi doğrudan `DELETE FROM storage.objects`'i engelliyor
+  (42501). Kayıt: `depo_sql_silme_sondasi.sql`. Bir daha denenmesin.
+- **Pro'ya geçmek tek başına yetmiyor**; harcama sınırı (spend cap) da
+  kaldırılmadan servisler dönmüyor.
+
+**Yapılan.** `araclar/depo_bakim.py`: sahipsizleri siliyor, büyük
+fotoğrafları aynı yola geri yazarak küçültüyor (1600 px / JPEG 0.8,
+istemci tarafıyla aynı), `--eski-sil GUN` ile saklama süresini
+uyguluyor. 1476 MB → ~139 MB.
+
+| iş | durum | kimde |
+|---|---|---|
+| **Ücretsiz plana dönüş** | panel işlemi; küçültme bitmeden yapılmamalı | sizde |
+| **Saklama süresinin kendiliğinden işlemesi** | betik var, düzenli çalıştıran yok | bende |
+
+### I.1 Vercel Cron — saklama süresi (karar verildi, yazılmadı)
+
+Betik elle çalıştırılıyor; ayda bir yeter ama birinin hatırlaması
+gerekiyor. Kalıcı çözüm: `vercel.json`'a günlük bir cron ve aynı işi
+yapan bir sunucu rotası.
+
+Betikten taşınacak mantık (hepsi `araclar/depo_bakim.py` içinde
+çalışır hâlde):
+
+- 90 günden eski **ödev/test/plan/mesaj** fotoğrafları silinir.
+- **Kayıt silinmez**, yalnız fotoğraf; sonra `dosyalar[]` ve
+  `file_url` bağlantıları temizlenir. Bağlantı kalsaydı arayüz olmayan
+  bir fotoğrafı göstermeye çalışırdı.
+- **Sıra:** önce dosya, sonra bağlantı. Tersi olsa bağlantı giderdi ve
+  dosya diskte bulunamaz hâlde kalırdı.
+- **İçerik dosyalarına dokunulmaz:** `sorular/`, `kitaplar/`,
+  `kurum/`, profil fotoğrafları. Bunlar kanıt değil içerik.
+
+Çözülmesi gereken üç nokta:
+
+1. **Yedek.** Betik silmeden önce dosyayı diske yedekliyor; sunucuda
+   disk yok. Ya yedeksiz silinecek (karar gerekiyor) ya da silinmiş
+   dosyanın adı bir tabloya yazılacak.
+2. **Yetki.** Rota servis anahtarıyla çalışır; `CRON_SECRET` ile
+   korunmalı, yoksa herkes çağırabilir.
+3. **Süre sınırı.** Vercel işlevi 10 sn (ücretsiz) sonra kesiliyor;
+   iş öbekler hâlinde, kaldığı yerden devam edecek şekilde yazılmalı.
+
+---
+
 ## Süreç kuralı (14 Ekim'de öğrenildi)
 
 Optik form yolu önkabul sınanmadan yazıldı: üç migration ve birkaç

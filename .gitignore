@@ -41,3 +41,4 @@ signing-key-info.txt
 # Depo bakim betiginin uretikleri (araclar/depo_bakim.py)
 depo_yedek/
 depo_bakim_durum.json
+araclar/__pycache__/
