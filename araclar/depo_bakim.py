@@ -288,9 +288,12 @@ def referansi_temizle(depo, tablo, kolonlar, silinecek):
     Kayıt silinmiyor, yalnız dosya alanları temizleniyor. Bağlantı
     kalsaydı arayüz olmayan bir fotoğrafı göstermeye çalışır ve
     kullanıcı dosyanın bozulduğunu sanardı.
+
+    Döndürür: (güncellenen_kayıt, hata_sayısı)
     """
     satirlar = depo.tablo(tablo, ["id"] + kolonlar)
     degisen = 0
+    hata = 0
     for satir in satirlar:
         yama = {}
         for kolon in kolonlar:
@@ -305,13 +308,24 @@ def referansi_temizle(depo, tablo, kolonlar, silinecek):
             else:
                 if yola_indir(deger) in silinecek:
                     yama[kolon] = None
-        if yama:
+        if not yama:
+            continue
+
+        kod, govde = depo.satir_guncelle(tablo, satir["id"], yama)
+
+        # 23502 = NOT NULL. homework_submissions.file_url boş geçilemiyor;
+        # boş metin de "dosya yok" sayılıyor (arayüzde de, ölçüm
+        # sorgusunda da), o yüzden NULL yerine '' ile yeniden deniyoruz.
+        if kod not in (200, 204) and '"23502"' in govde:
+            yama = {k: ("" if v is None else v) for k, v in yama.items()}
             kod, govde = depo.satir_guncelle(tablo, satir["id"], yama)
-            if kod not in (200, 204):
-                print(f"  HATA {tablo} {satir['id']}: {kod} {govde[:120]}")
-            else:
-                degisen += 1
-    return degisen
+
+        if kod not in (200, 204):
+            print(f"  HATA {tablo} {satir['id']}: {kod} {govde[:120]}")
+            hata += 1
+        else:
+            degisen += 1
+    return degisen, hata
 
 
 # ── Küçültme ─────────────────────────────────────────────────────
@@ -522,11 +536,21 @@ def main():
 
         if bekleyen:
             print("Kayitlardaki baglantilar temizleniyor...")
+            hata = 0
             for tablo, kolonlar in REFERANSLI_TABLOLAR:
-                n = referansi_temizle(depo, tablo, kolonlar, bekleyen)
-                print(f"  {tablo}: {n} kayit guncellendi")
-            durum["eski_sildi"] = []        # temizlendi, bir daha gerekmez
-            durum_yaz(durum)
+                n, h = referansi_temizle(depo, tablo, kolonlar, bekleyen)
+                hata += h
+                print(f"  {tablo}: {n} kayit guncellendi"
+                      + (f", {h} HATA" if h else ""))
+            if hata:
+                # Yollar durum dosyasinda kaliyor: temizlenmeyen baglanti
+                # arayuzde olmayan fotografi gostermeye calisir. Ayni
+                # komut tekrar calistirilinca kalan kayitlar denenecek.
+                print(f"\n{hata} kayit temizlenemedi. Yollar durum "
+                      f"dosyasinda bekliyor; komutu tekrar calistirin.")
+            else:
+                durum["eski_sildi"] = []    # temizlendi, bir daha gerekmez
+                durum_yaz(durum)
 
     # ── Kucult ──
     if not a.sadece_sahipsiz and kucultulecek:
